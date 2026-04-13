@@ -1,7 +1,9 @@
 {
     "agents": [
-        "cursor",
-        "codex"
+        "codex",
+        "copilot",
+        "junie",
+        "claude_code"
     ],
     "guidelines": true,
     "mcp": true,
