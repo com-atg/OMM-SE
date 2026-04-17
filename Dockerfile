@@ -22,11 +22,12 @@ RUN composer dump-autoload --no-dev --optimize
 # ── Stage 3: Runtime ─────────────────────────────────────────────────────────
 FROM php:8.4-fpm-alpine AS runtime
 
-# System dependencies
-RUN apk add --no-cache \
+# Upgrade all base-image packages to pull in latest security patches,
+# then install only what the runtime actually needs (curl intentionally omitted).
+RUN apk upgrade --no-cache \
+    && apk add --no-cache \
         nginx \
         supervisor \
-        curl \
         libpng-dev \
         libzip-dev \
         oniguruma-dev \
@@ -39,8 +40,7 @@ RUN apk add --no-cache \
         opcache \
         pcntl \
         bcmath \
-        intl \
-    && rm -rf /var/cache/apk/*
+        intl
 
 # PHP configuration
 COPY docker/php/opcache.ini /usr/local/etc/php/conf.d/opcache.ini
