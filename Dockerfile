@@ -24,6 +24,7 @@ FROM php:8.4-fpm-alpine AS runtime
 
 # Upgrade all base-image packages to pull in latest security patches,
 # then install only what the runtime actually needs (curl intentionally omitted).
+# Upgrade wheel (pulled in by supervisor's Python dep) to patch CVE-2026-24049.
 RUN apk upgrade --no-cache \
     && apk add --no-cache \
         nginx \
@@ -40,7 +41,8 @@ RUN apk upgrade --no-cache \
         opcache \
         pcntl \
         bcmath \
-        intl
+        intl \
+    && pip install --upgrade --no-cache-dir wheel 2>/dev/null || true
 
 # PHP configuration
 COPY docker/php/opcache.ini /usr/local/etc/php/conf.d/opcache.ini
@@ -58,16 +60,31 @@ WORKDIR /var/www/html
 COPY --from=composer-builder /app /var/www/html
 COPY --from=node-builder /app/public/build /var/www/html/public/build
 
-# Storage and cache writable by www-data
-RUN mkdir -p storage/logs storage/framework/{cache,sessions,views} bootstrap/cache \
-    && chown -R www-data:www-data storage bootstrap/cache \
-    && chmod -R 775 storage bootstrap/cache
+# Prepare writable directories for www-data.
+# Nginx temp paths are redirected to /tmp so it can run without root.
+RUN mkdir -p \
+        storage/logs \
+        storage/framework/{cache,sessions,views} \
+        bootstrap/cache \
+        /tmp/nginx/{client_body,proxy,fastcgi,uwsgi,scgi} \
+    && chown -R www-data:www-data \
+        storage \
+        bootstrap/cache \
+        /tmp/nginx \
+        /var/lib/nginx \
+        /var/log/nginx \
+    && chmod -R 775 storage bootstrap/cache \
+    && printf 'pid /tmp/nginx.pid;\nerror_log /dev/stderr warn;\n' \
+       > /etc/nginx/nginx.conf.d/runtime-paths.conf
 
 # Entrypoint
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-EXPOSE 80
+# Drop privileges — all processes (nginx on 8080, php-fpm, supervisord) run as www-data
+USER www-data
+
+EXPOSE 8080
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["/usr/bin/supervisord", "-n", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

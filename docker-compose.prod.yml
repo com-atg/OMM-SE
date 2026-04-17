@@ -21,4 +21,4 @@ services:
       - traefik.http.routers.omm-se.tls=true
       - traefik.http.routers.omm-se.middlewares=omm-se-strip
       - traefik.http.middlewares.omm-se-strip.stripprefix.prefixes=/omm_ace
-      - traefik.http.services.omm-se.loadbalancer.server.port=80
+      - traefik.http.services.omm-se.loadbalancer.server.port=8080
