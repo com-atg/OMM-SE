@@ -42,7 +42,9 @@ RUN apk upgrade --no-cache \
         pcntl \
         bcmath \
         intl \
-    && pip install --upgrade --no-cache-dir wheel 2>/dev/null || true
+    && pip install --upgrade --no-cache-dir --break-system-packages setuptools wheel 2>/dev/null || true \
+    && rm -rf /usr/lib/python*/site-packages/setuptools/_vendor/wheel-* \
+              /usr/lib/python*/site-packages/pip/_vendor/wheel-* 2>/dev/null || true
 
 # PHP configuration
 COPY docker/php/opcache.ini /usr/local/etc/php/conf.d/opcache.ini
