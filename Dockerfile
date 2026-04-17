@@ -74,8 +74,8 @@ RUN mkdir -p \
         /var/lib/nginx \
         /var/log/nginx \
     && chmod -R 775 storage bootstrap/cache \
-    && printf 'pid /tmp/nginx.pid;\nerror_log /dev/stderr warn;\n' \
-       > /etc/nginx/nginx.conf.d/runtime-paths.conf
+    && sed -i 's|^pid .*;|pid /tmp/nginx.pid;|' /etc/nginx/nginx.conf \
+    && sed -i 's|^error_log .*;|error_log /dev/stderr warn;|' /etc/nginx/nginx.conf
 
 # Entrypoint
 COPY docker/entrypoint.sh /entrypoint.sh
