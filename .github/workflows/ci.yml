@@ -127,6 +127,7 @@ jobs:
 
       # ── Deploy to production server via SSH ─────────────────────────────────
       - name: Deploy to production
+        if: ${{ secrets.SSH_HOST != '' }}
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SSH_HOST }}
