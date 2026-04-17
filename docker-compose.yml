@@ -1,0 +1,40 @@
+services:
+
+  app:
+    build:
+      context: .
+      target: runtime
+    env_file: .env
+    environment:
+      APP_ENV: local
+      MAIL_MAILER: smtp
+      MAIL_HOST: mailhog
+      MAIL_PORT: 1025
+      MAIL_FROM_ADDRESS: "atghelp@nyit.edu"
+    volumes:
+      # Mount source code for local development hot-reload
+      - .:/var/www/html
+      - /var/www/html/vendor
+      - /var/www/html/node_modules
+      - /var/www/html/public/build
+    labels:
+      - traefik.enable=true
+      # HTTP → HTTPS redirect
+      - traefik.http.routers.omm-se-http.rule=PathPrefix(`/omm_ace`)
+      - traefik.http.routers.omm-se-http.entrypoints=web
+      - traefik.http.routers.omm-se-http.middlewares=omm-se-https-redirect
+      - traefik.http.middlewares.omm-se-https-redirect.redirectscheme.scheme=https
+      - traefik.http.middlewares.omm-se-https-redirect.redirectscheme.permanent=true
+      # HTTPS router
+      - traefik.http.routers.omm-se.rule=PathPrefix(`/omm_ace`)
+      - traefik.http.routers.omm-se.entrypoints=websecure
+      - traefik.http.routers.omm-se.tls=true
+      - traefik.http.routers.omm-se.middlewares=omm-se-strip
+      - traefik.http.middlewares.omm-se-strip.stripprefix.prefixes=/omm_ace
+      - traefik.http.services.omm-se.loadbalancer.server.port=80
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # Web UI

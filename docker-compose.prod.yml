@@ -1,0 +1,24 @@
+services:
+
+  app:
+    image: ${DOCKERHUB_USERNAME}/omm-se:${APP_VERSION:-latest}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+    labels:
+      - traefik.enable=true
+      # HTTP → HTTPS redirect
+      - traefik.http.routers.omm-se-http.rule=PathPrefix(`/omm_ace`)
+      - traefik.http.routers.omm-se-http.entrypoints=web
+      - traefik.http.routers.omm-se-http.middlewares=omm-se-https-redirect
+      - traefik.http.middlewares.omm-se-https-redirect.redirectscheme.scheme=https
+      - traefik.http.middlewares.omm-se-https-redirect.redirectscheme.permanent=true
+      # HTTPS router
+      - traefik.http.routers.omm-se.rule=PathPrefix(`/omm_ace`)
+      - traefik.http.routers.omm-se.entrypoints=websecure
+      - traefik.http.routers.omm-se.tls=true
+      - traefik.http.routers.omm-se.middlewares=omm-se-strip
+      - traefik.http.middlewares.omm-se-strip.stripprefix.prefixes=/omm_ace
+      - traefik.http.services.omm-se.loadbalancer.server.port=80
