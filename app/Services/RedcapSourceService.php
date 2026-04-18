@@ -64,14 +64,14 @@ class RedcapSourceService
     }
 
     /**
-     * Fetch all completed evaluation records for a given scholar and semester.
-     * scholar_name is the raw coded value (e.g. '1', '2', …).
+     * Fetch all completed evaluation records for a given student (datatelid) and semester.
+     * $datatelId is the raw value from the source 'student' SQL field (numeric datatelid).
      * semester is the raw coded value ('1' = Spring, '2' = Fall).
-     * Returns empty array if either code fails validation.
+     * Returns empty array if either value fails validation.
      */
-    public function getScholarEvals(string $scholarName, string $semester): array
+    public function getScholarEvals(string $datatelId, string $semester): array
     {
-        if (! preg_match('/^\d+$/', $scholarName) || ! preg_match('/^[12]$/', $semester)) {
+        if (! preg_match('/^\d+$/', $datatelId) || ! preg_match('/^[12]$/', $semester)) {
             return [];
         }
 
@@ -79,28 +79,10 @@ class RedcapSourceService
             format: 'json',
             type: 'flat',
             rawOrLabel: 'raw',
-            filterLogic: "[scholar_name]='{$scholarName}' and [semester]='{$semester}'",
+            filterLogic: "[student]='{$datatelId}' and [semester]='{$semester}'",
             returnAs: 'array',
             url: $this->url,
             token: $this->token,
         );
-    }
-
-    /**
-     * Resolve the full name label for a scholar_name coded value.
-     * Coded values: 1=Catherine Chin, 2=Lea Dalco, 3=Grace Durbin,
-     *               4=Ian Nevers, 5=Elianna Sanchez
-     */
-    public function resolveScholarName(string $code): string
-    {
-        $names = [
-            '1' => 'Catherine Chin',
-            '2' => 'Lea Dalco',
-            '3' => 'Grace Durbin',
-            '4' => 'Ian Nevers',
-            '5' => 'Elianna Sanchez',
-        ];
-
-        return $names[$code] ?? '';
     }
 }

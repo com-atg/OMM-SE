@@ -37,13 +37,13 @@ class NotifierController extends Controller
         }
 
         // Validate required fields before processing.
-        $scholarCode = (string) ($evalRecord['scholar_name'] ?? '');
+        $scholarCode = (string) ($evalRecord['student'] ?? '');
         $semesterCode = (string) ($evalRecord['semester'] ?? '');
         $evalCategory = (string) ($evalRecord['eval_category'] ?? '');
 
         if ($scholarCode === '' || $semesterCode === '' || $evalCategory === '') {
             Log::error("NotifierController: record {$recordId} is missing required fields.", [
-                'scholar_name' => $scholarCode,
+                'student' => $scholarCode,
                 'semester' => $semesterCode,
                 'eval_category' => $evalCategory,
             ]);
@@ -65,20 +65,16 @@ class NotifierController extends Controller
         // 3. Aggregate scores per category and collect comments.
         $aggregates = $this->aggregate($allEvals, $semester);
 
-        // 4. Resolve scholar first/last name and find destination record.
-        $fullName = $source->resolveScholarName($scholarCode);
-        [$firstName, $lastName] = $this->splitName($fullName);
-
-        $scholarRecord = $destination->findScholarRecord($firstName, $lastName);
+        // 4. Find destination record by datatelid (the raw value of the source 'student' field).
+        $scholarRecord = $destination->findScholarByDatatelId($scholarCode);
 
         if (! $scholarRecord) {
-            Log::error("NotifierController: no destination record found for '{$fullName}'.");
+            Log::error("NotifierController: no destination record found for datatelid '{$scholarCode}'.");
 
             return response('', 200);
         }
 
-        // Re-fetch full destination record to preserve untouched fields (e.g. leadership).
-        $fullScholarRecord = $destination->getScholarRecord($scholarRecord['record_id']);
+        $fullName = trim(($scholarRecord['first_name'] ?? '').' '.($scholarRecord['last_name'] ?? ''));
 
         // 5. Push updated aggregates to destination.
         $updatePayload = array_merge(
@@ -90,14 +86,14 @@ class NotifierController extends Controller
 
         Log::info("NotifierController: updated destination record {$scholarRecord['record_id']} for {$fullName}.");
 
-        // 6. Send email notification — validate addresses before use.
-        $scholarEmail = filter_var($fullScholarRecord['email'] ?? '', FILTER_VALIDATE_EMAIL) ?: null;
+        // 6. Send email notification — email and name come from the destination scholar record.
+        $scholarEmail = filter_var($scholarRecord['email'] ?? '', FILTER_VALIDATE_EMAIL) ?: null;
         $facultyEmail = filter_var($evalRecord['faculty_email'] ?? '', FILTER_VALIDATE_EMAIL) ?: null;
 
         if ($scholarEmail) {
             $mailable = new EvaluationNotification(
                 evalRecord: $evalRecord,
-                scholarRecord: $fullScholarRecord,
+                scholarRecord: $scholarRecord,
                 semester: $semester,
                 aggregates: $aggregates,
                 evalCategory: $evalCategory,
@@ -178,13 +174,5 @@ class NotifierController extends Controller
             'by_category' => $byCategory,
             'semester' => $semester,
         ];
-    }
-
-    /** Split "First Last" into ['First', 'Last']. */
-    private function splitName(string $fullName): array
-    {
-        $parts = explode(' ', trim($fullName), 2);
-
-        return [$parts[0] ?? '', $parts[1] ?? ''];
     }
 }

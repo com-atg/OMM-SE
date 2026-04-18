@@ -10,9 +10,10 @@
     "license": "MIT",
     "require": {
         "php": "^8.3",
+        "ext-curl": "*",
         "laravel/framework": "^13.0",
         "laravel/tinker": "^3.0",
-        "ext-curl": "*"
+        "symfony/var-dumper": "*"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",

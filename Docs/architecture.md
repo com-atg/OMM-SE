@@ -69,21 +69,19 @@ classDiagram
     class NotifierController {
         +__invoke(Request, RedcapSourceService, RedcapDestinationService) Response
         -aggregate(evals, semester) array
-        -splitName(fullName) array
         -SEMESTER_MAP: array
     }
 
     class RedcapSourceService {
         +getRecord(recordId) array
-        +getScholarEvals(scholarName, semester) array
-        +resolveScholarName(code) string
+        +getScholarEvals(datatelId, semester) array
         +SCORE_FIELDS: array
         +CATEGORY_LABELS: array
         +DEST_CATEGORY: array
     }
 
     class RedcapDestinationService {
-        +findScholarRecord(firstName, lastName) array|null
+        +findScholarByDatatelId(datatelId) array|null
         +getScholarRecord(recordId) array
         +updateScholarRecord(data) string
     }
@@ -135,7 +133,7 @@ sequenceDiagram
     NC->>SRC: getRecord(recordId)
     SRC-->>NC: evalRecord[]
 
-    NC->>NC: validate scholar_name, semester, eval_category
+    NC->>NC: validate student, semester, eval_category
 
     NC->>SRC: getScholarEvals(scholarCode, semesterCode)
     SRC-->>NC: allEvals[]
@@ -143,15 +141,9 @@ sequenceDiagram
     NC->>NC: aggregate(allEvals, semester)
     Note over NC: Sum scores per category<br/>Count evals, skip out-of-range<br/>Concatenate comments
 
-    NC->>SRC: resolveScholarName(code)
-    SRC-->>NC: "Catherine Chin"
-
-    NC->>DST: findScholarRecord("Catherine", "Chin")
-    Note over DST: filterLogic query + 1h cache
+    NC->>DST: findScholarByDatatelId(scholarCode)
+    Note over DST: filterLogic [datatelid]='...' + 1h cache
     DST-->>NC: scholarRecord[]
-
-    NC->>DST: getScholarRecord(record_id)
-    DST-->>NC: fullScholarRecord[]
 
     NC->>DST: updateScholarRecord(payload)
     DST-->>NC: "1"

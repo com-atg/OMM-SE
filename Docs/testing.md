@@ -2,12 +2,12 @@
 
 ## Overview
 
-The test suite uses [Pest 4](https://pestphp.com/) and covers 56 tests / 104 assertions across unit and feature layers. There are no database dependencies — all REDCap API calls are mocked via Mockery.
+The test suite uses [Pest 4](https://pestphp.com/) and covers unit and feature layers. There are no database dependencies — all REDCap API calls are mocked via Mockery.
 
 ```mermaid
 graph TD
     subgraph Unit Tests
-        U1[RedcapSourceServiceTest\n9 tests]
+        U1[RedcapSourceServiceTest\n7 tests]
         U2[EvaluationNotificationTest\n15 tests]
     end
     subgraph Feature Tests
@@ -49,13 +49,11 @@ Tests `app/Services/RedcapSourceService.php` in isolation — no HTTP calls.
 
 | Test | What it verifies |
 |------|-----------------|
-| Resolves known scholar codes 1–5 | `resolveScholarName()` returns correct full name for each code |
-| Returns empty string for unknown code | `resolveScholarName('99')` → `''` |
 | `SCORE_FIELDS` constant | Maps A/B/C/D to the correct source field names |
 | `CATEGORY_LABELS` constant | Maps A/B/C/D to human-readable labels |
 | `DEST_CATEGORY` constant | Maps A/B/C/D to destination field suffixes |
 | All constants share the same keys | A/B/C/D present in all three constants |
-| Rejects non-numeric scholar code | `getScholarEvals("1' OR '1'='1", '1')` → `[]` |
+| Rejects non-numeric datatelid | `getScholarEvals("1' OR '1'='1", '1')` → `[]` |
 | Rejects invalid semester code | `getScholarEvals('1', '9')` → `[]` |
 | Rejects injection in semester | `getScholarEvals('1', "1' OR '1'='1")` → `[]` |
 
@@ -100,7 +98,7 @@ Tests the full webhook flow via HTTP. REDCap services are mocked; mail is faked.
 |------|---------|
 | Missing `record` param | 200, no email |
 | Record not found in source | 200, no email |
-| Eval missing `scholar_name` | 200, no email |
+| Eval missing `student` field | 200, no email |
 | Unknown semester code | 200, no email |
 | No destination scholar record | 200, no email |
 
@@ -145,11 +143,9 @@ use function Pest\Laravel\mock;
 $source = mock(RedcapSourceService::class);
 $source->shouldReceive('getRecord')->andReturn(sourceEvalRecord());
 $source->shouldReceive('getScholarEvals')->andReturn([sourceEvalRecord()]);
-$source->shouldReceive('resolveScholarName')->with('1')->andReturn('Catherine Chin');
 
 $destination = mock(RedcapDestinationService::class);
-$destination->shouldReceive('findScholarRecord')->andReturn(destScholarRecord());
-$destination->shouldReceive('getScholarRecord')->andReturn(destScholarRecord());
+$destination->shouldReceive('findScholarByDatatelId')->with('1')->andReturn(destScholarRecord());
 $destination->shouldReceive('updateScholarRecord')->andReturn('1');
 ```
 

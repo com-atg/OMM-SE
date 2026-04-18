@@ -44,9 +44,8 @@ flowchart TD
     A[New academic year begins] --> B[Admin creates new\nREDCap evaluation project]
     B --> C[Configure Data Entry Trigger\nURL in the new project]
     C --> D[Update REDCAP_SOURCE_TOKEN\nin production .env]
-    D --> E[Update scholar name map\nin RedcapSourceService\nif cohort has changed]
-    E --> F[Verify with a test webhook]
-    F --> G[Ready for new year]
+    D --> E[Verify with a test webhook]
+    E --> F[Ready for new year]
 
     style B fill:#e8f4fd
     style D fill:#fff3cd
@@ -55,7 +54,6 @@ flowchart TD
 
 **What changes year-to-year:**
 - `REDCAP_SOURCE_TOKEN` in `.env` — new API token for the new source project
-- Scholar name map in `RedcapSourceService::resolveScholarName()` — if the cohort changes
 - REDCap DET URL in the new source project — same URL, same `WEBHOOK_SECRET`
 
 **What never changes:**
@@ -73,7 +71,7 @@ The source project field structure is expected to remain consistent year-to-year
 | Field | Type | Notes |
 |-------|------|-------|
 | `record_id` | Auto-ID | Used to fetch the triggering record |
-| `scholar_name` | Dropdown | Coded integers mapping to scholar full names |
+| `student` | Text / Numeric | Scholar's datatelid — used to look up the destination record |
 | `semester` | Dropdown | 1=Spring, 2=Fall |
 | `eval_category` | Dropdown | A=Teaching, B=Clinic, C=Research, D=Didactics |
 | `teaching_score` | Calc (0–100%) | Used when `eval_category = A` |
@@ -110,8 +108,9 @@ The destination project is **permanent** — it stores aggregated scores for all
 | `{sem}_comments` | Notes | Yes — all comments concatenated with `\n\n` |
 | `{sem}_leadership` | Text | **No** — set manually in REDCap |
 | `{sem}_final_score` | Calc | **No** — calculated by REDCap formula |
-| `first_name` | Text | No — used for scholar lookup only |
-| `last_name` | Text | No — used for scholar lookup only |
+| `datatelid` | Text | No — used for scholar lookup by datatelid |
+| `first_name` | Text | No — used to build scholar display name |
+| `last_name` | Text | No — used to build scholar display name |
 | `goes_by` | Text | No — used for email greeting |
 | `email` | Email | No — used as notification `To:` address |
 
@@ -162,26 +161,14 @@ redcap_url=https://comresearchdata.nyit.edu/redcap/
 
 ## Scholar Lookup Strategy
 
-The source project stores `scholar_name` as a **coded dropdown** (integers). The codes and names are defined in `RedcapSourceService::resolveScholarName()` and **must be updated when the scholar cohort changes** at the start of a new academic year.
+The source project stores the scholar identifier in the `student` field as a **datatelid** (numeric institution ID). On each webhook, the app passes this value directly to `RedcapDestinationService::findScholarByDatatelId()`, which queries the destination project using REDCap's `filterLogic` parameter and caches the result for 1 hour.
 
 ```mermaid
 flowchart LR
-    A["scholar_name = '2'\nfrom source webhook"] -->|resolveScholarName\ncode map in source service| B["Lea Dalco"]
-    B -->|splitName| C["first='Lea', last='Dalco'"]
-    C -->|findScholarRecord\nfilterLogic + 1h cache| D["destination record_id = 7\npermanent record"]
+    A["student = '67890'\nfrom source eval record\n(datatelid)"] -->|findScholarByDatatelId\nfilterLogic + 1h cache| B["destination record_id = 7\npermanent record"]
 ```
 
-**Current scholar code map** (update in `RedcapSourceService` each academic year if cohort changes):
-
-| Code | Full Name |
-|------|-----------|
-| 1 | Catherine Chin |
-| 2 | Lea Dalco |
-| 3 | Grace Durbin |
-| 4 | Ian Nevers |
-| 5 | Elianna Sanchez |
-
-The lookup uses REDCap's `filterLogic` parameter (`[first_name]='X' AND [last_name]='Y'`) to avoid exporting all destination records on every webhook. Results are cached for 1 hour.
+The lookup queries `[datatelid]='67890'` against the destination project. Results are cached per datatelid for 1 hour since the scholar roster changes infrequently. No code-to-name mapping is needed — no code changes are required when the scholar cohort changes.
 
 ---
 

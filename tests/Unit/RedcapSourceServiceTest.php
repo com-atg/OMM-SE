@@ -2,24 +2,6 @@
 
 use App\Services\RedcapSourceService;
 
-test('resolves known scholar codes to full names', function (string $code, string $expected) {
-    $service = new RedcapSourceService;
-
-    expect($service->resolveScholarName($code))->toBe($expected);
-})->with([
-    '1' => ['1', 'Catherine Chin'],
-    '2' => ['2', 'Lea Dalco'],
-    '3' => ['3', 'Grace Durbin'],
-    '4' => ['4', 'Ian Nevers'],
-    '5' => ['5', 'Elianna Sanchez'],
-]);
-
-test('returns empty string for unknown scholar code', function () {
-    $service = new RedcapSourceService;
-
-    expect($service->resolveScholarName('99'))->toBe('');
-});
-
 test('SCORE_FIELDS maps all four categories to correct source fields', function () {
     expect(RedcapSourceService::SCORE_FIELDS)->toBe([
         'A' => 'teaching_score',
@@ -56,7 +38,7 @@ test('SCORE_FIELDS DEST_CATEGORY and CATEGORY_LABELS all share the same category
 
 // ─── getScholarEvals input validation ─────────────────────────────────────────
 
-test('getScholarEvals returns empty array for non-numeric scholar code', function () {
+test('getScholarEvals returns empty array for non-numeric datatelid', function () {
     $service = new RedcapSourceService;
 
     expect($service->getScholarEvals("1' OR '1'='1", '1'))->toBe([]);

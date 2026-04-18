@@ -11,7 +11,7 @@ function makeEvalRecord(string $category = 'A', array $overrides = []): array
         'record_id' => '1',
         'date_lab' => '04-16-2026',
         'semester' => '1',
-        'scholar_name' => '1',
+        'student' => '1',
         'eval_category' => $category,
         'comments' => '',
         'faculty' => 'Dr. Smith',

@@ -21,33 +21,27 @@ class RedcapDestinationService
     }
 
     /**
-     * Find a scholar record by first + last name.
-     * Uses REDCap filterLogic to avoid exporting all records, and caches the
-     * result for 1 hour since the scholar roster changes infrequently.
+     * Find a scholar record by datatelid (the value stored in the source 'student' SQL field).
+     * Caches for 1 hour since the scholar roster changes infrequently.
      */
-    public function findScholarRecord(string $firstName, string $lastName): ?array
+    public function findScholarByDatatelId(string $datatelId): ?array
     {
-        $cacheKey = 'scholar:'.strtolower($firstName).':'.strtolower($lastName);
+        $cacheKey = 'scholar:datatelid:'.$datatelId;
 
-        return Cache::remember($cacheKey, now()->addHour(), function () use ($firstName, $lastName) {
-            $filter = "[first_name]='{$firstName}' AND [last_name]='{$lastName}'";
-
+        return Cache::remember($cacheKey, now()->addHour(), function () use ($datatelId) {
             $records = Redcap_lib::exportRecords(
                 format: 'json',
                 type: 'flat',
-                fields: 'record_id,first_name,last_name,goes_by,email',
+                fields: 'record_id,datatelid,first_name,last_name,goes_by,email',
                 rawOrLabel: 'raw',
-                filterLogic: $filter,
+                filterLogic: "[datatelid]='{$datatelId}'",
                 returnAs: 'array',
                 url: $this->url,
                 token: $this->token,
             );
 
             foreach ($records as $record) {
-                if (
-                    strcasecmp($record['first_name'] ?? '', $firstName) === 0 &&
-                    strcasecmp($record['last_name'] ?? '', $lastName) === 0
-                ) {
+                if (($record['datatelid'] ?? '') === $datatelId) {
                     return $record;
                 }
             }

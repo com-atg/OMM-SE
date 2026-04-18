@@ -15,7 +15,7 @@ function sourceEvalRecord(string $category = 'A', array $overrides = []): array
         'record_id' => '1',
         'date_lab' => '04-16-2026',
         'semester' => '1',
-        'scholar_name' => '1',
+        'student' => '1',
         'eval_category' => $category,
         'teaching_score' => '90.00',
         'clinical_performance_score' => '83.93',
@@ -43,13 +43,11 @@ function mockServices(array $evalRecord, array $allEvals, ?array $destRecord): v
     $source = mock(RedcapSourceService::class);
     $source->shouldReceive('getRecord')->andReturn($evalRecord);
     $source->shouldReceive('getScholarEvals')->andReturn($allEvals);
-    $source->shouldReceive('resolveScholarName')->with('1')->andReturn('Catherine Chin');
 
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('findScholarRecord')->with('Catherine', 'Chin')->andReturn($destRecord);
+    $destination->shouldReceive('findScholarByDatatelId')->with('1')->andReturn($destRecord);
 
     if ($destRecord) {
-        $destination->shouldReceive('getScholarRecord')->andReturn($destRecord);
         $destination->shouldReceive('updateScholarRecord')->andReturn('1');
     }
 }
@@ -112,12 +110,12 @@ test('returns 200 when source record is not found', function () {
     Mail::assertNothingSent();
 });
 
-test('returns 200 when eval record is missing scholar_name', function () {
+test('returns 200 when eval record is missing student', function () {
     Mail::fake();
 
     $source = mock(RedcapSourceService::class);
     $source->shouldReceive('getRecord')->andReturn(
-        sourceEvalRecord('A', ['scholar_name' => ''])
+        sourceEvalRecord('A', ['student' => ''])
     );
 
     $this->postJson('/notify', ['record' => '1'])->assertSuccessful();
@@ -144,10 +142,9 @@ test('returns 200 when no matching destination scholar record exists', function 
     $source = mock(RedcapSourceService::class);
     $source->shouldReceive('getRecord')->andReturn(sourceEvalRecord());
     $source->shouldReceive('getScholarEvals')->andReturn([sourceEvalRecord()]);
-    $source->shouldReceive('resolveScholarName')->andReturn('Catherine Chin');
 
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('findScholarRecord')->andReturn(null);
+    $destination->shouldReceive('findScholarByDatatelId')->andReturn(null);
 
     $this->postJson('/notify', ['record' => '1'])->assertSuccessful();
 
@@ -257,13 +254,11 @@ test('aggregates scores from multiple evals of the same category', function () {
     $source = mock(RedcapSourceService::class);
     $source->shouldReceive('getRecord')->andReturn($evals[0]);
     $source->shouldReceive('getScholarEvals')->andReturn($evals);
-    $source->shouldReceive('resolveScholarName')->andReturn('Catherine Chin');
 
     $capturedPayload = null;
 
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('findScholarRecord')->andReturn(destScholarRecord());
-    $destination->shouldReceive('getScholarRecord')->andReturn(destScholarRecord());
+    $destination->shouldReceive('findScholarByDatatelId')->andReturn(destScholarRecord());
     $destination->shouldReceive('updateScholarRecord')
         ->once()
         ->withArgs(function (array $payload) use (&$capturedPayload) {
@@ -292,13 +287,11 @@ test('skips scores outside 0–100 range in aggregation', function () {
     $source = mock(RedcapSourceService::class);
     $source->shouldReceive('getRecord')->andReturn($evals[0]);
     $source->shouldReceive('getScholarEvals')->andReturn($evals);
-    $source->shouldReceive('resolveScholarName')->andReturn('Catherine Chin');
 
     $capturedPayload = null;
 
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('findScholarRecord')->andReturn(destScholarRecord());
-    $destination->shouldReceive('getScholarRecord')->andReturn(destScholarRecord());
+    $destination->shouldReceive('findScholarByDatatelId')->andReturn(destScholarRecord());
     $destination->shouldReceive('updateScholarRecord')
         ->once()
         ->withArgs(function (array $payload) use (&$capturedPayload) {
@@ -328,13 +321,11 @@ test('aggregates comments count and concatenated text', function () {
     $source = mock(RedcapSourceService::class);
     $source->shouldReceive('getRecord')->andReturn($evals[0]);
     $source->shouldReceive('getScholarEvals')->andReturn($evals);
-    $source->shouldReceive('resolveScholarName')->andReturn('Catherine Chin');
 
     $capturedPayload = null;
 
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('findScholarRecord')->andReturn(destScholarRecord());
-    $destination->shouldReceive('getScholarRecord')->andReturn(destScholarRecord());
+    $destination->shouldReceive('findScholarByDatatelId')->andReturn(destScholarRecord());
     $destination->shouldReceive('updateScholarRecord')
         ->once()
         ->withArgs(function (array $payload) use (&$capturedPayload) {
@@ -364,13 +355,11 @@ test('sets count to zero and omits avg when no evals exist for a category', func
     $source = mock(RedcapSourceService::class);
     $source->shouldReceive('getRecord')->andReturn($evals[0]);
     $source->shouldReceive('getScholarEvals')->andReturn($evals);
-    $source->shouldReceive('resolveScholarName')->andReturn('Catherine Chin');
 
     $capturedPayload = null;
 
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('findScholarRecord')->andReturn(destScholarRecord());
-    $destination->shouldReceive('getScholarRecord')->andReturn(destScholarRecord());
+    $destination->shouldReceive('findScholarByDatatelId')->andReturn(destScholarRecord());
     $destination->shouldReceive('updateScholarRecord')
         ->once()
         ->withArgs(function (array $payload) use (&$capturedPayload) {
@@ -397,13 +386,11 @@ test('uses fall semester fields when semester code is 2', function () {
     $source = mock(RedcapSourceService::class);
     $source->shouldReceive('getRecord')->andReturn($evalRecord);
     $source->shouldReceive('getScholarEvals')->andReturn([$evalRecord]);
-    $source->shouldReceive('resolveScholarName')->andReturn('Catherine Chin');
 
     $capturedPayload = null;
 
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('findScholarRecord')->andReturn(destScholarRecord());
-    $destination->shouldReceive('getScholarRecord')->andReturn(destScholarRecord());
+    $destination->shouldReceive('findScholarByDatatelId')->andReturn(destScholarRecord());
     $destination->shouldReceive('updateScholarRecord')
         ->once()
         ->withArgs(function (array $payload) use (&$capturedPayload) {
