@@ -92,6 +92,7 @@ class EvaluationNotification extends Mailable
                 'scoreScale' => self::SCORE_SCALE[$this->evalCategory] ?? '',
                 'categoryLabel' => RedcapSourceService::CATEGORY_LABELS[$this->evalCategory] ?? '',
                 'scoreField' => RedcapSourceService::SCORE_FIELDS[$this->evalCategory] ?? '',
+                'currentCategoryKey' => RedcapSourceService::DEST_CATEGORY[$this->evalCategory] ?? null,
             ],
         );
     }
