@@ -9,9 +9,11 @@ graph TD
     subgraph Unit Tests
         U1[RedcapSourceServiceTest\n7 tests]
         U2[EvaluationNotificationTest\n15 tests]
+        U3[RedcapAdvancedLinkServiceTest]
     end
     subgraph Feature Tests
         F1[NotifierControllerTest\n32 tests]
+        F2[RedcapAdvancedLinkMiddlewareTest]
     end
 
     U1 -->|tests| SRC[RedcapSourceService]
@@ -19,6 +21,8 @@ graph TD
     F1 -->|mocks + tests| NC[NotifierController]
     F1 -->|mocks| SRC
     F1 -->|mocks| DST[RedcapDestinationService]
+    U3 -->|fakes HTTP + role mappings| RAS[RedcapAdvancedLinkService]
+    F2 -->|mocks| RAS
 ```
 
 ---
@@ -79,6 +83,17 @@ Tests `app/Mail/EvaluationNotification.php` and `resources/views/emails/evaluati
 | Null avg renders as dash | Categories with 0 evals show "—" not "0%" |
 | No attachments | `assertHasNoAttachments()` |
 
+### Unit: `RedcapAdvancedLinkServiceTest`
+
+Tests `app/Services/RedcapAdvancedLinkService.php`.
+
+| Test | What it verifies |
+|------|-----------------|
+| Authorized role | Authkey identity + user role assignment returns REDCap user context |
+| REDCap authkey exchange | Posts `authkey` and `format=json` as form data to `REDCAP_URL` |
+| Unauthorized role | User outside `AUTHORIZED_ROLES` is rejected |
+| Missing project token | `project_id` without `REDCAP_TOKEN_PID_<pid>` is rejected |
+
 ### Feature: `NotifierControllerTest`
 
 Tests the full webhook flow via HTTP. REDCap services are mocked; mail is faked.
@@ -130,6 +145,20 @@ Tests the full webhook flow via HTTP. REDCap services are mocked; mail is faked.
 |------|---------|
 | Multiple comments | `nu_comments` = count, `comments` concatenated as `[Faculty]: text` |
 | Empty comment field | Not included in count |
+
+### Feature: `RedcapAdvancedLinkMiddlewareTest`
+
+Tests the protected interactive route flow.
+
+| Test | Expected |
+|------|---------|
+| Valid authkey + authorized role | REDCap user context stored in session; launch redirects to dashboard |
+| Existing authorized session | Protected route returns success |
+| No authkey and no session | 403 Forbidden |
+| Invalid/unauthorized authkey | 403 Forbidden |
+| Middleware disabled | Protected route bypasses Advanced Link checks |
+
+The global Pest bootstrap disables Advanced Link enforcement by default so existing feature tests do not depend on local `.env` values. The middleware tests explicitly enable it.
 
 ---
 

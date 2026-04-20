@@ -85,4 +85,24 @@ class RedcapSourceService
             token: $this->token,
         );
     }
+
+    /**
+     * Fetch all records from an arbitrary source project by token.
+     * Used by bulk processing where the token is resolved per-PID from env.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    public function fetchAllRecords(string $token): array
+    {
+        $records = Redcap_lib::exportRecords(
+            format: 'json',
+            type: 'flat',
+            rawOrLabel: 'raw',
+            returnAs: 'array',
+            url: $this->url,
+            token: $token,
+        );
+
+        return is_array($records) ? $records : [];
+    }
 }

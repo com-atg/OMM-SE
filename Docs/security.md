@@ -2,26 +2,30 @@
 
 ## Threat Model
 
-The application has a small attack surface — it exposes one unauthenticated-looking endpoint (`/notify`) and makes outbound API calls to REDCap and an SMTP server. It stores no passwords, no PII beyond what is transiently in memory during a request, and no database.
+The application exposes a REDCap-facing webhook endpoint (`/notify`), a set of SAML endpoints (`/saml/login`, `/saml/acs`, `/saml/logout`, `/saml/metadata`), and interactive app pages protected by an authenticated session. It makes outbound API calls to REDCap and an SMTP server. User identity comes from Okta via SAML SSO; authorization is resolved inside the app against env-managed allowlists plus the REDCap destination project (scholar roster).
 
 ```mermaid
 graph TD
     subgraph Threats
         T1[Forged webhooks]
-        T2[Injection via payload]
-        T3[Email header injection]
-        T4[Out-of-range / corrupt scores]
-        T5[Secret leakage]
-        T6[MITM / plaintext HTTP]
+        T2[Unauthorized dashboard access]
+        T3[Injection via payload]
+        T4[Email header injection]
+        T5[Out-of-range / corrupt scores]
+        T6[Secret leakage]
+        T7[MITM / plaintext HTTP]
+        T8[Forged SAML assertion / replay]
     end
 
     subgraph Controls
         C1[Webhook token — HMAC-safe comparison]
-        C2[Input validation & allowlist]
-        C3[FILTER_VALIDATE_EMAIL]
-        C4[Score range guard 0–100]
-        C5[Secrets in env, never committed]
-        C6[HTTPS enforced, HTTP → 301]
+        C2[Okta SAML SSO + app role allowlists + gates]
+        C3[Input validation & allowlist]
+        C4[FILTER_VALIDATE_EMAIL]
+        C5[Score range guard 0–100]
+        C6[Secrets in env, never committed]
+        C7[HTTPS enforced, HTTP → 301]
+        C8[onelogin/php-saml signature validation, strict mode]
     end
 
     T1 --> C1
@@ -30,6 +34,8 @@ graph TD
     T4 --> C4
     T5 --> C5
     T6 --> C6
+    T7 --> C7
+    T8 --> C8
 ```
 
 ---
@@ -89,7 +95,86 @@ if ($secret && ! hash_equals($secret, (string) $request->query('token', ''))) {
 
 ---
 
-## 2. HTTPS Enforcement
+## 2. Authentication — Okta SAML SSO
+
+Interactive pages (`/`, `/scholar`, `/process/*`, `/admin/*`) are protected by `RequireSamlAuth`. Unauthenticated requests are redirected to `/saml/login`, which hands off to Okta. Okta posts the SAML assertion back to `/saml/acs`; the app validates it via `onelogin/php-saml`, extracts the user's email, and establishes a Laravel session.
+
+```mermaid
+sequenceDiagram
+    participant U as User Browser
+    participant APP as RequireSamlAuth
+    participant SC as SamlController
+    participant SS as SamlService (onelogin/php-saml)
+    participant IDP as Okta
+
+    U->>APP: GET /
+    APP-->>U: 302 /saml/login
+    U->>SC: GET /saml/login
+    SC->>IDP: AuthnRequest (redirect)
+    IDP->>U: Okta login page
+    U->>IDP: credentials + MFA
+    IDP->>SC: POST /saml/acs (SAMLResponse)
+    SC->>SS: processResponse()
+    SS->>SS: signature, audience, NotOnOrAfter, strict checks
+    alt assertion valid
+        SC->>APP: find/create User by email, recompute role
+        APP-->>U: 302 /  (authenticated session)
+    else invalid / replay / unsigned
+        SC-->>U: 403 Forbidden
+    end
+```
+
+**Trust model:** the app trusts only the `email` attribute from the IdP. No groups, roles, or other claims are honored. Email is the stable identifier; `displayName` is used only for UI.
+
+Relevant env (see `.env.example`):
+
+```bash
+SAML_IDP_ENTITY_ID=
+SAML_IDP_SSO_URL=
+SAML_IDP_SLO_URL=
+SAML_IDP_X509_CERT=
+SAML_SP_ENTITY_ID="${APP_URL}/saml/metadata"
+SAML_SP_ACS_URL="${APP_URL}/saml/acs"
+SAML_SP_SLO_URL="${APP_URL}/saml/logout"
+SAML_STRICT=true
+SAML_DEBUG=false
+SAML_ATTR_EMAIL=email
+SAML_ATTR_NAME=displayName
+```
+
+`SAML_STRICT=true` enforces signed responses, audience restriction, and timing windows. `SAML_SP_X509_CERT` / `SAML_SP_PRIVATE_KEY` are only required when signed AuthnRequests or encrypted assertions are enabled in the Okta app.
+
+---
+
+## 2a. Authorization — Application Role Model
+
+Once authenticated, each user is assigned a role from `App\Enums\Role`:
+
+| Role | Source | Access |
+|------|--------|--------|
+| `Service` | Email in `SERVICE_USERS=` | Everything — dashboard, all scholars, run process, user management (`/admin/users`) |
+| `Admin` | Email in `ADMIN_USERS=` | Dashboard + all scholar records; **no** user management |
+| `Student` | Email matches a scholar in the destination project (OMMScholarEvalList) | Own scholar record only |
+
+Rules:
+
+- `SERVICE_USERS` / `ADMIN_USERS` are comma-separated emails, case-insensitive.
+- On every SAML login, the app recomputes the role from the current env allowlists — demotions/promotions take effect on the next sign-in.
+- Students auto-provision via `RedcapDestinationService::findScholarByEmail()`; the matched REDCap `record_id` is cached on the `users` row (`redcap_record_id`).
+- If an email is not on any allowlist **and** does not match a scholar record, the app returns `HTTP 404` rendering `resources/views/auth/records-not-found.blade.php`. This intentionally does not expose whether the user authenticated successfully against Okta.
+
+Authorization is enforced in controllers and views through four gates registered in `AppServiceProvider`:
+
+| Gate | Service | Admin | Student |
+|------|:--:|:--:|:--:|
+| `view-dashboard` | ✅ | ✅ | ❌ |
+| `view-all-scholars` | ✅ | ✅ | ❌ (own record only) |
+| `run-process` | ✅ | ✅ | ❌ |
+| `manage-users` | ✅ | ❌ | ❌ |
+
+---
+
+## 3. HTTPS Enforcement
 
 All traffic is HTTPS-only. Traefik enforces this at the edge before any request reaches the application.
 
@@ -112,7 +197,7 @@ This is enforced at the infrastructure level — the app itself never sees an HT
 
 ---
 
-## 3. Input Validation
+## 4. Input Validation
 
 ### Webhook Payload
 
@@ -125,7 +210,7 @@ flowchart TD
     B -- Yes --> C[getRecord from REDCap API]
     C --> D{Record found?}
     D -- No --> Z
-    D -- Yes --> E{scholar_name, semester,\neval_category all non-empty?}
+    D -- Yes --> E{student, semester,\neval_category all non-empty?}
     E -- No --> Z
     E -- Yes --> F{semester in known map\n1=spring 2=fall?}
     F -- No --> Z
@@ -134,19 +219,19 @@ flowchart TD
 
 ### REDCap Filter Injection
 
-`scholar_name` and `semester` are interpolated into REDCap's `filterLogic` string. Both are validated against strict allowlists before use:
+`student` and `semester` are interpolated into REDCap's `filterLogic` string. Both are validated against strict allowlists before use:
 
 ```php
 // RedcapSourceService::getScholarEvals()
-if (! preg_match('/^\d+$/', $scholarName) || ! preg_match('/^[12]$/', $semester)) {
+if (! preg_match('/^\d+$/', $datatelId) || ! preg_match('/^[12]$/', $semester)) {
     return [];  // Reject — no API call made
 }
 ```
 
-- `scholar_name` must be all digits
+- `student` / datatelid must be all digits
 - `semester` must be exactly `1` or `2`
 
-A payload like `scholar_name = "1' OR '1'='1"` returns an empty array immediately.
+A payload like `student = "1' OR '1'='1"` returns an empty array immediately.
 
 ### Score Range Validation
 
@@ -161,7 +246,7 @@ if ($score < 0.0 || $score > 100.0) {
 
 ---
 
-## 4. Email Header Injection Prevention
+## 5. Email Header Injection Prevention
 
 Faculty and scholar email addresses arrive from REDCap (untrusted). Both are validated with PHP's `FILTER_VALIDATE_EMAIL` before being passed to the mailer:
 
@@ -174,28 +259,34 @@ A malformed address (including one with embedded newlines) is silently discarded
 
 ---
 
-## 5. CSRF Exemption (Secure)
+## 6. CSRF Exemption (Secure)
 
-The `/notify` route is exempt from Laravel's CSRF middleware because REDCap cannot include a CSRF token. This is safe because:
+The `/notify` and `/saml/acs` routes are exempt from Laravel's CSRF middleware because neither REDCap nor Okta can include a Laravel CSRF token. This is safe because:
 
-1. The endpoint is protected by the webhook shared secret instead
-2. Successful exploitation requires knowing `WEBHOOK_SECRET`, which is never exposed to clients
+1. `/notify` is protected by the webhook shared secret (`hash_equals`).
+2. `/saml/acs` accepts only signed SAML assertions validated by `onelogin/php-saml` in strict mode (signature, audience, and `NotOnOrAfter` checks).
+3. Successful exploitation requires either knowing `WEBHOOK_SECRET` or forging a valid Okta-signed assertion.
 
 ```php
 // bootstrap/app.php
-$middleware->validateCsrfTokens(except: ['/notify']);
+$middleware->validateCsrfTokens(except: ['/notify', '/saml/acs']);
 ```
 
 ---
 
-## 6. Secret Management
+## 7. Secret Management
 
 | Secret | Where it lives | Notes |
 |--------|---------------|-------|
 | `APP_KEY` | `.env` | Never commit — generate with `php artisan key:generate` |
 | `REDCAP_TOKEN` | `.env` | Destination project API token |
 | `REDCAP_SOURCE_TOKEN` | `.env` | Source project API token — update each academic year |
+| `REDCAP_TOKEN_PID_<pid>` | `.env` | Source project token keyed by REDCap PID |
 | `WEBHOOK_SECRET` | `.env` | Shared with REDCap DET URL only |
+| `SAML_IDP_X509_CERT` | `.env` | Okta signing certificate — validates SAML assertions |
+| `SAML_SP_PRIVATE_KEY` | `.env` | Optional — only if signed AuthnRequests/encrypted assertions are enabled |
+| `SERVICE_USERS` / `ADMIN_USERS` | `.env` | App role allowlists (comma-separated emails) |
+| `DB_PASSWORD` / `MYSQL_ROOT_PASSWORD` | `.env` | MySQL credentials |
 | `MAIL_PASSWORD` | `.env` | SMTP credential |
 | `DOCKERHUB_TOKEN` | GitHub Secret | Never in code or `.env` |
 | `SSH_KEY` | GitHub Secret | Private key for deploy SSH access |
@@ -204,11 +295,11 @@ $middleware->validateCsrfTokens(except: ['/notify']);
 - `.env` is in `.gitignore` — never committed
 - `.env.example` contains no real values — safe to commit
 - All config values accessed via `config()` in application code, never `env()` directly
-- REDCap tokens appear only in `config/redcap.php` and the `.env` file
+- REDCap tokens appear only in `config/redcap.php` and the `.env` file; SAML values only in `config/saml.php` and the `.env` file
 
 ---
 
-## 7. Nginx Security Headers
+## 8. Nginx Security Headers
 
 The following headers are set on all responses (`docker/nginx/default.conf`):
 
@@ -222,7 +313,7 @@ Static assets are served with `Cache-Control: public, max-age=31536000, immutabl
 
 ---
 
-## 8. Docker Attack Surface
+## 9. Docker Attack Surface
 
 | Practice | Applied |
 |----------|--------|
@@ -230,7 +321,7 @@ Static assets are served with `Cache-Control: public, max-age=31536000, immutabl
 | Multi-stage build | No build tools (npm, Composer) in the runtime image |
 | `www-data` ownership | `storage/` and `bootstrap/cache/` owned by `www-data` only |
 | No exposed ports | App container has no `ports:` mapping — only reachable via Traefik on the Docker network |
-| No database | No MySQL to harden, patch, or credential-rotate |
+| MySQL not publicly exposed | `omm-ace-mysql` is reachable only on the internal Docker network; volume bind-mounted on the host with restrictive perms |
 | Read-only vendor | `vendor/` baked into image at build time, not mounted |
 
 ---
@@ -238,9 +329,14 @@ Static assets are served with `Cache-Control: public, max-age=31536000, immutabl
 ## Security Checklist for New Deployments
 
 - [ ] `WEBHOOK_SECRET` set to a 32-byte random hex value
+- [ ] `REDCAP_TOKEN_PID_<pid>` set for each source project
+- [ ] Okta SAML app created; `SAML_IDP_ENTITY_ID`, `SAML_IDP_SSO_URL`, `SAML_IDP_SLO_URL`, `SAML_IDP_X509_CERT` populated from Okta
+- [ ] `SAML_SP_ENTITY_ID`, `SAML_SP_ACS_URL`, `SAML_SP_SLO_URL` match the Okta app configuration
+- [ ] `SAML_STRICT=true` and `SAML_DEBUG=false` in production
+- [ ] `SERVICE_USERS` / `ADMIN_USERS` populated with the real operators' emails
 - [ ] `APP_KEY` generated (`php artisan key:generate --show`)
-- [ ] `APP_DEBUG=false` in production `.env`
-- [ ] `APP_ENV=production` in production `.env`
+- [ ] `APP_DEBUG=false` and `APP_ENV=production` in production `.env`
+- [ ] MySQL credentials (`DB_PASSWORD`, `MYSQL_ROOT_PASSWORD`) generated and not defaults
 - [ ] Traefik configured with valid TLS certificate
 - [ ] REDCap DET URL uses `https://` with the `?token=` parameter
 - [ ] GitHub Secrets configured: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `SSH_HOST`, `SSH_USER`, `SSH_KEY`

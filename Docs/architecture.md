@@ -10,7 +10,7 @@ C4Context
 
     Person(faculty, "Faculty", "Submits scholar evaluations in REDCap")
     Person(scholar, "Scholar", "Receives email notification with scores")
-    Person(admin, "Administrator", "BCC'd on every notification")
+    Person(admin, "Administrator", "Uses REDCap Advanced Link to access dashboard/process views and is BCC'd on notifications")
 
     System(app, "OMM Scholar Eval", "Laravel 13 webhook processor")
 
@@ -20,7 +20,8 @@ C4Context
     System_Ext(traefik, "Traefik", "Reverse proxy — TLS termination,\nHTTP→HTTPS redirect, path routing")
 
     Rel(faculty, src, "Submits evaluation")
-    Rel(src, app, "Data Entry Trigger (webhook)", "HTTPS POST")
+    Rel(admin, src, "Clicks Advanced Link")
+    Rel(src, app, "Advanced Link launch + Data Entry Trigger", "HTTPS POST")
     Rel(app, src, "Exports eval records", "REDCap API")
     Rel(app, dest, "Imports aggregated grades", "REDCap API")
     Rel(app, mail, "Sends notification email", "SMTP")
@@ -86,6 +87,15 @@ classDiagram
         +updateScholarRecord(data) string
     }
 
+    class RedcapAdvancedLinkService {
+        +authorize(authKey, authorizedRoles) array|null
+        +isRoleAuthorized(role, authorizedRoles) bool
+    }
+
+    class VerifyRedcapAdvancedLink {
+        +handle(Request, Closure) Response
+    }
+
     class VerifyWebhookToken {
         +handle(Request, Closure) Response
     }
@@ -105,7 +115,37 @@ classDiagram
     NotifierController --> RedcapSourceService : injects
     NotifierController --> RedcapDestinationService : injects
     NotifierController --> EvaluationNotification : creates
+    VerifyRedcapAdvancedLink --> RedcapAdvancedLinkService : validates
     VerifyWebhookToken --> NotifierController : guards
+```
+
+---
+
+## Advanced Link Request Flow
+
+```mermaid
+sequenceDiagram
+    participant TR as Traefik
+    participant MW as VerifyRedcapAdvancedLink
+    participant RAS as RedcapAdvancedLinkService
+    participant RC as REDCap API
+    participant UI as Dashboard/Process/Scholar Views
+
+    TR->>MW: POST /omm_ace/redcap/launch authkey=...
+    MW->>RAS: authorize(authkey, AUTHORIZED_ROLES)
+    RAS->>RC: POST authkey + format=json
+    RC-->>RAS: username + project_id
+    RAS->>RC: exportUserRoleAssignments using REDCAP_TOKEN_PID_project
+    alt role authorized
+        MW->>MW: store REDCap user in session
+        MW-->>TR: redirect /
+    else unauthorized or invalid
+        MW-->>TR: 403 Forbidden
+    end
+
+    TR->>MW: GET protected page
+    MW->>MW: verify session role
+    MW->>UI: proceed
 ```
 
 ---
@@ -200,3 +240,5 @@ The application intentionally has no database. This simplifies operations signif
 | Queue | `QUEUE_CONNECTION=sync` — webhook processed inline |
 | Migrations | None — no schema to manage |
 | Persistence | All data lives in REDCap |
+
+Advanced Link authorization data is stored in the encrypted Laravel cookie session. No REDCap user records are written to local storage.

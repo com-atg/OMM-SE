@@ -1,6 +1,6 @@
 services:
 
-  app:
+  omm-ace-app:
     image: nyitcomatg/omm-se:latest
     restart: unless-stopped
     env_file: .env
@@ -21,7 +21,34 @@ services:
       - "traefik.http.services.omm-ace.loadbalancer.server.port=8080"
     networks:
       - proxy-net
+      - omm-ace-internal
+    depends_on:
+      omm-ace-mysql:
+        condition: service_healthy
+
+  # For production, prefer a managed MySQL (e.g. AWS RDS, DigitalOcean Managed DB)
+  # and point DB_HOST at it instead of running this container. This service is
+  # provided for single-host deployments; ensure mysql-data volume is backed up.
+  omm-ace-mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - ./data:/var/lib/mysql
+    networks:
+      - omm-ace-internal
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
 networks:
   proxy-net:
     external: true
+  omm-ace-internal:
+    driver: bridge

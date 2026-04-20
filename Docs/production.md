@@ -150,9 +150,18 @@ APP_DEBUG=false
 APP_KEY=                    # php artisan key:generate --show
 APP_URL=https://your-domain.com
 
-SESSION_DRIVER=cookie
-CACHE_STORE=file
-QUEUE_CONNECTION=sync
+# Database — MySQL 8 (omm-ace-mysql service in docker-compose.prod.yml)
+DB_CONNECTION=mysql
+DB_HOST=omm-ace-mysql
+DB_PORT=3306
+DB_DATABASE=omm_se
+DB_USERNAME=omm_se
+DB_PASSWORD=                # generate a long random string
+MYSQL_ROOT_PASSWORD=        # generate a long random string
+
+SESSION_DRIVER=database
+CACHE_STORE=database
+QUEUE_CONNECTION=database
 
 MAIL_MAILER=smtp
 MAIL_HOST=your-smtp-host
@@ -165,10 +174,44 @@ MAIL_FROM_NAME="OMM Scholar Eval"
 REDCAP_URL=https://comresearchdata.nyit.edu/redcap/api/
 REDCAP_TOKEN=               # Destination project token
 REDCAP_SOURCE_TOKEN=        # Source project token — update each academic year
+REDCAP_TOKEN_PID_1846=      # Source project token keyed by PID
 WEBHOOK_SECRET=             # openssl rand -hex 32
+
+# ── Okta SAML SSO ─────────────────────────────────────────────────────────────
+# Get these from the Okta app's "Sign On" → "View SAML setup instructions".
+SAML_IDP_ENTITY_ID=
+SAML_IDP_SSO_URL=
+SAML_IDP_SLO_URL=
+SAML_IDP_X509_CERT=
+SAML_SP_ENTITY_ID="${APP_URL}/saml/metadata"
+SAML_SP_ACS_URL="${APP_URL}/saml/acs"
+SAML_SP_SLO_URL="${APP_URL}/saml/logout"
+SAML_ATTR_EMAIL=email
+SAML_ATTR_NAME=displayName
+SAML_STRICT=true
+SAML_DEBUG=false
+SAML_DEFAULT_REDIRECT=/
+
+# ── Application role allowlists ──────────────────────────────────────────────
+# Comma-separated emails, case-insensitive. Role is recomputed on every login.
+SERVICE_USERS=
+ADMIN_USERS=
 
 DOCKERHUB_USERNAME=your-dockerhub-username
 ```
+
+**Database:** On first boot the `omm-ace-mysql` container initializes a volume at `./data` (bind mount). The app's `entrypoint.sh` runs `php artisan migrate --force` against it. Sessions, cache, and queue all live in MySQL.
+
+**Annual rotation:** For each new academic-year source project, add a matching `REDCAP_TOKEN_PID_<pid>` entry and update `REDCAP_SOURCE_TOKEN`.
+
+**Enrolling Service / Admin users:** Add their emails to `SERVICE_USERS=` or `ADMIN_USERS=`. After editing `.env`, run `docker compose -f docker-compose.prod.yml up -d --force-recreate app` to pick up the new values. The role is re-evaluated on each SAML login. Students require no enrollment — they auto-provision on first login as long as their email matches a record in the destination REDCap project.
+
+**Okta application:** In the Okta admin console create a new SAML 2.0 app.
+- Single sign-on URL / ACS: `https://your-domain.com/saml/acs`
+- Audience URI (SP Entity ID): `https://your-domain.com/saml/metadata`
+- Name ID format: `EmailAddress`
+- Attribute statements: map `email` → `user.email`, `displayName` → `user.displayName`
+- Copy the IdP Entity ID, SSO URL, SLO URL, and x509 certificate into the corresponding `SAML_IDP_*` env vars.
 
 ---
 
@@ -207,7 +250,7 @@ flowchart LR
     STRIP --> APP[app container :80]
 ```
 
-- Path prefix `/omm_ace` is stripped before the request reaches Laravel, so routes are defined as `/notify`, `/test/email`, etc.
+- Path prefix `/omm_ace` is stripped before the request reaches Laravel, so routes are defined as `/notify`, `/saml/login`, `/saml/acs`, `/test/email`, etc.
 - TLS is terminated by Traefik using whatever certificate resolver it is already configured with.
 
 ---
@@ -224,7 +267,7 @@ docker compose -f docker-compose.prod.yml pull app
 docker compose -f docker-compose.prod.yml up -d --remove-orphans app
 ```
 
-There is no database to migrate, making rollouts instantaneous. To roll back, set `APP_VERSION` to a previous CalVer tag and re-run the same commands.
+`entrypoint.sh` runs `php artisan migrate --force` on startup, so any new migrations are applied before the new container serves traffic. The MySQL container (`omm-ace-mysql`) is never recreated during an app rollout — only the `omm-ace-app` service is replaced. To roll back the app, set `APP_VERSION` to a previous CalVer tag and re-run the same commands. Destructive schema changes require a manual backup of the `./data` bind mount first.
 
 ```bash
 export APP_VERSION=2026.H1.2

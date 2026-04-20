@@ -1,6 +1,6 @@
 # OMM Scholar Eval
 
-A Laravel 13 webhook processor that receives scholar evaluation submissions from REDCap, computes per-category grade aggregates, writes them back to a destination REDCap project, and delivers professional email notifications to scholars, faculty, and administrators.
+A Laravel 13 app that receives scholar evaluation submissions from REDCap, computes per-category grade aggregates, writes them back to a destination REDCap project, delivers professional email notifications, and protects dashboard/process views with REDCap Advanced Link authorization.
 
 ---
 
@@ -9,10 +9,15 @@ A Laravel 13 webhook processor that receives scholar evaluation submissions from
 ```mermaid
 sequenceDiagram
     participant RC as REDCap Source Project
+    participant User as REDCap User
     participant App as OMM Scholar Eval
     participant Dest as REDCap OMMScholarEvalList
     participant Mail as Mail Server
 
+    User->>RC: Click Advanced Link
+    RC->>App: POST /omm_ace/redcap/launch (authkey)
+    App->>RC: validate authkey + export user role assignments
+    App->>User: dashboard/process access if role authorized
     RC->>App: POST /omm_ace/notify?token=<secret>
     App->>RC: exportRecords (single eval)
     App->>RC: exportRecords (all evals, scholar + semester)
@@ -45,11 +50,11 @@ sequenceDiagram
 | Guide | Description |
 |-------|-------------|
 | [Architecture](docs/architecture.md) | System design, component breakdown, data flow |
-| [REDCap Integration](docs/redcap-integration.md) | Source/destination schemas, webhook setup, field mappings |
+| [REDCap Integration](docs/redcap-integration.md) | Source/destination schemas, webhook setup, Advanced Link setup, field mappings |
 | [Local Development](docs/local-development.md) | Docker setup, environment variables, Mailhog |
 | [Testing](docs/testing.md) | Pest test suite, running tests, test structure |
 | [Production Deployment](docs/production.md) | CI/CD pipeline, CalVer tagging, Docker Hub, SSH deploy |
-| [Security](docs/security.md) | Webhook auth, HTTPS enforcement, input validation |
+| [Security](docs/security.md) | Webhook auth, Advanced Link auth, HTTPS enforcement, input validation |
 
 ---
 
@@ -64,6 +69,7 @@ php artisan key:generate
 
 # 2. Configure REDCap tokens and mail in .env
 #    REDCAP_URL, REDCAP_TOKEN, REDCAP_SOURCE_TOKEN, WEBHOOK_SECRET
+#    AUTHORIZED_ROLES, REDCAP_TOKEN_PID_<pid> for Advanced Link access
 
 # 3. Start the local stack
 docker compose up -d
@@ -82,12 +88,17 @@ See [Local Development](docs/local-development.md) for the full setup guide.
 app/
 ├── Http/
 │   ├── Controllers/
-│   │   └── NotifierController.php   # Webhook orchestrator
+│   │   ├── DashboardController.php  # Dashboard view
+│   │   ├── NotifierController.php   # Webhook orchestrator
+│   │   ├── ProcessController.php    # Bulk aggregation by PID
+│   │   └── ScholarController.php    # Scholar detail view
 │   └── Middleware/
-│       └── VerifyWebhookToken.php   # Shared-secret auth
+│       ├── VerifyRedcapAdvancedLink.php # REDCap user/role auth
+│       └── VerifyWebhookToken.php       # Shared-secret webhook auth
 ├── Mail/
 │   └── EvaluationNotification.php  # Markdown mailable
 └── Services/
+    ├── RedcapAdvancedLinkService.php # Authkey + role authorization
     ├── RedcapSourceService.php      # Current-year source project API wrapper
     └── RedcapDestinationService.php # OMMScholarEvalList API wrapper
 

@@ -51,6 +51,27 @@ class RedcapDestinationService
     }
 
     /**
+     * Find a scholar record by email address. Case-insensitive.
+     * Returns null if no scholar in the destination project has this email.
+     */
+    public function findScholarByEmail(string $email): ?array
+    {
+        $email = strtolower(trim($email));
+
+        if ($email === '') {
+            return null;
+        }
+
+        foreach ($this->getAllScholarRecords() as $record) {
+            if (strtolower(trim((string) ($record['email'] ?? ''))) === $email) {
+                return $record;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Fetch a single scholar record by record_id (full record).
      */
     public function getScholarRecord(string $recordId): array
@@ -82,5 +103,45 @@ class RedcapDestinationService
             url: $this->url,
             token: $this->token,
         );
+    }
+
+    /**
+     * Fetch all scholar records from the destination project.
+     * Cached for 10 minutes to balance freshness with REDCap API load.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    public function getAllScholarRecords(int $cacheMinutes = 10): array
+    {
+        return Cache::remember('destination:all_scholars', now()->addMinutes($cacheMinutes), function () {
+            $records = Redcap_lib::exportRecords(
+                format: 'json',
+                type: 'flat',
+                rawOrLabel: 'raw',
+                returnAs: 'array',
+                url: $this->url,
+                token: $this->token,
+            );
+
+            return is_array($records) ? $records : [];
+        });
+    }
+
+    /**
+     * Build a datatelid → scholar record map from the cached roster.
+     *
+     * @return array<string,array<string,mixed>>
+     */
+    public function scholarMapByDatatelId(): array
+    {
+        $map = [];
+        foreach ($this->getAllScholarRecords() as $record) {
+            $datatelId = (string) ($record['datatelid'] ?? '');
+            if ($datatelId !== '') {
+                $map[$datatelId] = $record;
+            }
+        }
+
+        return $map;
     }
 }

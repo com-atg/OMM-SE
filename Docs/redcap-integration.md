@@ -28,12 +28,14 @@ graph LR
 |---|---|---|
 | Project name | OMMACEvaluations AY20XX-20XX | OMMScholarEvalList |
 | PID | **Changes each academic year** | Fixed (permanent) |
-| Env token | `REDCAP_SOURCE_TOKEN` | `REDCAP_TOKEN` |
+| Env token | `REDCAP_SOURCE_TOKEN`, `REDCAP_TOKEN_PID_<pid>` | `REDCAP_TOKEN` |
 | Service class | `RedcapSourceService` | `RedcapDestinationService` |
 | App role | Read only | Read + Write |
 | Lifecycle | New project per academic year | Never recreated |
 
-> **Annual rotation:** At the start of each academic year, a new source project is created in REDCap. Update only `REDCAP_SOURCE_TOKEN` in `.env` — no code changes required. The destination project and its token never change.
+> **Annual rotation:** At the start of each academic year, a new source project is created in REDCap. Update `REDCAP_SOURCE_TOKEN` for webhook aggregation and add/update `REDCAP_TOKEN_PID_<new pid>` for any per-PID API operations. The destination project and its token never change.
+
+> **Note on user identity:** App authentication is via Okta SAML SSO (see [Security](security.md)). REDCap identity/role lookups are **not** part of the sign-in flow. Student users are mapped to their scholar record via `RedcapDestinationService::findScholarByEmail()` at login time; the matched `record_id` is cached on the `users` row.
 
 ---
 
@@ -43,17 +45,18 @@ graph LR
 flowchart TD
     A[New academic year begins] --> B[Admin creates new\nREDCap evaluation project]
     B --> C[Configure Data Entry Trigger\nURL in the new project]
-    C --> D[Update REDCAP_SOURCE_TOKEN\nin production .env]
-    D --> E[Verify with a test webhook]
-    E --> F[Ready for new year]
+    C --> E[Update REDCAP_SOURCE_TOKEN\nand REDCAP_TOKEN_PID for PID\nin production .env]
+    E --> F[Verify with a test webhook]
+    F --> G[Ready for new year]
 
     style B fill:#e8f4fd
-    style D fill:#fff3cd
     style E fill:#fff3cd
+    style F fill:#fff3cd
 ```
 
 **What changes year-to-year:**
 - `REDCAP_SOURCE_TOKEN` in `.env` — new API token for the new source project
+- `REDCAP_TOKEN_PID_<pid>` in `.env` — source project token keyed by the new REDCap PID
 - REDCap DET URL in the new source project — same URL, same `WEBHOOK_SECRET`
 
 **What never changes:**

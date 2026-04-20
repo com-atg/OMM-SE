@@ -1,12 +1,43 @@
 <?php
 
+use App\Http\Controllers\Admin\UserController as AdminUserController;
+use App\Http\Controllers\Auth\SamlController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\NotifierController;
+use App\Http\Controllers\ProcessController;
+use App\Http\Controllers\ScholarController;
+use App\Http\Middleware\RequireSamlAuth;
 use App\Http\Middleware\VerifyWebhookToken;
 use App\Mail\EvaluationNotification;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    return view('welcome');
+// SAML SSO (Okta)
+Route::get('/saml/login', [SamlController::class, 'login'])->name('saml.login');
+Route::post('/saml/acs', [SamlController::class, 'acs'])->name('saml.acs');
+Route::match(['get', 'post'], '/saml/logout', [SamlController::class, 'logout'])->name('saml.logout');
+Route::get('/saml/metadata', [SamlController::class, 'metadata'])->name('saml.metadata');
+
+Route::middleware(RequireSamlAuth::class)->group(function () {
+    Route::get('/', DashboardController::class)->name('dashboard');
+    Route::get('/scholar', ScholarController::class)->name('scholar');
+
+    // Bulk aggregation for a source REDCap project identified by PID.
+    // Token resolved from .env as REDCAP_TOKEN_PID_{pid}.
+    Route::middleware('can:run-process')->group(function () {
+        Route::get('/process/{pid}', [ProcessController::class, 'show'])
+            ->whereNumber('pid')
+            ->name('process');
+        Route::get('/process/status/{jobId}', [ProcessController::class, 'status'])
+            ->name('process.status');
+    });
+
+    // User management (Service-only).
+    Route::middleware('can:manage-users')->prefix('admin')->name('admin.')->group(function () {
+        Route::get('/users', [AdminUserController::class, 'index'])->name('users.index');
+        Route::get('/users/{user}/edit', [AdminUserController::class, 'edit'])->name('users.edit');
+        Route::patch('/users/{user}', [AdminUserController::class, 'update'])->name('users.update');
+        Route::delete('/users/{user}', [AdminUserController::class, 'destroy'])->name('users.destroy');
+    });
 });
 
 // REDCap webhook — triggered when an evaluation record is saved in PID 1846.

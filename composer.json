@@ -13,6 +13,7 @@
         "ext-curl": "*",
         "laravel/framework": "^13.0",
         "laravel/tinker": "^3.0",
+        "onelogin/php-saml": "^4.3",
         "symfony/var-dumper": "*"
     },
     "require-dev": {

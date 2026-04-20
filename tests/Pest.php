@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -15,7 +16,7 @@ use Tests\TestCase;
 */
 
 pest()->extend(TestCase::class)
- // ->use(RefreshDatabase::class)
+    ->use(RefreshDatabase::class)
     ->in('Feature', 'Unit');
 
 /*
@@ -44,7 +45,28 @@ expect()->extend('toBeOne', function () {
 |
 */
 
-function something()
+function asService(?string $email = null): User
 {
-    // ..
+    $user = User::factory()->service()->create($email ? ['email' => strtolower($email)] : []);
+    test()->actingAs($user);
+
+    return $user;
+}
+
+function asAdmin(?string $email = null): User
+{
+    $user = User::factory()->admin()->create($email ? ['email' => strtolower($email)] : []);
+    test()->actingAs($user);
+
+    return $user;
+}
+
+function asStudent(?string $redcapRecordId = null): User
+{
+    $user = User::factory()->student()->create(
+        $redcapRecordId ? ['redcap_record_id' => $redcapRecordId] : []
+    );
+    test()->actingAs($user);
+
+    return $user;
 }

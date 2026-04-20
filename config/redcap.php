@@ -1,5 +1,14 @@
 <?php
 
+$projectTokens = [];
+foreach (array_merge($_SERVER, $_ENV) as $key => $value) {
+    $key = (string) $key;
+
+    if (str_starts_with($key, 'REDCAP_TOKEN_PID_') && is_string($value) && $value !== '') {
+        $projectTokens[substr($key, strlen('REDCAP_TOKEN_PID_'))] = $value;
+    }
+}
+
 return [
     'url' => env('REDCAP_URL', ''),
 
@@ -20,4 +29,9 @@ return [
     | Leave empty to disable verification (local / CI environments).
     */
     'webhook_secret' => env('WEBHOOK_SECRET', ''),
+
+    /*
+    | Project tokens keyed by PID, e.g. REDCAP_TOKEN_PID_1846.
+    */
+    'project_tokens' => $projectTokens,
 ];
