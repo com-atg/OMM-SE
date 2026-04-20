@@ -7,6 +7,9 @@ $splitCsv = function (string $raw): array {
     )));
 };
 
+$appUrl = rtrim((string) env('APP_URL'), '/');
+$spUrl = fn (string $path): ?string => $appUrl !== '' ? $appUrl.$path : null;
+
 return [
     /*
     | ─────────────────────────────────────────────────────────────────────────
@@ -14,13 +17,13 @@ return [
     | ─────────────────────────────────────────────────────────────────────────
     */
     'sp' => [
-        'entityId' => env('SAML_SP_ENTITY_ID'),
+        'entityId' => env('SAML_SP_ENTITY_ID', $spUrl('/saml/metadata')),
         'assertionConsumerService' => [
-            'url' => env('SAML_SP_ACS_URL'),
+            'url' => env('SAML_SP_ACS_URL', $spUrl('/saml/acs')),
             'binding' => 'urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST',
         ],
         'singleLogoutService' => [
-            'url' => env('SAML_SP_SLO_URL'),
+            'url' => env('SAML_SP_SLO_URL', $spUrl('/saml/logout')),
             'binding' => 'urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect',
         ],
         'NameIDFormat' => 'urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress',

@@ -118,7 +118,7 @@ class SamlController
      */
     public function metadata(): Response
     {
-        $settings = $this->saml->auth()->getSettings();
+        $settings = $this->saml->auth(spValidationOnly: true)->getSettings();
         $metadata = $settings->getSPMetadata();
 
         return response($metadata, 200, ['Content-Type' => 'text/xml']);

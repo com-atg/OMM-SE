@@ -10,9 +10,9 @@ use RuntimeException;
 
 class SamlService
 {
-    public function auth(): OneLoginAuth
+    public function auth(bool $spValidationOnly = false): OneLoginAuth
     {
-        return new OneLoginAuth($this->settings());
+        return new OneLoginAuth($this->settings(), $spValidationOnly);
     }
 
     /**

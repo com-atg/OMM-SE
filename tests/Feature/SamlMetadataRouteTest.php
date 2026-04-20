@@ -9,10 +9,10 @@ it('serves SAML metadata without starting a session', function () {
         'saml.sp.entityId' => 'https://comapp.nyit.edu/omm_ace/saml/metadata',
         'saml.sp.assertionConsumerService.url' => 'https://comapp.nyit.edu/omm_ace/saml/acs',
         'saml.sp.singleLogoutService.url' => 'https://comapp.nyit.edu/omm_ace/saml/logout',
-        'saml.idp.entityId' => 'https://idp.example.com/metadata',
-        'saml.idp.singleSignOnService.url' => 'https://idp.example.com/sso',
+        'saml.idp.entityId' => null,
+        'saml.idp.singleSignOnService.url' => null,
         'saml.idp.singleLogoutService.url' => '',
-        'saml.idp.x509cert' => 'test-certificate',
+        'saml.idp.x509cert' => '',
         'saml.security.wantAssertionsSigned' => false,
     ]);
 
