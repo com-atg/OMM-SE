@@ -9,13 +9,26 @@ use App\Http\Controllers\ScholarController;
 use App\Http\Middleware\RequireSamlAuth;
 use App\Http\Middleware\VerifyWebhookToken;
 use App\Mail\EvaluationNotification;
+use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
+use Illuminate\Cookie\Middleware\EncryptCookies;
+use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
+use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
+use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 // SAML SSO (Okta)
 Route::get('/saml/login', [SamlController::class, 'login'])->name('saml.login');
 Route::post('/saml/acs', [SamlController::class, 'acs'])->name('saml.acs');
 Route::match(['get', 'post'], '/saml/logout', [SamlController::class, 'logout'])->name('saml.logout');
-Route::get('/saml/metadata', [SamlController::class, 'metadata'])->name('saml.metadata');
+Route::get('/saml/metadata', [SamlController::class, 'metadata'])
+    ->withoutMiddleware([
+        EncryptCookies::class,
+        AddQueuedCookiesToResponse::class,
+        StartSession::class,
+        ShareErrorsFromSession::class,
+        PreventRequestForgery::class,
+    ])
+    ->name('saml.metadata');
 
 Route::middleware(RequireSamlAuth::class)->group(function () {
     Route::get('/', DashboardController::class)->name('dashboard');

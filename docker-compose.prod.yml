@@ -32,6 +32,7 @@ services:
   omm-ace-mysql:
     image: mysql:8.0
     restart: unless-stopped
+    env_file: .env
     environment:
       MYSQL_DATABASE: ${DB_DATABASE}
       MYSQL_USER: ${DB_USERNAME}
