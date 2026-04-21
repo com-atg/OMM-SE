@@ -3,9 +3,11 @@
 use App\Enums\Role;
 use App\Models\User;
 
+use function Pest\Laravel\delete;
 use function Pest\Laravel\from;
 use function Pest\Laravel\get;
 use function Pest\Laravel\patch;
+use function Pest\Laravel\post;
 
 beforeEach(function () {
     asService();
@@ -66,4 +68,32 @@ it('clears redcap_record_id when left blank', function () {
     ]);
 
     expect($user->fresh()->redcap_record_id)->toBeNull();
+});
+
+it('soft-deletes a user and they no longer appear in the active list', function () {
+    $user = User::factory()->student()->create();
+
+    delete(route('admin.users.destroy', $user))->assertRedirect(route('admin.users.index'));
+
+    expect(User::find($user->id))->toBeNull()
+        ->and(User::onlyTrashed()->find($user->id))->not->toBeNull();
+});
+
+it('restores a soft-deleted user', function () {
+    $user = User::factory()->student()->create();
+    $user->delete();
+
+    post(route('admin.users.restore', $user->id))->assertRedirect(route('admin.users.index'));
+
+    expect(User::find($user->id))->not->toBeNull();
+});
+
+it('shows deleted users in the trashed section on the index page', function () {
+    $user = User::factory()->student()->create(['email' => 'deleted@example.com']);
+    $user->delete();
+
+    get('/admin/users')
+        ->assertOk()
+        ->assertSee('Deleted users')
+        ->assertSee('deleted@example.com');
 });

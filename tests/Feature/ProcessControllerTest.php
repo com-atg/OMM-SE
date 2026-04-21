@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Mail;
 
 use function Pest\Laravel\get;
 use function Pest\Laravel\mock;
+use function Pest\Laravel\post;
 
 beforeEach(function () {
     Cache::flush();
@@ -19,6 +20,39 @@ beforeEach(function () {
 afterEach(function () {
     unset($_ENV['REDCAP_TOKEN_PID_1846']);
     putenv('REDCAP_TOKEN_PID_1846');
+});
+
+// ─── One-click run (REDCAP_SOURCE_TOKEN) ─────────────────────────────────────
+
+it('triggers the source project job and renders the process view', function () {
+    config(['redcap.source_token' => 'SOURCE_TOKEN_TEST']);
+
+    $source = mock(RedcapSourceService::class);
+    $source->shouldReceive('fetchAllRecords')->andReturn([]);
+    $destination = mock(RedcapDestinationService::class);
+    $destination->shouldReceive('scholarMapByDatatelId')->andReturn([]);
+
+    $response = post(route('process.run'));
+
+    $response->assertOk()->assertViewIs('process')->assertSee('Source Project');
+
+    $jobId = $response->viewData('jobId');
+    $state = Cache::get(ProcessSourceProjectJob::cacheKey($jobId));
+
+    expect($state['pid'])->toBe('source')
+        ->and($state['status'])->toBeIn(['pending', 'running', 'complete']);
+});
+
+it('returns 503 when REDCAP_SOURCE_TOKEN is not configured', function () {
+    config(['redcap.source_token' => '']);
+
+    post(route('process.run'))->assertStatus(503);
+});
+
+it('forbids admin users from triggering the run', function () {
+    asAdmin();
+
+    post(route('process.run'))->assertForbidden();
 });
 
 // ─── Route guards ────────────────────────────────────────────────────────────

@@ -30,6 +30,21 @@
                 <a href="{{ route('scholar') }}" class="text-sm text-slate-600 hover:text-slate-900 underline underline-offset-4">
                     View individual scholar →
                 </a>
+                @can('run-process')
+                    <form method="POST" action="{{ route('process.run') }}" class="inline">
+                        @csrf
+                        <button
+                            type="submit"
+                            class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 active:scale-95 transition-transform"
+                            onclick="this.disabled=true; this.textContent='Starting…'; this.form.submit();"
+                        >
+                            <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
+                            </svg>
+                            Process evaluations
+                        </button>
+                    </form>
+                @endcan
                 @can('manage-users')
                     <a href="{{ route('admin.users.index') }}" class="text-sm text-slate-600 hover:text-slate-900 underline underline-offset-4">
                         Users

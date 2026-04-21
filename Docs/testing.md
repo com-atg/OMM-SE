@@ -2,27 +2,32 @@
 
 ## Overview
 
-The test suite uses [Pest 4](https://pestphp.com/) and covers unit and feature layers. There are no database dependencies — all REDCap API calls are mocked via Mockery.
+The test suite uses [Pest 4](https://pestphp.com/) and covers unit and feature layers. `RefreshDatabase` is enabled globally — each test runs in a transaction that is rolled back. REDCap API calls are mocked via Mockery. Total: **94 tests**.
 
 ```mermaid
 graph TD
     subgraph Unit Tests
         U1[RedcapSourceServiceTest\n7 tests]
         U2[EvaluationNotificationTest\n15 tests]
-        U3[RedcapAdvancedLinkServiceTest]
     end
     subgraph Feature Tests
         F1[NotifierControllerTest\n32 tests]
-        F2[RedcapAdvancedLinkMiddlewareTest]
+        F2[DashboardControllerTest\n4 tests]
+        F3[ScholarControllerTest\n3 tests]
+        F4[ProcessControllerTest\n7 tests]
+        F5[SamlServiceTest\n6 tests]
+        F6[RoleAuthorizationTest\n12 tests]
+        F7[AdminUserControllerTest\n5 tests]
+        F8[ExampleTest\n1 test]
     end
 
     U1 -->|tests| SRC[RedcapSourceService]
     U2 -->|tests| MAIL[EvaluationNotification]
-    F1 -->|mocks + tests| NC[NotifierController]
-    F1 -->|mocks| SRC
-    F1 -->|mocks| DST[RedcapDestinationService]
-    U3 -->|fakes HTTP + role mappings| RAS[RedcapAdvancedLinkService]
-    F2 -->|mocks| RAS
+    F1 -->|mocks| NC[NotifierController]
+    F2 & F3 & F4 -->|mocks| DST[RedcapDestinationService]
+    F5 -->|unit-style| SS[SamlService]
+    F6 -->|authorization| MW[RequireSamlAuth + Gates]
+    F7 -->|CRUD| UC[Admin\\UserController]
 ```
 
 ---
@@ -42,6 +47,20 @@ php artisan test --compact tests/Feature/NotifierControllerTest.php
 # Unit tests only
 php artisan test --compact tests/Unit/
 ```
+
+---
+
+## Auth Helpers
+
+`tests/Pest.php` exposes three global helpers for authenticating test users. All use the `User` factory and automatically call `actingAs()`:
+
+```php
+asService()              // creates + acts as a Service-role user
+asAdmin()                // creates + acts as an Admin-role user
+asStudent('record-id')   // creates + acts as a Student with the given redcap_record_id
+```
+
+Use these in `beforeEach` to cover entire test files, or per-test for mixed-role scenarios.
 
 ---
 
@@ -83,16 +102,46 @@ Tests `app/Mail/EvaluationNotification.php` and `resources/views/emails/evaluati
 | Null avg renders as dash | Categories with 0 evals show "—" not "0%" |
 | No attachments | `assertHasNoAttachments()` |
 
-### Unit: `RedcapAdvancedLinkServiceTest`
+### Feature: `SamlServiceTest`
 
-Tests `app/Services/RedcapAdvancedLinkService.php`.
+Tests `app/Services/SamlService.php` role resolution and user provisioning.
 
 | Test | What it verifies |
 |------|-----------------|
-| Authorized role | Authkey identity + user role assignment returns REDCap user context |
-| REDCap authkey exchange | Posts `authkey` and `format=json` as form data to `REDCAP_URL` |
-| Unauthorized role | User outside `AUTHORIZED_ROLES` is rejected |
-| Missing project token | `project_id` without `REDCAP_TOKEN_PID_<pid>` is rejected |
+| Service allowlist | Email in `SERVICE_USERS` → `Role::Service` |
+| Admin allowlist | Email in `ADMIN_USERS` → `Role::Admin` |
+| Default Student | Unknown email → `Role::Student` |
+| Create user | `loginFromAssertion` creates user, lowercases email, sets `last_login_at`, logs in |
+| Role promotion on re-login | Allowlist change is picked up on next sign-in |
+| Empty email rejected | Throws `RuntimeException` |
+
+### Feature: `RoleAuthorizationTest`
+
+Tests gate enforcement across all protected routes.
+
+| Test | What it verifies |
+|------|-----------------|
+| Student → dashboard redirect | `GET /` redirects to `/scholar` for students |
+| Service/Admin → dashboard | `GET /` returns 200 for elevated roles |
+| Student own record | `GET /scholar` returns only their record; `lock_selection` is true |
+| Student 404 | No matching REDCap record → 404 |
+| Student `?id` override blocked | Query string is ignored; own record always shown |
+| Admin/Student → process 403 | `GET /process/{pid}` returns 403 |
+| Admin/Student → admin UI 403 | `GET /admin/users` returns 403 |
+| Service → admin UI 200 | `GET /admin/users` returns 200 |
+| Self-delete blocked | Service user cannot delete their own account |
+
+### Feature: `AdminUserControllerTest`
+
+Tests `app/Http/Controllers/Admin/UserController.php`.
+
+| Test | What it verifies |
+|------|-----------------|
+| Index lists all users | Email, name, role visible |
+| Edit form renders | User email shown; role pre-selected |
+| Update role + REDCap ID | `PATCH` persists new role and `redcap_record_id` |
+| Invalid role rejected | Validation error on unknown role value |
+| Clear REDCap ID | Blank input stores `null` |
 
 ### Feature: `NotifierControllerTest`
 
@@ -146,19 +195,11 @@ Tests the full webhook flow via HTTP. REDCap services are mocked; mail is faked.
 | Multiple comments | `nu_comments` = count, `comments` concatenated as `[Faculty]: text` |
 | Empty comment field | Not included in count |
 
-### Feature: `RedcapAdvancedLinkMiddlewareTest`
-
-Tests the protected interactive route flow.
+### Feature: `ExampleTest`
 
 | Test | Expected |
 |------|---------|
-| Valid authkey + authorized role | REDCap user context stored in session; launch redirects to dashboard |
-| Existing authorized session | Protected route returns success |
-| No authkey and no session | 403 Forbidden |
-| Invalid/unauthorized authkey | 403 Forbidden |
-| Middleware disabled | Protected route bypasses Advanced Link checks |
-
-The global Pest bootstrap disables Advanced Link enforcement by default so existing feature tests do not depend on local `.env` values. The middleware tests explicitly enable it.
+| Unauthenticated request | `GET /` redirects to `/saml/login` |
 
 ---
 

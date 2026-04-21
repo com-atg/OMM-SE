@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\User;
 use App\Services\RedcapDestinationService;
 use Illuminate\Support\Facades\Cache;
 
@@ -77,6 +78,70 @@ it('ignores ?id query string for students and forces their own record', function
     $response = get('/scholar?id=11');
 
     expect($response->viewData('selected')['record_id'])->toBe('10');
+});
+
+// ─── Token URL ───────────────────────────────────────────────────────────────
+
+it('service user can access any scholar via token URL', function () {
+    asService();
+
+    $target = User::factory()->student()->create(['redcap_record_id' => '10']);
+
+    $destination = mock(RedcapDestinationService::class);
+    $destination->shouldReceive('getAllScholarRecords')->once()->andReturn([
+        ['record_id' => '10', 'first_name' => 'Cat', 'last_name' => 'Chin'],
+    ]);
+
+    get(route('scholar.token', $target->public_token))->assertOk();
+});
+
+it('admin user can access any scholar via token URL', function () {
+    asAdmin();
+
+    $target = User::factory()->student()->create(['redcap_record_id' => '10']);
+
+    $destination = mock(RedcapDestinationService::class);
+    $destination->shouldReceive('getAllScholarRecords')->once()->andReturn([
+        ['record_id' => '10', 'first_name' => 'Cat', 'last_name' => 'Chin'],
+    ]);
+
+    get(route('scholar.token', $target->public_token))->assertOk();
+});
+
+it('student can access their own token URL', function () {
+    $student = asStudent('10');
+
+    $destination = mock(RedcapDestinationService::class);
+    $destination->shouldReceive('getAllScholarRecords')->once()->andReturn([
+        ['record_id' => '10', 'first_name' => 'Cat', 'last_name' => 'Chin'],
+    ]);
+
+    get(route('scholar.token', $student->public_token))->assertOk();
+});
+
+it('student cannot access another student token URL', function () {
+    asStudent('10');
+
+    $other = User::factory()->student()->create(['redcap_record_id' => '11']);
+
+    get(route('scholar.token', $other->public_token))->assertForbidden();
+});
+
+it('token URL returns 404 for an unknown token', function () {
+    asService();
+
+    get(route('scholar.token', '00000000-0000-0000-0000-000000000000'))->assertNotFound();
+});
+
+it('scholar page includes a shareable URL for students', function () {
+    $student = asStudent('10');
+
+    $destination = mock(RedcapDestinationService::class);
+    $destination->shouldReceive('getAllScholarRecords')->once()->andReturn([
+        ['record_id' => '10', 'first_name' => 'Cat', 'last_name' => 'Chin'],
+    ]);
+
+    get('/scholar')->assertOk()->assertSee($student->public_token);
 });
 
 // ─── Process — Service-only ──────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 # OMM Scholar Eval
 
-A Laravel 13 app that receives scholar evaluation submissions from REDCap, computes per-category grade aggregates, writes them back to a destination REDCap project, delivers professional email notifications, and protects dashboard/process views with REDCap Advanced Link authorization.
+A Laravel 13 app that receives scholar evaluation submissions from REDCap, computes per-category grade aggregates, writes them back to a destination REDCap project, delivers email notifications to scholars and faculty, and exposes a dashboard protected by Okta SAML SSO.
 
 ---
 
@@ -9,21 +9,22 @@ A Laravel 13 app that receives scholar evaluation submissions from REDCap, compu
 ```mermaid
 sequenceDiagram
     participant RC as REDCap Source Project
-    participant User as REDCap User
     participant App as OMM Scholar Eval
     participant Dest as REDCap OMMScholarEvalList
     participant Mail as Mail Server
+    participant Scholar as Scholar (browser)
 
-    User->>RC: Click Advanced Link
-    RC->>App: POST /omm_ace/redcap/launch (authkey)
-    App->>RC: validate authkey + export user role assignments
-    App->>User: dashboard/process access if role authorized
-    RC->>App: POST /omm_ace/notify?token=<secret>
+    RC->>App: POST /notify?token=<secret> (Data Entry Trigger)
     App->>RC: exportRecords (single eval)
     App->>RC: exportRecords (all evals, scholar + semester)
     App->>App: Aggregate scores & comments
     App->>Dest: importRecords (nu/avg/comments fields)
-    App->>Mail: EvaluationNotification (To: scholar, CC: faculty, BCC: admin)
+    App->>Mail: EvaluationNotification (To: scholar, CC: faculty)
+
+    Scholar->>App: GET / (unauthenticated)
+    App-->>Scholar: 302 → Okta login
+    Scholar->>App: POST /saml/acs (Okta assertion)
+    App-->>Scholar: dashboard / scholar detail
 ```
 
 ---
@@ -36,12 +37,26 @@ sequenceDiagram
 | Runtime | PHP-FPM + Nginx (Alpine) |
 | Process manager | Supervisor |
 | Reverse proxy | Traefik (external) |
-| Cache | File-based |
-| Queue | Sync (inline) |
-| Testing | Pest 4 |
+| Database | MySQL 8 |
+| Sessions / Cache / Queue | Database driver |
+| Authentication | Okta SAML 2.0 via `onelogin/php-saml` |
+| Authorization | App-level role enum (Service / Admin / Student) |
+| Testing | Pest 4 — 94 tests |
 | CI/CD | GitHub Actions |
 | Containerisation | Docker (multi-stage) |
 | Versioning | CalVer — `YYYY.HX.N` |
+
+---
+
+## Roles
+
+| Role | Access |
+|------|--------|
+| **Service** | Everything — dashboard, all scholar records, `/process/*` bulk aggregation, `/admin/users` user management |
+| **Admin** | Dashboard + all scholar records (read-only). No user management. |
+| **Student** | Own scholar record only. Redirected from dashboard to their detail page. |
+
+Service and Admin users are allowlisted by email in `.env` (`SERVICE_USERS=`, `ADMIN_USERS=`). Students auto-provision on first SAML login if their email matches a record in the REDCap destination project. Unmatched users see a 404.
 
 ---
 
@@ -49,12 +64,12 @@ sequenceDiagram
 
 | Guide | Description |
 |-------|-------------|
-| [Architecture](docs/architecture.md) | System design, component breakdown, data flow |
-| [REDCap Integration](docs/redcap-integration.md) | Source/destination schemas, webhook setup, Advanced Link setup, field mappings |
-| [Local Development](docs/local-development.md) | Docker setup, environment variables, Mailhog |
-| [Testing](docs/testing.md) | Pest test suite, running tests, test structure |
-| [Production Deployment](docs/production.md) | CI/CD pipeline, CalVer tagging, Docker Hub, SSH deploy |
-| [Security](docs/security.md) | Webhook auth, Advanced Link auth, HTTPS enforcement, input validation |
+| [Architecture](Docs/architecture.md) | System design, component breakdown, SAML + webhook data flows |
+| [REDCap Integration](Docs/redcap-integration.md) | Source/destination schemas, webhook setup, field mappings |
+| [Local Development](Docs/local-development.md) | Docker setup, environment variables, simulating SSO login |
+| [Testing](Docs/testing.md) | Pest test suite, auth helpers, test structure |
+| [Production Deployment](Docs/production.md) | CI/CD pipeline, CalVer tagging, Docker Hub, SSH deploy, Okta setup |
+| [Security](Docs/security.md) | SAML validation, role model, webhook auth, secrets management |
 
 ---
 
@@ -63,22 +78,24 @@ sequenceDiagram
 ```bash
 # 1. Clone and install dependencies
 git clone <repo-url> omm-se && cd omm-se
-composer install
+composer install && npm install
+
+# 2. Configure environment
 cp .env.example .env
 php artisan key:generate
+# Edit .env: set DB_*, REDCAP_*, SAML_IDP_*, SERVICE_USERS
 
-# 2. Configure REDCap tokens and mail in .env
-#    REDCAP_URL, REDCAP_TOKEN, REDCAP_SOURCE_TOKEN, WEBHOOK_SECRET
-#    AUTHORIZED_ROLES, REDCAP_TOKEN_PID_<pid> for Advanced Link access
-
-# 3. Start the local stack
+# 3. Start the local stack (app + MySQL + Mailhog)
 docker compose up -d
 
-# 4. Run tests
+# 4. Run migrations and seed the default Service account
+php artisan migrate --seed
+
+# 5. Run tests
 php artisan test --compact
 ```
 
-See [Local Development](docs/local-development.md) for the full setup guide.
+See [Local Development](Docs/local-development.md) for the full setup guide including how to bypass SAML for local development.
 
 ---
 
@@ -86,32 +103,30 @@ See [Local Development](docs/local-development.md) for the full setup guide.
 
 ```
 app/
+├── Enums/
+│   └── Role.php                         # Service / Admin / Student
 ├── Http/
 │   ├── Controllers/
-│   │   ├── DashboardController.php  # Dashboard view
-│   │   ├── NotifierController.php   # Webhook orchestrator
-│   │   ├── ProcessController.php    # Bulk aggregation by PID
-│   │   └── ScholarController.php    # Scholar detail view
+│   │   ├── Admin/UserController.php     # Service-only user management UI
+│   │   ├── Auth/SamlController.php      # SAML SSO (login / ACS / logout / metadata)
+│   │   ├── DashboardController.php      # Cohort overview (Service + Admin)
+│   │   ├── NotifierController.php       # REDCap webhook orchestrator
+│   │   ├── ProcessController.php        # Bulk aggregation by PID (Service only)
+│   │   └── ScholarController.php        # Scholar detail (scoped by role)
 │   └── Middleware/
-│       ├── VerifyRedcapAdvancedLink.php # REDCap user/role auth
+│       ├── RequireSamlAuth.php          # SAML session guard
 │       └── VerifyWebhookToken.php       # Shared-secret webhook auth
-├── Mail/
-│   └── EvaluationNotification.php  # Markdown mailable
+├── Models/User.php
+├── Providers/AppServiceProvider.php     # Gate definitions
 └── Services/
-    ├── RedcapAdvancedLinkService.php # Authkey + role authorization
-    ├── RedcapSourceService.php      # Current-year source project API wrapper
-    └── RedcapDestinationService.php # OMMScholarEvalList API wrapper
+    ├── SamlService.php                  # Role resolution + user provisioning
+    ├── RedcapSourceService.php          # Current-year source project API
+    └── RedcapDestinationService.php     # OMMScholarEvalList API
 
-config/redcap.php                    # REDCap connection config
-resources/views/emails/evaluation.blade.php
+config/
+├── redcap.php
+└── saml.php
 
-docker/
-├── entrypoint.sh
-├── nginx/default.conf
-├── php/{php.ini,opcache.ini}
-└── supervisor/supervisord.conf
-
-tests/
-├── Feature/NotifierControllerTest.php
-└── Unit/{RedcapSourceServiceTest,EvaluationNotificationTest}.php
+packages/redcap-advanced-link/          # Reusable REDCap Advanced Link template
+                                        # (not wired into this app — copy-paste for other projects)
 ```

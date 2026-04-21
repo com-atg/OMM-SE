@@ -119,7 +119,8 @@ class SamlController
     public function metadata(): Response
     {
         $settings = $this->saml->auth(spValidationOnly: true)->getSettings();
-        $metadata = $settings->getSPMetadata();
+        $validUntil = strtotime('+20 years');
+        $metadata = $settings->getSPMetadata(false, $validUntil);
 
         return response($metadata, 200, ['Content-Type' => 'text/xml']);
     }

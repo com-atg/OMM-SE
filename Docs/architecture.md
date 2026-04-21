@@ -2,32 +2,35 @@
 
 ## System Context
 
-The app sits between two REDCap projects and a mail server. It has no persistent database — all state lives in REDCap and the file system cache.
+The app sits between two REDCap projects, an Okta tenant, and a mail server. State is persisted in MySQL (users, sessions, cache, queue) and in REDCap (scholar records, aggregates).
 
 ```mermaid
 C4Context
     title OMM Scholar Eval — System Context
 
     Person(faculty, "Faculty", "Submits scholar evaluations in REDCap")
-    Person(scholar, "Scholar", "Receives email notification with scores")
-    Person(admin, "Administrator", "Uses REDCap Advanced Link to access dashboard/process views and is BCC'd on notifications")
+    Person(scholar, "Scholar", "Logs in via Okta; views own eval records")
+    Person(admin, "Administrator", "Logs in via Okta; views all scholar records")
+    Person(service, "Service User", "Logs in via Okta; full access + user management")
 
-    System(app, "OMM Scholar Eval", "Laravel 13 webhook processor")
-
+    System(app, "OMM Scholar Eval", "Laravel 13 web app + webhook processor")
+    System_Ext(okta, "Okta", "SAML 2.0 Identity Provider")
     System_Ext(src, "REDCap Source Project", "OMMACEvaluations AY20XX-20XX\nRotates each academic year")
     System_Ext(dest, "REDCap OMMScholarEvalList", "Aggregated grade records\nper scholar per semester")
     System_Ext(mail, "SMTP Mail Server", "Delivers email notifications")
-    System_Ext(traefik, "Traefik", "Reverse proxy — TLS termination,\nHTTP→HTTPS redirect, path routing")
+    System_Ext(traefik, "Traefik", "Reverse proxy — TLS termination,\nHTTP→HTTPS redirect")
 
     Rel(faculty, src, "Submits evaluation")
-    Rel(admin, src, "Clicks Advanced Link")
-    Rel(src, app, "Advanced Link launch + Data Entry Trigger", "HTTPS POST")
+    Rel(scholar, okta, "Authenticates via SSO")
+    Rel(admin, okta, "Authenticates via SSO")
+    Rel(service, okta, "Authenticates via SSO")
+    Rel(okta, app, "SAML assertion", "HTTPS POST /saml/acs")
+    Rel(src, app, "Data Entry Trigger", "HTTPS POST /notify")
     Rel(app, src, "Exports eval records", "REDCap API")
     Rel(app, dest, "Imports aggregated grades", "REDCap API")
     Rel(app, mail, "Sends notification email", "SMTP")
     Rel(mail, scholar, "Delivers email")
-    Rel(mail, admin, "BCC delivery")
-    Rel(traefik, app, "Forwards /omm_ace/* requests", "HTTP")
+    Rel(traefik, app, "Forwards requests", "HTTP")
 ```
 
 ---
@@ -115,37 +118,54 @@ classDiagram
     NotifierController --> RedcapSourceService : injects
     NotifierController --> RedcapDestinationService : injects
     NotifierController --> EvaluationNotification : creates
-    VerifyRedcapAdvancedLink --> RedcapAdvancedLinkService : validates
+    RequireSamlAuth --> SamlService : delegates
     VerifyWebhookToken --> NotifierController : guards
 ```
 
 ---
 
-## Advanced Link Request Flow
+## SAML Authentication Flow
 
 ```mermaid
 sequenceDiagram
+    participant U as Browser
     participant TR as Traefik
-    participant MW as VerifyRedcapAdvancedLink
-    participant RAS as RedcapAdvancedLinkService
-    participant RC as REDCap API
-    participant UI as Dashboard/Process/Scholar Views
+    participant MW as RequireSamlAuth
+    participant SC as SamlController
+    participant SS as SamlService
+    participant IDP as Okta
+    participant DB as MySQL (users)
+    participant RC as REDCap OMMScholarEvalList
 
-    TR->>MW: POST /omm_ace/redcap/launch authkey=...
-    MW->>RAS: authorize(authkey, AUTHORIZED_ROLES)
-    RAS->>RC: POST authkey + format=json
-    RC-->>RAS: username + project_id
-    RAS->>RC: exportUserRoleAssignments using REDCAP_TOKEN_PID_project
-    alt role authorized
-        MW->>MW: store REDCap user in session
-        MW-->>TR: redirect /
-    else unauthorized or invalid
-        MW-->>TR: 403 Forbidden
+    U->>TR: GET /
+    TR->>MW: forward
+    MW-->>U: 302 → /saml/login (stores intended URL)
+
+    U->>SC: GET /saml/login
+    SC-->>U: 302 → Okta SSO URL (AuthnRequest)
+
+    U->>IDP: Okta login page
+    IDP-->>U: POST /saml/acs (SAMLResponse)
+
+    U->>SC: POST /saml/acs
+    SC->>SS: extractIdentity(auth)
+    SS-->>SC: email, name, nameId
+    SC->>SS: loginFromAssertion(email, name, nameId)
+    SS->>SS: resolveRole(email) — checks SERVICE_USERS / ADMIN_USERS
+    SS->>DB: updateOrCreate user row
+    DB-->>SS: User
+
+    alt role = Student
+        SC->>RC: findScholarByEmail(email)
+        alt no match
+            SC-->>U: 404 records-not-found view
+        else matched
+            SC->>DB: save redcap_record_id
+            SC-->>U: 302 → intended URL
+        end
+    else role = Admin or Service
+        SC-->>U: 302 → intended URL
     end
-
-    TR->>MW: GET protected page
-    MW->>MW: verify session role
-    MW->>UI: proceed
 ```
 
 ---
@@ -235,10 +255,10 @@ The application intentionally has no database. This simplifies operations signif
 
 | Concern | Solution |
 |---------|---------|
-| Sessions | `SESSION_DRIVER=cookie` — no server-side state |
-| Cache | `CACHE_STORE=file` — scholar lookup cached 1 h in `storage/framework/cache` |
-| Queue | `QUEUE_CONNECTION=sync` — webhook processed inline |
-| Migrations | None — no schema to manage |
-| Persistence | All data lives in REDCap |
+| Sessions | `SESSION_DRIVER=database` — `sessions` table in MySQL |
+| Cache | `CACHE_STORE=database` — `cache` table; scholar roster cached 10 min, per-scholar 1 h |
+| Queue | `QUEUE_CONNECTION=database` — `jobs` table; bulk-aggregation job dispatched after response |
+| Migrations | `users`, `sessions`, `cache`, `jobs`, `password_reset_tokens` |
+| Persistence | User records (with roles + REDCap record IDs) in MySQL; aggregated grades in REDCap |
 
-Advanced Link authorization data is stored in the encrypted Laravel cookie session. No REDCap user records are written to local storage.
+User authentication state is stored in the database-backed session. The `users` table caches each scholar's `redcap_record_id` after their first SAML login, avoiding a REDCap API call on every request.

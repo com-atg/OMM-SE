@@ -15,9 +15,11 @@ class UserController extends Controller
     public function index(): View
     {
         $users = User::query()->orderBy('role')->orderBy('email')->get();
+        $trashedUsers = User::onlyTrashed()->orderBy('email')->get();
 
         return view('admin.users.index', [
             'users' => $users,
+            'trashedUsers' => $trashedUsers,
             'roles' => Role::cases(),
         ]);
     }
@@ -59,5 +61,16 @@ class UserController extends Controller
         return redirect()
             ->route('admin.users.index')
             ->with('status', "Deleted {$email}.");
+    }
+
+    public function restore(Request $request, int $id): RedirectResponse
+    {
+        $user = User::onlyTrashed()->findOrFail($id);
+
+        $user->restore();
+
+        return redirect()
+            ->route('admin.users.index')
+            ->with('status', "Restored {$user->email}.");
     }
 }

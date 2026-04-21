@@ -341,9 +341,12 @@ test('aggregates comments count and concatenated text', function () {
         ->toHaveKey('spring_nu_comments', 2)
         ->toHaveKey('spring_comments');
 
+    // New format: "Faculty; Date; Comment" per line.
     expect($capturedPayload['spring_comments'])
-        ->toContain('[Dr. A]: First comment.')
-        ->toContain('[Dr. B]: Second comment.');
+        ->toContain('Dr. A;')
+        ->toContain('First comment.')
+        ->toContain('Dr. B;')
+        ->toContain('Second comment.');
 });
 
 test('sets count to zero and omits avg when no evals exist for a category', function () {

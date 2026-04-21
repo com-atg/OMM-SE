@@ -33,10 +33,14 @@ Route::get('/saml/metadata', [SamlController::class, 'metadata'])
 Route::middleware(RequireSamlAuth::class)->group(function () {
     Route::get('/', DashboardController::class)->name('dashboard');
     Route::get('/scholar', ScholarController::class)->name('scholar');
+    Route::get('/scholar/{token}', [ScholarController::class, 'show'])
+        ->where('token', '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
+        ->name('scholar.token');
 
     // Bulk aggregation for a source REDCap project identified by PID.
     // Token resolved from .env as REDCAP_TOKEN_PID_{pid}.
     Route::middleware('can:run-process')->group(function () {
+        Route::post('/process/run', [ProcessController::class, 'run'])->name('process.run');
         Route::get('/process/{pid}', [ProcessController::class, 'show'])
             ->whereNumber('pid')
             ->name('process');
@@ -50,6 +54,7 @@ Route::middleware(RequireSamlAuth::class)->group(function () {
         Route::get('/users/{user}/edit', [AdminUserController::class, 'edit'])->name('users.edit');
         Route::patch('/users/{user}', [AdminUserController::class, 'update'])->name('users.update');
         Route::delete('/users/{user}', [AdminUserController::class, 'destroy'])->name('users.destroy');
+        Route::post('/users/{id}/restore', [AdminUserController::class, 'restore'])->name('users.restore');
     });
 });
 

@@ -74,6 +74,39 @@
                 </tbody>
             </table>
         </section>
+
+        @if ($trashedUsers->isNotEmpty())
+            <h2 class="mt-10 mb-3 text-base font-semibold text-slate-700">Deleted users</h2>
+            <section class="bg-white rounded-xl shadow-sm ring-1 ring-red-100 overflow-hidden">
+                <table class="w-full text-sm">
+                    <thead class="bg-red-50 text-xs uppercase tracking-wide text-red-400">
+                        <tr>
+                            <th class="px-4 py-3 text-left">Email</th>
+                            <th class="px-4 py-3 text-left">Name</th>
+                            <th class="px-4 py-3 text-left">Role</th>
+                            <th class="px-4 py-3 text-left">Deleted</th>
+                            <th class="px-4 py-3"></th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        @foreach ($trashedUsers as $u)
+                            <tr class="opacity-60">
+                                <td class="px-4 py-3 font-medium text-slate-900">{{ $u->email }}</td>
+                                <td class="px-4 py-3">{{ $u->name }}</td>
+                                <td class="px-4 py-3">{{ $u->role?->label() }}</td>
+                                <td class="px-4 py-3 text-slate-500">{{ $u->deleted_at?->diffForHumans() }}</td>
+                                <td class="px-4 py-3 text-right">
+                                    <form method="POST" action="{{ route('admin.users.restore', $u->id) }}" class="inline">
+                                        @csrf
+                                        <button type="submit" class="text-green-600 hover:text-green-800">Restore</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </section>
+        @endif
     </div>
 </body>
 </html>
