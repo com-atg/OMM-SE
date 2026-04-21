@@ -97,6 +97,7 @@ class SamlService
         return [
             'strict' => (bool) config('saml.strict', true),
             'debug' => (bool) config('saml.debug', false),
+            'baseurl' => rtrim((string) config('app.url'), '/'),
             'sp' => config('saml.sp'),
             'idp' => config('saml.idp'),
             'security' => config('saml.security'),

@@ -15,6 +15,7 @@ class AppServiceProvider extends ServiceProvider
     {
         if ($this->app->isProduction()) {
             URL::forceScheme('https');
+            URL::forceRootUrl(config('app.url'));
         }
 
         Gate::define('view-dashboard', fn (User $user) => $user->canViewAllScholars());
