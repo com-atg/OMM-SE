@@ -34,6 +34,7 @@ RUN apk upgrade --no-cache \
         oniguruma-dev \
         icu-dev \
         linux-headers \
+        mysql-client \
     && docker-php-ext-install \
         mbstring \
         zip \
@@ -42,6 +43,7 @@ RUN apk upgrade --no-cache \
         pcntl \
         bcmath \
         intl \
+        pdo_mysql \
     && pip install --upgrade --no-cache-dir --break-system-packages setuptools wheel 2>/dev/null || true \
     && rm -rf /usr/lib/python*/site-packages/setuptools/_vendor/wheel-* \
               /usr/lib/python*/site-packages/pip/_vendor/wheel-* 2>/dev/null || true
