@@ -16,7 +16,8 @@ class RequireSamlAuth
     {
         if (! Auth::check()) {
             if (! $request->expectsJson()) {
-                $request->session()->put('url.intended', $request->fullUrl());
+                $intendedUrl = url($request->path()).($request->getQueryString() ? '?'.$request->getQueryString() : '');
+                $request->session()->put('url.intended', $intendedUrl);
             }
 
             return redirect()->route('saml.login');

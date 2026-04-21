@@ -35,9 +35,15 @@ it('creates a user with the resolved role and lowercases the email', function ()
         ->and(auth()->id())->toBe($user->id);
 });
 
-it('updates role on subsequent logins if allowlist changes', function () {
-    User::factory()->student()->create(['email' => 'boss@example.com']);
+it('preserves the database role on subsequent logins', function () {
+    User::factory()->create(['email' => 'boss@example.com', 'role' => Role::Student]);
 
+    app(SamlService::class)->loginFromAssertion('boss@example.com', 'The Boss', null);
+
+    expect(User::where('email', 'boss@example.com')->first()->role)->toBe(Role::Student);
+});
+
+it('uses the allowlist role for first-time logins', function () {
     app(SamlService::class)->loginFromAssertion('boss@example.com', 'The Boss', null);
 
     expect(User::where('email', 'boss@example.com')->first()->role)->toBe(Role::Admin);

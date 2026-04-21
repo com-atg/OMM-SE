@@ -5,9 +5,12 @@ namespace App\Http\Controllers\Admin;
 use App\Enums\Role;
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\RedcapDestinationService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\Rule;
 
 class UserController extends Controller
@@ -17,11 +20,45 @@ class UserController extends Controller
         $users = User::query()->orderBy('role')->orderBy('email')->get();
         $trashedUsers = User::onlyTrashed()->orderBy('email')->get();
 
+        $counts = [
+            'service' => $users->where('role', Role::Service)->count(),
+            'admin' => $users->where('role', Role::Admin)->count(),
+            'student' => $users->where('role', Role::Student)->count(),
+            'deleted' => $trashedUsers->count(),
+        ];
+
         return view('admin.users.index', [
             'users' => $users,
             'trashedUsers' => $trashedUsers,
             'roles' => Role::cases(),
+            'counts' => $counts,
         ]);
+    }
+
+    public function create(): View
+    {
+        return view('admin.users.create', [
+            'roles' => Role::cases(),
+        ]);
+    }
+
+    public function store(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'email' => ['required', 'email', 'max:255', 'unique:users,email'],
+            'name' => ['required', 'string', 'max:255'],
+            'role' => ['required', Rule::enum(Role::class)],
+        ]);
+
+        User::create([
+            'email' => strtolower(trim($validated['email'])),
+            'name' => $validated['name'],
+            'role' => Role::from($validated['role']),
+        ]);
+
+        return redirect()
+            ->route('admin.users.index')
+            ->with('status', "Created {$validated['email']}.");
     }
 
     public function edit(User $user): View
@@ -72,5 +109,68 @@ class UserController extends Controller
         return redirect()
             ->route('admin.users.index')
             ->with('status', "Restored {$user->email}.");
+    }
+
+    public function impersonate(Request $request, User $user): RedirectResponse
+    {
+        abort_if($user->id === $request->user()->id, 403, 'You cannot impersonate yourself.');
+        abort_if($user->isService(), 403, 'Cannot impersonate a Service account.');
+        abort_if($request->session()->has('impersonating_original_id'), 403, 'Already in an impersonation session.');
+
+        $request->session()->put('impersonating_original_id', $request->user()->id);
+        Auth::loginUsingId($user->id);
+
+        return redirect()->route('dashboard');
+    }
+
+    public function stopImpersonation(Request $request): RedirectResponse
+    {
+        $originalId = $request->session()->pull('impersonating_original_id');
+
+        if ($originalId !== null) {
+            Auth::loginUsingId($originalId);
+        }
+
+        return redirect()->route('admin.users.index');
+    }
+
+    public function import(RedcapDestinationService $destination): RedirectResponse
+    {
+        Cache::forget('destination:all_scholars');
+        $scholars = $destination->getAllScholarRecords();
+
+        $created = 0;
+        $skipped = 0;
+
+        foreach ($scholars as $scholar) {
+            $email = strtolower(trim((string) ($scholar['email'] ?? '')));
+
+            if ($email === '') {
+                continue;
+            }
+
+            if (User::withTrashed()->where('email', $email)->exists()) {
+                $skipped++;
+
+                continue;
+            }
+
+            $firstName = trim((string) ($scholar['goes_by'] ?: ($scholar['first_name'] ?? '')));
+            $lastName = trim((string) ($scholar['last_name'] ?? ''));
+            $name = trim("{$firstName} {$lastName}") ?: $email;
+
+            User::create([
+                'email' => $email,
+                'name' => $name,
+                'role' => Role::Student,
+                'redcap_record_id' => (string) ($scholar['record_id'] ?? '') ?: null,
+            ]);
+
+            $created++;
+        }
+
+        return redirect()
+            ->route('admin.users.index')
+            ->with('status', "REDCap import complete: {$created} created, {$skipped} already existed.");
     }
 }

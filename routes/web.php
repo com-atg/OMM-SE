@@ -48,13 +48,21 @@ Route::middleware(RequireSamlAuth::class)->group(function () {
             ->name('process.status');
     });
 
+    // Stop impersonation — must be outside can:manage-users since the impersonated user may lack that gate.
+    Route::post('/impersonate/stop', [AdminUserController::class, 'stopImpersonation'])->name('users.impersonate.stop');
+
     // User management (Service-only).
     Route::middleware('can:manage-users')->prefix('admin')->name('admin.')->group(function () {
         Route::get('/users', [AdminUserController::class, 'index'])->name('users.index');
+        // Static routes before {user} wildcard to avoid conflicts.
+        Route::get('/users/create', [AdminUserController::class, 'create'])->name('users.create');
+        Route::post('/users', [AdminUserController::class, 'store'])->name('users.store');
+        Route::post('/users/import', [AdminUserController::class, 'import'])->name('users.import');
         Route::get('/users/{user}/edit', [AdminUserController::class, 'edit'])->name('users.edit');
         Route::patch('/users/{user}', [AdminUserController::class, 'update'])->name('users.update');
         Route::delete('/users/{user}', [AdminUserController::class, 'destroy'])->name('users.destroy');
         Route::post('/users/{id}/restore', [AdminUserController::class, 'restore'])->name('users.restore');
+        Route::post('/users/{user}/impersonate', [AdminUserController::class, 'impersonate'])->name('users.impersonate');
     });
 });
 

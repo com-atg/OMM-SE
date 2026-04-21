@@ -16,6 +16,7 @@
     @endif
 </head>
 <body class="min-h-screen bg-slate-50 text-slate-800 antialiased" style="font-family: 'Instrument Sans', system-ui, sans-serif;">
+    @include('partials.impersonation-banner')
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <header class="mb-8 flex items-center justify-between flex-wrap gap-4">
             <div>
