@@ -19,6 +19,8 @@
             ? 'bg-amber-100 text-amber-950 shadow-sm ring-1 ring-amber-200'
             : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950';
     };
+
+    $hasViteBuild = file_exists(public_path('build/manifest.json')) || file_exists(public_path('hot'));
 @endphp
 
 <!DOCTYPE html>
@@ -31,7 +33,8 @@
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=inter:400,500,600,700,800&display=swap" rel="stylesheet">
 
-    @if (file_exists(public_path('build/manifest.json')) || file_exists(public_path('hot')))
+    @if ($hasViteBuild)
+        @livewireScriptConfig
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     @else
         <script src="https://cdn.tailwindcss.com"></script>
@@ -144,7 +147,9 @@
 
     {{ $scripts ?? '' }}
 
-    @livewireScripts
-    @fluxScripts
+    @unless ($hasViteBuild)
+        @livewireScripts
+        @fluxScripts
+    @endunless
 </body>
 </html>
