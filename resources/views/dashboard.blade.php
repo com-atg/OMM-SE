@@ -45,13 +45,6 @@
 
     </x-slot:navActions>
 
-    <x-slot:headerActions>
-        <flux:button href="{{ route('scholar') }}" variant="ghost" icon="users">Scholar detail</flux:button>
-        @can('manage-users')
-            <flux:button href="{{ route('admin.users.index') }}" variant="ghost" icon="shield-check">Manage users</flux:button>
-        @endcan
-    </x-slot:headerActions>
-
     <section class="rounded-lg border border-amber-200/80 bg-white/76 p-6 shadow-[0_24px_80px_rgba(15,23,42,0.08)] backdrop-blur sm:p-7">
         <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div class="max-w-3xl">
@@ -175,34 +168,51 @@
             </div>
         </section>
 
-        <section class="overflow-hidden rounded-lg border border-white/80 bg-white/86 shadow-[0_18px_50px_rgba(15,23,42,0.07)] backdrop-blur">
-            <div class="border-b border-slate-200/80 px-5 py-4">
-                <div class="text-[0.72rem] font-bold uppercase tracking-[0.3em] text-sky-700">Data Classification</div>
-                <h2 class="mt-2 text-lg font-bold text-slate-950">Category Detail</h2>
+        <section class="rounded-lg border border-white/80 bg-white/86 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.07)] backdrop-blur">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                    <div class="text-[0.72rem] font-bold uppercase tracking-[0.3em] text-sky-700">Data Classification</div>
+                    <h2 class="mt-2 text-lg font-bold text-slate-950">Category Detail</h2>
+                </div>
+                <flux:badge color="sky">{{ $categoryRows->count() }} categories</flux:badge>
             </div>
 
-            <flux:table>
+            <flux:table class="mt-5 min-w-[760px] overflow-hidden rounded-lg border border-slate-200/80 bg-white/88 shadow-sm">
                 <flux:table.columns>
-                    <flux:table.column>Category</flux:table.column>
-                    <flux:table.column align="end">Avg</flux:table.column>
-                    <flux:table.column align="end">Spring</flux:table.column>
-                    <flux:table.column align="end">Fall</flux:table.column>
-                    <flux:table.column align="end">Coverage</flux:table.column>
+                    <flux:table.column class="w-[42%] bg-slate-50/90 ps-4 text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Category</flux:table.column>
+                    <flux:table.column class="w-[14%] bg-slate-50/90 text-xs font-bold uppercase tracking-[0.18em] text-slate-500" align="end">Avg score</flux:table.column>
+                    <flux:table.column class="w-[12%] bg-slate-50/90 text-xs font-bold uppercase tracking-[0.18em] text-slate-500" align="end">Spring</flux:table.column>
+                    <flux:table.column class="w-[12%] bg-slate-50/90 text-xs font-bold uppercase tracking-[0.18em] text-slate-500" align="end">Fall</flux:table.column>
+                    <flux:table.column class="w-[20%] bg-slate-50/90 pe-4 text-xs font-bold uppercase tracking-[0.18em] text-slate-500" align="end">Coverage</flux:table.column>
                 </flux:table.columns>
 
                 <flux:table.rows>
                     @foreach ($categoryRows as $row)
-                        <flux:table.row>
-                            <flux:table.cell>
-                                <div class="font-semibold text-slate-900">{{ $row['label'] }}</div>
-                                <div class="text-xs text-slate-500">{{ number_format($row['total']) }} total evaluations</div>
+                        <flux:table.row class="transition hover:bg-slate-50/80">
+                            <flux:table.cell class="ps-4">
+                                <div class="flex items-center gap-3">
+                                    <span class="size-2.5 rounded-full bg-sky-500 ring-4 ring-sky-100"></span>
+                                    <div>
+                                        <div class="font-semibold text-slate-950">{{ $row['label'] }}</div>
+                                        <div class="mt-0.5 text-xs font-medium text-slate-500">{{ number_format($row['total']) }} total evaluations</div>
+                                    </div>
+                                </div>
                             </flux:table.cell>
-                            <flux:table.cell align="end">
-                                <span class="font-semibold tabular-nums">{{ $row['average'] > 0 ? number_format($row['average'], 1) : '-' }}</span>
+                            <flux:table.cell class="text-slate-700" align="end">
+                                <span class="inline-flex min-w-16 justify-end rounded-md bg-slate-100 px-2.5 py-1 font-semibold tabular-nums text-slate-800">
+                                    {{ $row['average'] > 0 ? number_format($row['average'], 1) : '-' }}
+                                </span>
                             </flux:table.cell>
-                            <flux:table.cell align="end">{{ number_format($row['spring']) }}</flux:table.cell>
-                            <flux:table.cell align="end">{{ number_format($row['fall']) }}</flux:table.cell>
-                            <flux:table.cell align="end">{{ number_format($row['coverage'], 1) }}%</flux:table.cell>
+                            <flux:table.cell class="font-medium tabular-nums text-slate-600" align="end">{{ number_format($row['spring']) }}</flux:table.cell>
+                            <flux:table.cell class="font-medium tabular-nums text-slate-600" align="end">{{ number_format($row['fall']) }}</flux:table.cell>
+                            <flux:table.cell class="pe-4" align="end">
+                                <div class="ml-auto flex w-40 flex-col gap-1.5">
+                                    <div class="text-sm font-semibold tabular-nums text-slate-700">{{ number_format($row['coverage'], 1) }}%</div>
+                                    <div class="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                                        <div class="h-full rounded-full bg-emerald-500" style="width: {{ min(100, max(0, $row['coverage'])) }}%"></div>
+                                    </div>
+                                </div>
+                            </flux:table.cell>
                         </flux:table.row>
                     @endforeach
                 </flux:table.rows>

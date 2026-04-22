@@ -41,7 +41,9 @@ it('renders the dashboard with aggregated stats', function () {
 
     $response->assertOk()
         ->assertViewIs('dashboard')
-        ->assertSee('OMM Scholar Evaluations');
+        ->assertSee('OMM Scholar Evaluations')
+        ->assertDontSee('Scholar detail')
+        ->assertDontSee('Manage users');
 
     $stats = $response->viewData('stats');
 

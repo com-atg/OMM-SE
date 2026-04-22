@@ -16,6 +16,7 @@ function scholarRoster(): array
     return [
         [
             'record_id' => '10',
+            'datatelid' => '1234567',
             'first_name' => 'Catherine',
             'last_name' => 'Chin',
             'goes_by' => 'Cat',
@@ -31,6 +32,7 @@ function scholarRoster(): array
         ],
         [
             'record_id' => '11',
+            'datatelid' => '7654321',
             'first_name' => 'Ava',
             'last_name' => 'Adams',
             'goes_by' => '',
@@ -47,6 +49,8 @@ it('renders the picker with a sorted roster and no selection', function () {
     $response->assertOk()
         ->assertViewIs('scholar')
         ->assertSee('Select a scholar')
+        ->assertSee('NYITCOM', false)
+        ->assertSee('data-flux-select', false)
         ->assertSee('Ava Adams', false)
         ->assertSee('Cat Chin', false);
 
@@ -65,11 +69,17 @@ it('renders per-semester eval counts when a scholar is selected', function () {
 
     $response = get('/scholar?id=10');
 
-    $response->assertOk()->assertSee('Cat Chin', false);
+    $response->assertOk()
+        ->assertSee('Cat Chin', false)
+        ->assertSee('Scholar Profile', false)
+        ->assertSee('https://guru.nyit.edu/GuruAdmin/StudentOverview/StudentPhotoImageHandler.ashx?id=1234567', false);
 
     $semesters = $response->viewData('semesters');
+    $selected = $response->viewData('selected');
 
-    expect($semesters)->toHaveCount(2)
+    expect($selected['datatelid'])->toBe('1234567')
+        ->and($selected['photo_url'])->toBe('https://guru.nyit.edu/GuruAdmin/StudentOverview/StudentPhotoImageHandler.ashx?id=1234567')
+        ->and($semesters)->toHaveCount(2)
         ->and($semesters[0]['slug'])->toBe('spring')
         ->and($semesters[0]['counts'])->toBe([2, 1, 0, 0])
         ->and($semesters[0]['averages'])->toBe([88.5, 92.0, null, null])

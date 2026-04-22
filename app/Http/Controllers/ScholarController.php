@@ -31,10 +31,7 @@ class ScholarController extends Controller
 
             return view('scholar', [
                 'roster' => [],
-                'selected' => [
-                    'record_id' => (string) $match['record_id'],
-                    'name' => $this->displayName($match),
-                ],
+                'selected' => $this->selectedScholar($match),
                 'semesters' => $this->buildSemesters($match),
                 'lock_selection' => true,
                 'shareable_url' => route('scholar.token', $user->public_token),
@@ -61,10 +58,7 @@ class ScholarController extends Controller
             $match = $this->resolveRecord($records, $selectedId);
 
             if ($match) {
-                $selected = [
-                    'record_id' => (string) $match['record_id'],
-                    'name' => $this->displayName($match),
-                ];
+                $selected = $this->selectedScholar($match);
                 $semesters = $this->buildSemesters($match);
             }
         }
@@ -103,10 +97,7 @@ class ScholarController extends Controller
 
         return view('scholar', [
             'roster' => [],
-            'selected' => [
-                'record_id' => (string) $match['record_id'],
-                'name' => $this->displayName($match),
-            ],
+            'selected' => $this->selectedScholar($match),
             'semesters' => $this->buildSemesters($match),
             'lock_selection' => true,
             'shareable_url' => route('scholar.token', $target->public_token),
@@ -132,6 +123,22 @@ class ScholarController extends Controller
         $last = trim((string) ($record['last_name'] ?? ''));
 
         return trim($first.' '.$last);
+    }
+
+    /**
+     * @param  array<string,mixed>  $record
+     * @return array{record_id:string,name:string,datatelid:string|null,photo_url:string|null}
+     */
+    private function selectedScholar(array $record): array
+    {
+        $datatelId = trim((string) ($record['datatelid'] ?? ''));
+
+        return [
+            'record_id' => (string) $record['record_id'],
+            'name' => $this->displayName($record),
+            'datatelid' => $datatelId !== '' ? $datatelId : null,
+            'photo_url' => $datatelId !== '' ? 'https://guru.nyit.edu/GuruAdmin/StudentOverview/StudentPhotoImageHandler.ashx?id='.$datatelId : null,
+        ];
     }
 
     /**

@@ -111,8 +111,6 @@
                             <td class="px-5 py-4 text-slate-500">{{ $u->last_login_at?->diffForHumans() ?? 'never' }}</td>
                             <td class="px-5 py-4">
                                 <div class="flex items-center justify-end gap-2">
-                                    <flux:button href="{{ route('admin.users.edit', $u) }}" size="sm" variant="ghost">Edit</flux:button>
-
                                     @if (! $u->isService() && $u->id !== auth()->id() && ! session('impersonating_original_id'))
                                         <form method="POST" action="{{ route('admin.users.impersonate', $u) }}">
                                             @csrf
@@ -120,11 +118,13 @@
                                         </form>
                                     @endif
 
+                                    <flux:button href="{{ route('admin.users.edit', $u) }}" size="sm" variant="ghost" icon="pencil-square" aria-label="Edit user" title="Edit user" />
+
                                     @if ($u->id !== auth()->id())
                                         <form method="POST" action="{{ route('admin.users.destroy', $u) }}" onsubmit="return confirm('Delete this user? This can be undone.')">
                                             @csrf
                                             @method('DELETE')
-                                            <flux:button type="submit" size="sm" variant="danger">Delete</flux:button>
+                                            <flux:button type="submit" size="sm" variant="danger" icon="trash" aria-label="Delete user" title="Delete user" />
                                         </form>
                                     @endif
                                 </div>

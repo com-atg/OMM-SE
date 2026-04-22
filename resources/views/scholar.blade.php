@@ -1,320 +1,377 @@
-<!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Scholar Detail — {{ config('app.name', 'OMM Scholar Evaluations') }}</title>
+@php
+    $categoryKeys = $semesters[0]['category_keys'] ?? [];
+    $categoryLabels = $semesters[0]['category_labels'] ?? [];
+    $monthKeys = [];
+    $mergedMonthly = [];
 
-    <link rel="preconnect" href="https://fonts.bunny.net">
-    <link href="https://fonts.bunny.net/css?family=instrument-sans:400,500,600,700" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-
-    @if (file_exists(public_path('build/manifest.json')) || file_exists(public_path('hot')))
-        @vite(['resources/css/app.css', 'resources/js/app.js'])
-    @else
-        <script src="https://cdn.tailwindcss.com"></script>
-    @endif
-</head>
-<body class="min-h-screen bg-slate-50 text-slate-800 antialiased" style="font-family: 'Instrument Sans', system-ui, sans-serif;">
-    @include('partials.impersonation-banner')
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-
-        {{-- Header --}}
-        <header class="mb-6 flex items-center justify-between flex-wrap gap-4">
-            <div>
-                <h1 class="text-2xl sm:text-3xl font-semibold tracking-tight text-slate-900">Scholar Detail</h1>
-                <p class="mt-1 text-sm text-slate-500">Per-semester evaluation breakdown.</p>
-            </div>
-            @unless ($lock_selection ?? false)
-                <a href="{{ route('dashboard') }}" class="text-sm text-slate-500 hover:text-slate-800 underline underline-offset-4">← Back to overview</a>
-            @endunless
-        </header>
-
-        {{-- Scholar picker (Service / Admin only) --}}
-        @unless ($lock_selection ?? false)
-        <section class="bg-white rounded-xl shadow-sm ring-1 ring-slate-200 p-5 mb-6">
-            <form method="GET" action="{{ route('scholar') }}" class="flex flex-col sm:flex-row sm:items-end gap-3">
-                <div class="flex-1">
-                    <label for="scholar-select" class="block text-xs uppercase tracking-wide text-slate-500 mb-1">Choose a scholar</label>
-                    <select
-                        id="scholar-select"
-                        name="id"
-                        onchange="this.form.submit()"
-                        class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none"
-                    >
-                        <option value="">— Select —</option>
-                        @foreach ($roster as $scholar)
-                            <option
-                                value="{{ $scholar['record_id'] }}"
-                                @selected($selected && $selected['record_id'] === $scholar['record_id'])
-                            >{{ $scholar['name'] }}</option>
-                        @endforeach
-                    </select>
-                </div>
-                <noscript>
-                    <button type="submit" class="rounded-lg bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700">View</button>
-                </noscript>
-            </form>
-        </section>
-        @endunless
-
-        @if (! $selected)
-            <div class="bg-white rounded-xl shadow-sm ring-1 ring-slate-200 p-8 text-center text-sm text-slate-500">
-                Select a scholar above to see their evaluation breakdown.
-            </div>
-        @else
-
-            {{-- Scholar name + shareable URL --}}
-            <div class="mb-6 flex items-start justify-between gap-4 flex-wrap">
-                <h2 class="text-2xl font-semibold text-slate-900">{{ $selected['name'] }}</h2>
-                @if (! empty($shareable_url))
-                    <div class="flex items-center gap-2 min-w-0">
-                        <span class="text-xs text-slate-500 whitespace-nowrap">Shareable link:</span>
-                        <code class="truncate max-w-xs rounded bg-slate-100 px-2 py-1 text-xs text-slate-700 select-all">{{ $shareable_url }}</code>
-                        <button
-                            type="button"
-                            onclick="navigator.clipboard.writeText('{{ $shareable_url }}').then(() => { this.textContent = 'Copied!'; setTimeout(() => this.textContent = 'Copy', 1500); })"
-                            class="shrink-0 rounded bg-slate-200 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-300"
-                        >Copy</button>
-                    </div>
-                @endif
-            </div>
-
-            {{-- ── Monthly activity chart (all months across semesters) ── --}}
-            @php
-                $allMonthly = collect($semesters)->flatMap(fn($s) => $s['monthly'])->toArray();
-                $monthKeys = [];
-                foreach ($semesters as $sem) {
-                    foreach (array_keys($sem['monthly']) as $m) {
-                        $monthKeys[] = $m;
-                    }
-                }
-                $monthKeys = array_values(array_unique($monthKeys));
-
-                // Merge monthly counts across semesters for the same month key
-                $mergedMonthly = [];
-                foreach ($semesters as $sem) {
-                    foreach ($sem['monthly'] as $month => $cats) {
-                        foreach ($cats as $catKey => $cnt) {
-                            $mergedMonthly[$month][$catKey] = ($mergedMonthly[$month][$catKey] ?? 0) + $cnt;
-                        }
-                    }
-                }
-
-                $categoryKeys = $semesters[0]['category_keys'] ?? [];
-                $categoryLabels = $semesters[0]['category_labels'] ?? [];
-            @endphp
-
-            @if (count($monthKeys) > 0)
-            <section class="bg-white rounded-xl shadow-sm ring-1 ring-slate-200 p-5 mb-6">
-                <h3 class="text-sm font-semibold text-slate-700 mb-1">Monthly Activity</h3>
-                <p class="text-xs text-slate-500 mb-4">Evaluations received per month, grouped by category.</p>
-                <div class="h-64"><canvas id="chartMonthly"></canvas></div>
-            </section>
-            @endif
-
-            {{-- ── Per-semester panels ── --}}
-            @foreach ($semesters as $i => $sem)
-            <section class="mb-8">
-                {{-- Semester heading + score badges --}}
-                <div class="flex items-center justify-between flex-wrap gap-3 mb-4">
-                    <h3 class="text-lg font-semibold text-slate-800">{{ $sem['label'] }} Semester</h3>
-                    <div class="flex items-center gap-3 flex-wrap">
-                        @if ($sem['leadership'] !== null)
-                            <span class="inline-flex items-center gap-1.5 rounded-full bg-violet-100 px-3 py-1 text-xs font-medium text-violet-800">
-                                Leadership: {{ $sem['leadership'] }}/10
-                            </span>
-                        @endif
-                        @if ($sem['final_score'] !== null)
-                            <span class="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-3 py-1 text-sm font-semibold text-blue-900">
-                                Final score: {{ number_format($sem['final_score'], 2) }}
-                            </span>
-                        @endif
-                    </div>
-                </div>
-
-                @if ($sem['total'] === 0)
-                    <p class="text-sm text-slate-500">No evaluations recorded this semester.</p>
-                @else
-
-                {{-- Category score table + per-category chart side by side --}}
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-
-                    {{-- Score table --}}
-                    <div class="bg-white rounded-xl shadow-sm ring-1 ring-slate-200 overflow-hidden">
-                        <table class="w-full text-sm">
-                            <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                                <tr>
-                                    <th class="px-4 py-3 text-left">Category</th>
-                                    <th class="px-4 py-3 text-center">Evals</th>
-                                    <th class="px-4 py-3 text-center">Avg Score</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-slate-100">
-                                @foreach ($sem['category_keys'] as $j => $catKey)
-                                    <tr>
-                                        <td class="px-4 py-2.5 font-medium text-slate-700">{{ $sem['category_labels'][$j] }}</td>
-                                        <td class="px-4 py-2.5 text-center text-slate-600">{{ $sem['counts'][$j] }}</td>
-                                        <td class="px-4 py-2.5 text-center">
-                                            @if ($sem['averages'][$j] !== null)
-                                                <span class="font-semibold text-slate-900">{{ number_format($sem['averages'][$j], 1) }}</span>
-                                                <span class="text-xs text-slate-400">/ 100</span>
-                                            @else
-                                                <span class="text-slate-400">—</span>
-                                            @endif
-                                        </td>
-                                    </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                    </div>
-
-                    {{-- Per-category bar chart --}}
-                    <div class="bg-white rounded-xl shadow-sm ring-1 ring-slate-200 p-4">
-                        <p class="text-xs text-slate-500 mb-3">Evaluations per category</p>
-                        <div class="h-52"><canvas id="chartSem{{ $i }}"></canvas></div>
-                    </div>
-                </div>
-
-                {{-- Dates per category --}}
-                @php $hasDates = collect($sem['dates'])->some(fn($e) => count($e) > 0); @endphp
-                @if ($hasDates)
-                <div class="bg-white rounded-xl shadow-sm ring-1 ring-slate-200 p-5 mb-6">
-                    <h4 class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-3">Evaluation Dates by Category</h4>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                        @foreach ($sem['category_keys'] as $j => $catKey)
-                            @if (! empty($sem['dates'][$catKey]))
-                                <div>
-                                    <p class="text-xs font-medium text-slate-600 mb-1.5">{{ $sem['category_labels'][$j] }}</p>
-                                    <ul class="space-y-1">
-                                        @foreach ($sem['dates'][$catKey] as $entry)
-                                            <li class="text-xs text-slate-600 leading-snug">{{ $entry }}</li>
-                                        @endforeach
-                                    </ul>
-                                </div>
-                            @endif
-                        @endforeach
-                    </div>
-                </div>
-                @endif
-
-                {{-- Comments --}}
-                @if (count($sem['comments']) > 0)
-                <div class="bg-white rounded-xl shadow-sm ring-1 ring-slate-200 p-5">
-                    <h4 class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-3">
-                        Faculty Comments ({{ $sem['comments_count'] }})
-                    </h4>
-                    <div class="space-y-4">
-                        @foreach ($sem['comments'] as $c)
-                            <div class="border-l-2 border-slate-200 pl-4">
-                                <div class="flex items-center gap-2 flex-wrap mb-1">
-                                    <span class="font-medium text-xs text-slate-700">{{ $c['faculty'] }}</span>
-                                    @if ($c['date'] !== '')
-                                        <span class="text-xs text-slate-400">{{ $c['date'] }}</span>
-                                    @endif
-                                    @if ($c['category'] !== '')
-                                        <span class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">{{ $c['category'] }}</span>
-                                    @endif
-                                </div>
-                                <p class="text-sm text-slate-700 leading-relaxed">{{ $c['comment'] }}</p>
-                            </div>
-                        @endforeach
-                    </div>
-                </div>
-                @endif
-
-                @endif {{-- /total > 0 --}}
-            </section>
-            @endforeach
-
-        @endif {{-- /selected --}}
-    </div>
-
-    @if ($selected)
-    <script>
-        const semesters   = @json($semesters);
-        const categoryLabels = @json($categoryLabels);
-        const categoryKeys   = @json($categoryKeys);
-        const mergedMonthly  = @json($mergedMonthly ?? []);
-        const monthKeys      = @json($monthKeys ?? []);
-
-        const palette = ['#2563eb', '#16a34a', '#ea580c', '#9333ea'];
-
-        // ── Monthly grouped bar chart ──────────────────────────────────────
-        const monthlyCanvas = document.getElementById('chartMonthly');
-        if (monthlyCanvas && monthKeys.length > 0) {
-            new Chart(monthlyCanvas, {
-                type: 'bar',
-                data: {
-                    labels: monthKeys,
-                    datasets: categoryKeys.map((catKey, idx) => ({
-                        label: categoryLabels[idx],
-                        data: monthKeys.map(m => (mergedMonthly[m] && mergedMonthly[m][catKey]) || 0),
-                        backgroundColor: palette[idx],
-                        borderRadius: 4,
-                    })),
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
-                    },
-                    scales: {
-                        x: { grid: { color: 'rgba(100,116,139,0.12)' }, ticks: { color: '#64748b', font: { size: 11 } } },
-                        y: {
-                            grid: { color: 'rgba(100,116,139,0.12)' },
-                            ticks: { color: '#64748b', precision: 0, stepSize: 1 },
-                            beginAtZero: true,
-                            title: { display: true, text: '# Evals', color: '#94a3b8', font: { size: 11 } },
-                        },
-                    },
-                },
-            });
+    foreach ($semesters as $sem) {
+        foreach (array_keys($sem['monthly']) as $month) {
+            $monthKeys[] = $month;
         }
 
-        // ── Per-semester category charts ───────────────────────────────────
-        semesters.forEach((sem, i) => {
-            const canvas = document.getElementById('chartSem' + i);
-            if (!canvas) return;
+        foreach ($sem['monthly'] as $month => $cats) {
+            foreach ($cats as $catKey => $count) {
+                $mergedMonthly[$month][$catKey] = ($mergedMonthly[$month][$catKey] ?? 0) + $count;
+            }
+        }
+    }
 
-            new Chart(canvas, {
-                type: 'bar',
-                data: {
-                    labels: sem.category_labels,
-                    datasets: [{
-                        label: '# Evaluations',
-                        data: sem.counts,
-                        backgroundColor: palette,
-                        borderRadius: 6,
-                    }],
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            callbacks: {
-                                afterLabel: (ctx) => {
-                                    const avg = sem.averages[ctx.dataIndex];
-                                    return avg !== null ? 'Avg: ' + avg.toFixed(1) + ' / 100' : 'No score';
+    $monthKeys = array_values(array_unique($monthKeys));
+    $totalEvaluations = collect($semesters)->sum('total');
+    $totalComments = collect($semesters)->sum('comments_count');
+    $selectedInitials = collect(explode(' ', $selected['name'] ?? ''))
+        ->filter()
+        ->map(fn (string $part) => mb_substr($part, 0, 1))
+        ->take(2)
+        ->implode('');
+@endphp
+
+<x-app-shell
+    title="Scholar Detail"
+    active="scholars"
+    eyebrow="Scholar Detail"
+    heading="Individual Scholar Evaluation"
+    subheading="Review semester scores, evaluation cadence, faculty comments, and supporting detail for a selected scholar."
+>
+    <x-slot:head>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    </x-slot:head>
+
+    @unless ($lock_selection ?? false)
+        <x-slot:headerActions>
+            <flux:button href="{{ route('dashboard') }}" variant="ghost" icon="arrow-left">
+                Dashboard
+            </flux:button>
+        </x-slot:headerActions>
+    @endunless
+
+    @unless ($lock_selection ?? false)
+        <section class="rounded-lg border border-white/80 bg-white/84 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.07)] backdrop-blur">
+            <form method="GET" action="{{ route('scholar') }}" class="flex flex-col gap-4 md:flex-row md:items-end">
+                <flux:select
+                    class="min-w-0 flex-1"
+                    name="id"
+                    variant="listbox"
+                    searchable
+                    clearable
+                    value="{{ $selected['record_id'] ?? '' }}"
+                    label="Choose a scholar"
+                    placeholder="Search by scholar name..."
+                    empty="No scholars found"
+                >
+                    @foreach ($roster as $scholar)
+                        <flux:select.option value="{{ $scholar['record_id'] }}">
+                            {{ $scholar['name'] }}
+                        </flux:select.option>
+                    @endforeach
+                </flux:select>
+
+                <div class="flex gap-2">
+                    <flux:button type="submit" variant="primary" icon="magnifying-glass">
+                        View
+                    </flux:button>
+
+                    @if ($selected)
+                        <flux:button href="{{ route('scholar') }}" variant="ghost" icon="x-mark">
+                            Clear
+                        </flux:button>
+                    @endif
+                </div>
+            </form>
+        </section>
+    @endunless
+
+    @if (! $selected)
+        <section class="rounded-lg border border-slate-200 bg-white/84 p-10 text-center shadow-sm">
+            <div class="mx-auto grid size-12 place-items-center rounded-lg bg-slate-100 text-slate-500">
+                <flux:icon.user-group variant="mini" />
+            </div>
+            <h2 class="mt-4 text-lg font-semibold text-slate-950">Select a scholar</h2>
+            <p class="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-600">
+                Use the scholar selector to open an individual evaluation profile.
+            </p>
+        </section>
+    @else
+        <section class="grid grid-cols-1 gap-5 xl:grid-cols-[320px_1fr]">
+            <aside class="rounded-lg border border-white/80 bg-white/86 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.07)] backdrop-blur">
+                <div class="overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+                    @if ($selected['photo_url'])
+                        <img
+                            src="{{ $selected['photo_url'] }}"
+                            alt="{{ $selected['name'] }}"
+                            class="aspect-[4/5] w-full object-cover"
+                            onerror="this.classList.add('hidden'); this.nextElementSibling.classList.remove('hidden'); this.nextElementSibling.classList.add('grid');"
+                        >
+                        <div class="hidden aspect-[4/5] w-full place-items-center bg-slate-900 text-5xl font-bold text-white">
+                            {{ $selectedInitials }}
+                        </div>
+                    @else
+                        <div class="grid aspect-[4/5] w-full place-items-center bg-slate-900 text-5xl font-bold text-white">
+                            {{ $selectedInitials }}
+                        </div>
+                    @endif
+                </div>
+
+                <div class="mt-5">
+                    <div class="text-[0.7rem] font-bold uppercase tracking-[0.32em] text-sky-700">Scholar Profile</div>
+                    <h2 class="mt-2 text-2xl font-bold tracking-tight text-slate-950">{{ $selected['name'] }}</h2>
+
+                    <dl class="mt-5 grid grid-cols-2 gap-3">
+                        <div class="rounded-lg border border-slate-200 bg-white/78 p-3">
+                            <dt class="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-slate-500">Record</dt>
+                            <dd class="mt-1 font-semibold tabular-nums text-slate-950">{{ $selected['record_id'] }}</dd>
+                        </div>
+                        <div class="rounded-lg border border-slate-200 bg-white/78 p-3">
+                            <dt class="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-slate-500">Datatel</dt>
+                            <dd class="mt-1 font-semibold tabular-nums text-slate-950">{{ $selected['datatelid'] ?? '-' }}</dd>
+                        </div>
+                        <div class="rounded-lg border border-slate-200 bg-white/78 p-3">
+                            <dt class="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-slate-500">Evals</dt>
+                            <dd class="mt-1 font-semibold tabular-nums text-slate-950">{{ number_format($totalEvaluations) }}</dd>
+                        </div>
+                        <div class="rounded-lg border border-slate-200 bg-white/78 p-3">
+                            <dt class="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-slate-500">Comments</dt>
+                            <dd class="mt-1 font-semibold tabular-nums text-slate-950">{{ number_format($totalComments) }}</dd>
+                        </div>
+                    </dl>
+
+                    @if (! empty($shareable_url))
+                        <div class="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                            <div class="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-slate-500">Shareable Link</div>
+                            <code class="mt-2 block truncate rounded-md bg-white px-2.5 py-2 text-xs text-slate-600 ring-1 ring-slate-200">{{ $shareable_url }}</code>
+                            <flux:button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                icon="clipboard"
+                                class="mt-2 w-full"
+                                onclick="copyScholarLink(this, @js($shareable_url))"
+                            >
+                                Copy link
+                            </flux:button>
+                        </div>
+                    @endif
+                </div>
+            </aside>
+
+            <div class="flex min-w-0 flex-col gap-5">
+                @if (count($monthKeys) > 0)
+                    <section class="rounded-lg border border-white/80 bg-white/86 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.07)] backdrop-blur">
+                        <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                                <div class="text-[0.72rem] font-bold uppercase tracking-[0.3em] text-sky-700">Activity</div>
+                                <h2 class="mt-2 text-lg font-bold text-slate-950">Monthly Evaluation Volume</h2>
+                            </div>
+                            <flux:badge color="sky">{{ count($monthKeys) }} months</flux:badge>
+                        </div>
+                        <div class="mt-5 h-72"><canvas id="chartMonthly"></canvas></div>
+                    </section>
+                @endif
+
+                @foreach ($semesters as $i => $sem)
+                    <section class="rounded-lg border border-white/80 bg-white/86 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.07)] backdrop-blur">
+                        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                                <div class="text-[0.72rem] font-bold uppercase tracking-[0.3em] text-sky-700">{{ $sem['label'] }} Semester</div>
+                                <h2 class="mt-2 text-lg font-bold text-slate-950">Evaluation Summary</h2>
+                            </div>
+                            <div class="flex flex-wrap gap-2">
+                                @if ($sem['leadership'] !== null)
+                                    <flux:badge color="violet">Leadership {{ $sem['leadership'] }}/10</flux:badge>
+                                @endif
+                                @if ($sem['final_score'] !== null)
+                                    <flux:badge color="blue">Final {{ number_format($sem['final_score'], 2) }}</flux:badge>
+                                @endif
+                                <flux:badge color="zinc">{{ number_format($sem['total']) }} evals</flux:badge>
+                            </div>
+                        </div>
+
+                        @if ($sem['total'] === 0)
+                            <div class="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-6 text-sm text-slate-600">
+                                No evaluations recorded this semester.
+                            </div>
+                        @else
+                            <div class="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
+                                <div class="overflow-hidden rounded-lg border border-slate-200 bg-white/90">
+                                    <flux:table>
+                                        <flux:table.columns>
+                                            <flux:table.column class="bg-slate-50/90 ps-4 text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Category</flux:table.column>
+                                            <flux:table.column class="bg-slate-50/90 text-xs font-bold uppercase tracking-[0.18em] text-slate-500" align="end">Evals</flux:table.column>
+                                            <flux:table.column class="bg-slate-50/90 pe-4 text-xs font-bold uppercase tracking-[0.18em] text-slate-500" align="end">Avg</flux:table.column>
+                                        </flux:table.columns>
+                                        <flux:table.rows>
+                                            @foreach ($sem['category_keys'] as $j => $catKey)
+                                                <flux:table.row class="transition hover:bg-slate-50/80">
+                                                    <flux:table.cell class="ps-4 font-semibold text-slate-900">{{ $sem['category_labels'][$j] }}</flux:table.cell>
+                                                    <flux:table.cell class="font-medium tabular-nums text-slate-600" align="end">{{ $sem['counts'][$j] }}</flux:table.cell>
+                                                    <flux:table.cell class="pe-4 tabular-nums" align="end">
+                                                        @if ($sem['averages'][$j] !== null)
+                                                            <span class="font-semibold text-slate-950">{{ number_format($sem['averages'][$j], 1) }}</span>
+                                                            <span class="text-xs text-slate-400">/100</span>
+                                                        @else
+                                                            <span class="text-slate-400">-</span>
+                                                        @endif
+                                                    </flux:table.cell>
+                                                </flux:table.row>
+                                            @endforeach
+                                        </flux:table.rows>
+                                    </flux:table>
+                                </div>
+
+                                <div class="rounded-lg border border-slate-200 bg-white/90 p-4">
+                                    <div class="mb-3 text-sm font-semibold text-slate-700">Evaluations by Category</div>
+                                    <div class="h-56"><canvas id="chartSem{{ $i }}"></canvas></div>
+                                </div>
+                            </div>
+
+                            @php $hasDates = collect($sem['dates'])->some(fn ($entries) => count($entries) > 0); @endphp
+                            @if ($hasDates)
+                                <div class="mt-5 rounded-lg border border-slate-200 bg-white/90 p-5">
+                                    <div class="mb-4 text-[0.72rem] font-bold uppercase tracking-[0.3em] text-slate-500">Evaluation Dates by Category</div>
+                                    <div class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+                                        @foreach ($sem['category_keys'] as $j => $catKey)
+                                            @if (! empty($sem['dates'][$catKey]))
+                                                <div class="min-w-0">
+                                                    <div class="mb-2 flex items-center gap-2">
+                                                        <span class="size-2 rounded-full bg-sky-500"></span>
+                                                        <p class="text-sm font-semibold text-slate-800">{{ $sem['category_labels'][$j] }}</p>
+                                                    </div>
+                                                    <ul class="space-y-1.5">
+                                                        @foreach ($sem['dates'][$catKey] as $entry)
+                                                            <li class="text-sm leading-5 text-slate-600">{{ $entry }}</li>
+                                                        @endforeach
+                                                    </ul>
+                                                </div>
+                                            @endif
+                                        @endforeach
+                                    </div>
+                                </div>
+                            @endif
+
+                            @if (count($sem['comments']) > 0)
+                                <div class="mt-5 rounded-lg border border-slate-200 bg-white/90 p-5">
+                                    <div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                        <div class="text-[0.72rem] font-bold uppercase tracking-[0.3em] text-slate-500">Faculty Comments</div>
+                                        <flux:badge color="zinc">{{ $sem['comments_count'] }}</flux:badge>
+                                    </div>
+
+                                    <div class="space-y-4">
+                                        @foreach ($sem['comments'] as $comment)
+                                            <article class="border-l-2 border-sky-200 pl-4">
+                                                <div class="flex flex-wrap items-center gap-2">
+                                                    <span class="text-sm font-semibold text-slate-900">{{ $comment['faculty'] }}</span>
+                                                    @if ($comment['date'] !== '')
+                                                        <span class="text-sm text-slate-400">{{ $comment['date'] }}</span>
+                                                    @endif
+                                                    @if ($comment['category'] !== '')
+                                                        <flux:badge size="sm" color="zinc">{{ $comment['category'] }}</flux:badge>
+                                                    @endif
+                                                </div>
+                                                <p class="mt-2 text-base leading-7 text-slate-700">{{ $comment['comment'] }}</p>
+                                            </article>
+                                        @endforeach
+                                    </div>
+                                </div>
+                            @endif
+                        @endif
+                    </section>
+                @endforeach
+            </div>
+        </section>
+
+        <x-slot:scripts>
+            <script>
+                function copyScholarLink(button, url) {
+                    navigator.clipboard.writeText(url).then(() => {
+                        const original = button.innerHTML;
+                        button.innerHTML = original.replace('Copy link', 'Copied');
+                        setTimeout(() => {
+                            button.innerHTML = original;
+                        }, 1500);
+                    });
+                }
+
+                const semesters = @json($semesters);
+                const categoryLabels = @json($categoryLabels);
+                const categoryKeys = @json($categoryKeys);
+                const mergedMonthly = @json($mergedMonthly);
+                const monthKeys = @json($monthKeys);
+                const palette = ['#2563eb', '#059669', '#d97706', '#7c3aed'];
+                const gridColor = 'rgba(100, 116, 139, 0.16)';
+                const tickColor = '#64748b';
+
+                const monthlyCanvas = document.getElementById('chartMonthly');
+                if (monthlyCanvas && monthKeys.length > 0) {
+                    new Chart(monthlyCanvas, {
+                        type: 'bar',
+                        data: {
+                            labels: monthKeys,
+                            datasets: categoryKeys.map((catKey, index) => ({
+                                label: categoryLabels[index],
+                                data: monthKeys.map((month) => (mergedMonthly[month] && mergedMonthly[month][catKey]) || 0),
+                                backgroundColor: palette[index],
+                                borderRadius: 6,
+                            })),
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { position: 'bottom', labels: { color: tickColor, boxWidth: 10, font: { size: 11 } } },
+                            },
+                            scales: {
+                                x: { grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 11 } } },
+                                y: {
+                                    beginAtZero: true,
+                                    grid: { color: gridColor },
+                                    ticks: { color: tickColor, precision: 0, stepSize: 1 },
+                                    title: { display: true, text: '# Evals', color: '#94a3b8', font: { size: 11 } },
                                 },
                             },
                         },
-                    },
-                    scales: {
-                        x: { grid: { color: 'rgba(100,116,139,0.12)' }, ticks: { color: '#64748b' } },
-                        y: {
-                            grid: { color: 'rgba(100,116,139,0.12)' },
-                            ticks: { color: '#64748b', precision: 0, stepSize: 1 },
-                            beginAtZero: true,
+                    });
+                }
+
+                semesters.forEach((sem, index) => {
+                    const canvas = document.getElementById('chartSem' + index);
+                    if (! canvas) {
+                        return;
+                    }
+
+                    new Chart(canvas, {
+                        type: 'bar',
+                        data: {
+                            labels: sem.category_labels,
+                            datasets: [{
+                                label: '# Evaluations',
+                                data: sem.counts,
+                                backgroundColor: palette,
+                                borderRadius: 6,
+                            }],
                         },
-                    },
-                },
-            });
-        });
-    </script>
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { display: false },
+                                tooltip: {
+                                    callbacks: {
+                                        afterLabel: (ctx) => {
+                                            const avg = sem.averages[ctx.dataIndex];
+
+                                            return avg !== null ? 'Avg: ' + avg.toFixed(1) + ' / 100' : 'No score';
+                                        },
+                                    },
+                                },
+                            },
+                            scales: {
+                                x: { grid: { color: gridColor }, ticks: { color: tickColor } },
+                                y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: tickColor, precision: 0, stepSize: 1 } },
+                            },
+                        },
+                    });
+                });
+            </script>
+        </x-slot:scripts>
     @endif
-</body>
-</html>
+</x-app-shell>
