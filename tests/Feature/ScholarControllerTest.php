@@ -55,6 +55,8 @@ it('renders the picker with a sorted roster and no selection', function () {
         ->assertSee('data-flux-select-native', false)
         ->assertDontSee('scriptModule', false)
         ->assertDontSee('scholar-detail.js', false)
+        ->assertDontSee('livewire.min.js', false)
+        ->assertDontSee('flux.min.js', false)
         ->assertDontSee('View', false)
         ->assertDontSee('Clear', false)
         ->assertSee('Ava Adams', false)
@@ -75,8 +77,12 @@ it('bundles the Livewire and Flux runtimes through Vite', function () {
     expect($entrypoint)
         ->toContain('livewire.esm')
         ->toContain('flux-pro/dist/flux.module.js')
-        ->toContain('renderScholarCharts')
+        ->toContain('scholar-detail-charts')
         ->toContain('Livewire.start()');
+
+    expect(file_get_contents(resource_path('js/scholar-detail-charts.js')))
+        ->toContain('renderScholarCharts')
+        ->toContain('bootScholarDetailCharts');
 });
 
 it('uses a path-safe Livewire config for the Vite runtime', function () {
@@ -85,7 +91,17 @@ it('uses a path-safe Livewire config for the Vite runtime', function () {
     expect($shell)
         ->toContain('window.livewireScriptConfig')
         ->toContain('parse_url(config(\'app.url\'), PHP_URL_PATH)')
-        ->not->toContain('@livewireScriptConfig');
+        ->toContain('runtime.livewire')
+        ->not->toContain('@livewireScriptConfig')
+        ->not->toContain('@livewireScripts')
+        ->not->toContain('@fluxScripts');
+});
+
+it('serves runtime fallback assets without js or css route extensions', function () {
+    get(route('runtime.livewire', absolute: false))->assertOk();
+    get(route('runtime.flux', absolute: false))->assertOk();
+    get(route('runtime.scholar-detail-charts', absolute: false))->assertOk();
+    get(route('runtime.flux-styles', absolute: false))->assertOk();
 });
 
 it('renders per-semester eval counts when a scholar is selected', function () {

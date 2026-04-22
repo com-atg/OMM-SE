@@ -46,12 +46,24 @@
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=inter:400,500,600,700,800&display=swap" rel="stylesheet">
 
+    <script data-navigate-once="true">window.livewireScriptConfig = @js($livewireScriptConfig);</script>
+
     @if ($hasViteBuild)
-        <script data-navigate-once="true">window.livewireScriptConfig = @js($livewireScriptConfig);</script>
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     @else
         <script src="https://cdn.tailwindcss.com"></script>
-        <link rel="stylesheet" href="{{ url('/flux/flux.css') }}">
+        <link rel="stylesheet" href="{{ route('runtime.flux-styles') }}">
+        <script type="module" data-navigate-once>
+            import { Livewire, Alpine } from @js(route('runtime.livewire'));
+            import @js(route('runtime.flux'));
+            import { bootScholarDetailCharts } from @js(route('runtime.scholar-detail-charts'));
+
+            window.Alpine = Alpine;
+            window.Livewire = Livewire;
+
+            bootScholarDetailCharts(Livewire);
+            Livewire.start();
+        </script>
     @endif
 
     {{ $head ?? '' }}
@@ -159,10 +171,5 @@
     </div>
 
     {{ $scripts ?? '' }}
-
-    @unless ($hasViteBuild)
-        @livewireScripts
-        @fluxScripts
-    @endunless
 </body>
 </html>

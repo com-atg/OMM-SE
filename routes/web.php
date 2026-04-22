@@ -17,6 +17,30 @@ use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 
+Route::get('/runtime/livewire', function () {
+    return response()->file(base_path('vendor/livewire/livewire/dist/livewire.esm.js'), [
+        'Content-Type' => 'text/javascript; charset=UTF-8',
+    ]);
+})->name('runtime.livewire');
+
+Route::get('/runtime/flux', function () {
+    return response()->file(base_path('vendor/livewire/flux-pro/dist/flux.module.js'), [
+        'Content-Type' => 'text/javascript; charset=UTF-8',
+    ]);
+})->name('runtime.flux');
+
+Route::get('/runtime/scholar-detail-charts', function () {
+    return response()->file(resource_path('js/scholar-detail-charts.js'), [
+        'Content-Type' => 'text/javascript; charset=UTF-8',
+    ]);
+})->name('runtime.scholar-detail-charts');
+
+Route::get('/runtime/flux-styles', function () {
+    return response()->file(base_path('vendor/livewire/flux/dist/flux.css'), [
+        'Content-Type' => 'text/css; charset=UTF-8',
+    ]);
+})->name('runtime.flux-styles');
+
 // SAML SSO (Okta)
 Route::get('/saml/login', [SamlController::class, 'login'])->name('saml.login');
 Route::post('/saml/acs', [SamlController::class, 'acs'])->name('saml.acs');
