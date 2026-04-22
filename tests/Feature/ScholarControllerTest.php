@@ -50,7 +50,7 @@ it('renders the picker with a sorted roster and no selection', function () {
         ->assertViewIs('scholar')
         ->assertSee('Select a scholar')
         ->assertSee('NYITCOM', false)
-        ->assertSee('data-flux-select', false)
+        ->assertSee('data-flux-select-native', false)
         ->assertSee('Ava Adams', false)
         ->assertSee('Cat Chin', false);
 

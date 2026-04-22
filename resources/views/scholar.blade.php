@@ -51,16 +51,16 @@
                 <flux:select
                     class="min-w-0 flex-1"
                     name="id"
-                    variant="listbox"
-                    searchable
-                    clearable
-                    value="{{ $selected['record_id'] ?? '' }}"
                     label="Choose a scholar"
-                    placeholder="Search by scholar name..."
-                    empty="No scholars found"
                 >
+                    <flux:select.option value="" disabled :selected="$selected === null">
+                        Select a scholar...
+                    </flux:select.option>
                     @foreach ($roster as $scholar)
-                        <flux:select.option value="{{ $scholar['record_id'] }}">
+                        <flux:select.option
+                            value="{{ $scholar['record_id'] }}"
+                            :selected="$selected !== null && $selected['record_id'] === $scholar['record_id']"
+                        >
                             {{ $scholar['name'] }}
                         </flux:select.option>
                     @endforeach
