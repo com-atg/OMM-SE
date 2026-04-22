@@ -166,3 +166,20 @@ it('shows a pending final grade when no final score exists', function () {
         ->assertSee('Pending')
         ->assertSee('Final grade is not available yet.');
 });
+
+it('hides student-only navigation and sharing controls on the scholar view', function () {
+    $student = asStudent('10');
+
+    $destination = mock(RedcapDestinationService::class);
+    $destination->shouldReceive('getAllScholarRecords')->twice()->andReturn(scholarRoster());
+
+    $response = get('/scholar');
+
+    $response->assertOk()
+        ->assertSee('Cat Chin', false)
+        ->assertDontSee('Shareable Link', false)
+        ->assertDontSee(route('scholar.token', $student->public_token), false)
+        ->assertDontSee('href="'.route('dashboard', absolute: false).'"', false);
+
+    expect($response->viewData('shareable_url'))->toBeNull();
+});

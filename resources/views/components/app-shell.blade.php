@@ -13,6 +13,8 @@
         'wide' => 'max-w-7xl',
         default => 'max-w-6xl',
     };
+    $user = auth()->user();
+    $showDashboardLink = ! $user?->isStudent();
 
     $navLink = function (string $section) use ($active): string {
         return $active === $section
@@ -89,9 +91,11 @@
                 </a>
 
                 <div class="hidden items-center gap-1 lg:flex">
-                    <a href="{{ route('dashboard') }}" class="{{ $navLink('dashboard') }} rounded-lg px-3 py-2 text-sm font-semibold transition">
-                        Dashboard
-                    </a>
+                    @if ($showDashboardLink)
+                        <a href="{{ route('dashboard') }}" class="{{ $navLink('dashboard') }} rounded-lg px-3 py-2 text-sm font-semibold transition">
+                            Dashboard
+                        </a>
+                    @endif
                     <a href="{{ route('scholar') }}" class="{{ $navLink('scholars') }} rounded-lg px-3 py-2 text-sm font-semibold transition">
                         Scholars
                     </a>
@@ -122,7 +126,9 @@
                     <flux:button variant="ghost" icon="bars-3" inset="top bottom" aria-label="Open navigation" />
 
                     <flux:menu>
-                        <flux:menu.item href="{{ route('dashboard') }}" icon="chart-pie">Dashboard</flux:menu.item>
+                        @if ($showDashboardLink)
+                            <flux:menu.item href="{{ route('dashboard') }}" icon="chart-pie">Dashboard</flux:menu.item>
+                        @endif
                         <flux:menu.item href="{{ route('scholar') }}" icon="users">Scholars</flux:menu.item>
                         @can('manage-users')
                             <flux:menu.item href="{{ route('admin.users.index') }}" icon="shield-check">Users</flux:menu.item>

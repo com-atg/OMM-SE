@@ -306,14 +306,14 @@ $chartPayload = [
                                 <img
                                     src="{{ $selected['photo_url'] }}"
                                     alt="{{ $selected['name'] }}"
-                                    class="size-20 object-cover"
+                                    class="size-40 object-cover"
                                     onerror="this.classList.add('hidden'); this.nextElementSibling.classList.remove('hidden'); this.nextElementSibling.classList.add('grid');"
                                 >
-                                <div class="hidden size-20 place-items-center bg-[#002045] text-xl font-bold text-white">
+                                <div class="hidden size-40 place-items-center bg-[#002045] text-4xl font-bold text-white">
                                     {{ $selectedInitials }}
                                 </div>
                             @else
-                                <div class="grid size-20 place-items-center bg-[#002045] text-xl font-bold text-white">
+                                <div class="grid size-40 place-items-center bg-[#002045] text-4xl font-bold text-white">
                                     {{ $selectedInitials }}
                                 </div>
                             @endif
@@ -322,14 +322,9 @@ $chartPayload = [
                         <div class="min-w-0">
                             <div class="flex flex-wrap items-center gap-2">
                                 <span class="rounded-full bg-[#d6e3ff] px-3 py-1 text-[0.68rem] font-bold uppercase tracking-[0.22em] text-[#001b3c]">Scholar Profile</span>
-                                <span class="rounded-full bg-[#e7eeff] px-3 py-1 text-[0.68rem] font-bold uppercase tracking-[0.18em] text-[#455f88]">Record #{{ $selected['record_id'] }}</span>
                             </div>
                             <h2 class="mt-3 text-3xl font-semibold tracking-tight text-[#111c2c] sm:text-4xl">{{ $selected['name'] }}</h2>
                             <div class="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm text-[#43474e]">
-                                <span class="inline-flex items-center gap-1.5">
-                                    <flux:icon.identification variant="mini" class="size-4 text-[#455f88]" />
-                                    Datatel {{ $selected['datatelid'] ?? '-' }}
-                                </span>
                                 <span class="inline-flex items-center gap-1.5">
                                     <flux:icon.academic-cap variant="mini" class="size-4 text-[#455f88]" />
                                     Final Grade:

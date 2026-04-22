@@ -34,7 +34,7 @@ class ScholarController extends Controller
                 'selected' => $this->selectedScholar($match),
                 'semesters' => $this->buildSemesters($match),
                 'lock_selection' => true,
-                'shareable_url' => route('scholar.token', $user->public_token),
+                'shareable_url' => null,
             ]);
         }
 
@@ -100,7 +100,7 @@ class ScholarController extends Controller
             'selected' => $this->selectedScholar($match),
             'semesters' => $this->buildSemesters($match),
             'lock_selection' => true,
-            'shareable_url' => route('scholar.token', $target->public_token),
+            'shareable_url' => $viewer->isStudent() ? null : route('scholar.token', $target->public_token),
         ]);
     }
 
