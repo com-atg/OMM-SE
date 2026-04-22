@@ -12,6 +12,18 @@ beforeEach(function () {
     Cache::flush();
 });
 
+it('stores a compact relative intended URL before SAML login', function () {
+    get('/scholar?id=10')
+        ->assertRedirect(route('saml.login'))
+        ->assertSessionHas('url.intended', '/scholar?id=10');
+});
+
+it('falls back to dashboard when the intended URL is too large', function () {
+    get('/scholar?'.http_build_query(['payload' => str_repeat('x', 2100)]))
+        ->assertRedirect(route('saml.login'))
+        ->assertSessionHas('url.intended', route('dashboard', absolute: false));
+});
+
 // ─── Dashboard ───────────────────────────────────────────────────────────────
 
 it('redirects students from dashboard to their scholar page', function () {

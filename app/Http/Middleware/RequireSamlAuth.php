@@ -16,7 +16,16 @@ class RequireSamlAuth
     {
         if (! Auth::check()) {
             if (! $request->expectsJson()) {
-                $intendedUrl = url($request->path()).($request->getQueryString() ? '?'.$request->getQueryString() : '');
+                $intendedUrl = '/'.ltrim($request->path(), '/');
+
+                if ($request->getQueryString()) {
+                    $intendedUrl .= '?'.$request->getQueryString();
+                }
+
+                if (mb_strlen($intendedUrl) > 2000) {
+                    $intendedUrl = route('dashboard', absolute: false);
+                }
+
                 $request->session()->put('url.intended', $intendedUrl);
             }
 
