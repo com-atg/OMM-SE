@@ -90,9 +90,9 @@ it('uses a path-safe Livewire config for the Vite runtime', function () {
 
     expect($shell)
         ->toContain('window.livewireScriptConfig')
+        ->toContain('@livewireScriptConfig')
         ->toContain('parse_url(config(\'app.url\'), PHP_URL_PATH)')
         ->toContain('runtime.livewire')
-        ->not->toContain('@livewireScriptConfig')
         ->not->toContain('@livewireScripts')
         ->not->toContain('@fluxScripts');
 });
