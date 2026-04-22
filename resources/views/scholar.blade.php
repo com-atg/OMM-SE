@@ -4,6 +4,7 @@
     eyebrow="Scholar Detail"
     heading="Individual Scholar Evaluation"
     subheading="Review semester scores, evaluation cadence, faculty comments, and supporting detail for a selected scholar."
+    width="wide"
 >
     <x-slot:head>
         <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
