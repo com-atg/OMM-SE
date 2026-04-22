@@ -32,6 +32,18 @@ jobs:
           key: composer-${{ hashFiles('composer.lock') }}
           restore-keys: composer-
 
+      - name: Configure Flux Pro Composer auth
+        env:
+          FLUX_USERNAME: ${{ secrets.FLUX_USERNAME }}
+          FLUX_LICENSE_KEY: ${{ secrets.FLUX_LICENSE_KEY }}
+        run: |
+          if [ -z "$FLUX_USERNAME" ] || [ -z "$FLUX_LICENSE_KEY" ]; then
+            echo "::error::Missing FLUX_USERNAME or FLUX_LICENSE_KEY repository secret."
+            exit 1
+          fi
+
+          composer config --global http-basic.composer.fluxui.dev "$FLUX_USERNAME" "$FLUX_LICENSE_KEY"
+
       - name: Install PHP dependencies
         run: composer install --no-interaction --prefer-dist --no-progress
 
@@ -129,6 +141,9 @@ jobs:
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/omm-se:${{ steps.calver.outputs.version }}
             ${{ secrets.DOCKERHUB_USERNAME }}/omm-se:latest
+          build-args: |
+            FLUX_USERNAME=${{ secrets.FLUX_USERNAME }}
+            FLUX_LICENSE_KEY=${{ secrets.FLUX_LICENSE_KEY }}
 
       # ── Deploy to production server via SSH ─────────────────────────────────
       - name: Deploy to production
