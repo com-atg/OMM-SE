@@ -65,13 +65,15 @@ it('renders gracefully when the destination service throws', function () {
 
     $response->assertOk()
         ->assertViewIs('dashboard')
-        ->assertSee('No scholar data available');
+        ->assertSee('Dashboard data needs attention')
+        ->assertSee('No scholar records are available');
 
     $stats = $response->viewData('stats');
     expect($stats['has_scholars'])->toBeFalse()
         ->and($stats['has_evals'])->toBeFalse()
         ->and($stats['kpis']['total_scholars'])->toBe(0)
-        ->and($stats['kpis']['total_evals'])->toBe(0);
+        ->and($stats['kpis']['total_evals'])->toBe(0)
+        ->and($stats['fetch_error'])->toContain('Unable to connect to REDCap');
 });
 
 it('shows a friendly empty state when the roster returns no records', function () {
@@ -80,7 +82,7 @@ it('shows a friendly empty state when the roster returns no records', function (
 
     get('/')
         ->assertOk()
-        ->assertSee('No scholar data available')
+        ->assertSee('No scholar records are available')
         ->assertDontSee('chartAvgByCategory');
 });
 
@@ -101,4 +103,22 @@ it('shows the "no evaluations yet" state when scholars exist but have no evals',
     expect($stats['has_scholars'])->toBeTrue()
         ->and($stats['has_evals'])->toBeFalse()
         ->and($stats['kpis']['total_scholars'])->toBe(2);
+});
+
+it('does not cache failed dashboard fetches as empty data', function () {
+    $destination = mock(RedcapDestinationService::class);
+    $destination->shouldReceive('getAllScholarRecords')->once()->andThrow(new RuntimeException('REDCap down'));
+
+    get('/')->assertOk()
+        ->assertSee('Dashboard data needs attention');
+
+    $destination->shouldReceive('getAllScholarRecords')->once()->andReturn(destRoster());
+
+    $response = get('/');
+
+    $response->assertOk()
+        ->assertDontSee('Dashboard data needs attention');
+
+    expect($response->viewData('stats')['kpis']['total_scholars'])->toBe(3)
+        ->and($response->viewData('stats')['kpis']['total_evals'])->toBe(7);
 });

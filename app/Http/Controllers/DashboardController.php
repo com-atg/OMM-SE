@@ -12,6 +12,10 @@ use Illuminate\Support\Facades\Log;
 
 class DashboardController extends Controller
 {
+    private const CACHE_KEY = 'dashboard:stats:v2';
+
+    private const FALLBACK_CACHE_KEY = 'dashboard:stats:last-success';
+
     private const SEMESTERS = ['spring', 'fall'];
 
     private const HISTOGRAM_BUCKETS = [
@@ -32,16 +36,28 @@ class DashboardController extends Controller
 
         abort_unless($user && $user->canViewAllScholars(), 403);
 
-        $stats = Cache::remember('dashboard:stats', now()->addMinutes(10), function () use ($destination) {
+        $stats = Cache::get(self::CACHE_KEY);
+
+        if ($stats === null) {
             try {
                 $records = $destination->getAllScholarRecords();
+                $stats = $this->buildStats($records);
+
+                Cache::put(self::CACHE_KEY, $stats, now()->addMinutes(10));
+                Cache::put(self::FALLBACK_CACHE_KEY, $stats, now()->addDay());
             } catch (\Throwable $e) {
                 Log::error('DashboardController: failed to fetch destination records.', ['error' => $e->getMessage()]);
-                $records = [];
-            }
 
-            return $this->buildStats($records);
-        });
+                $stats = Cache::get(self::FALLBACK_CACHE_KEY);
+
+                if ($stats !== null) {
+                    $stats['fetch_error'] = 'Unable to refresh dashboard data. Showing the most recent cached snapshot.';
+                    $stats['is_stale'] = true;
+                } else {
+                    $stats = $this->buildStats([], 'Unable to connect to REDCap. Check the REDCAP_URL and REDCAP_TOKEN configuration.');
+                }
+            }
+        }
 
         return view('dashboard', ['stats' => $stats]);
     }
@@ -50,7 +66,7 @@ class DashboardController extends Controller
      * @param  array<int,array<string,mixed>>  $records
      * @return array<string,mixed>
      */
-    private function buildStats(array $records): array
+    private function buildStats(array $records, ?string $fetchError = null): array
     {
         $categories = RedcapSourceService::DEST_CATEGORY;
         $labels = RedcapSourceService::CATEGORY_LABELS;
@@ -178,6 +194,8 @@ class DashboardController extends Controller
                 'labels' => $histogramLabels,
                 'series' => $histogramSeries,
             ],
+            'fetch_error' => $fetchError,
+            'is_stale' => false,
             'generated_at' => now()->toIso8601String(),
         ];
     }
