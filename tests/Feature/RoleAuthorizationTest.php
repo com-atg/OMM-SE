@@ -145,7 +145,7 @@ it('token URL returns 404 for an unknown token', function () {
     get(route('scholar.token', '00000000-0000-0000-0000-000000000000'))->assertNotFound();
 });
 
-it('scholar page includes a shareable URL for students', function () {
+it('scholar page hides the shareable URL for students', function () {
     $student = asStudent('10');
 
     $destination = mock(RedcapDestinationService::class);
@@ -153,7 +153,7 @@ it('scholar page includes a shareable URL for students', function () {
         ['record_id' => '10', 'first_name' => 'Cat', 'last_name' => 'Chin'],
     ]);
 
-    get('/scholar')->assertOk()->assertSee($student->public_token);
+    get('/scholar')->assertOk()->assertDontSee($student->public_token);
 });
 
 // ─── Process — Service-only ──────────────────────────────────────────────────
