@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Auth\SamlController;
 use App\Http\Controllers\DashboardController;
@@ -64,6 +65,17 @@ Route::middleware(RequireSamlAuth::class)->group(function () {
         Route::delete('/users/{user}', [AdminUserController::class, 'destroy'])->name('users.destroy');
         Route::post('/users/{id}/restore', [AdminUserController::class, 'restore'])->name('users.restore');
         Route::post('/users/{user}/impersonate', [AdminUserController::class, 'impersonate'])->name('users.impersonate');
+    });
+
+    // Settings (Service-only).
+    Route::middleware('can:manage-settings')->prefix('admin')->name('admin.')->group(function () {
+        Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');
+        Route::post('/settings/project-mappings', [SettingsController::class, 'store'])->name('settings.project-mappings.store');
+        Route::get('/settings/project-mappings/{projectMapping}/edit', [SettingsController::class, 'edit'])->name('settings.project-mappings.edit');
+        Route::patch('/settings/project-mappings/{projectMapping}', [SettingsController::class, 'update'])->name('settings.project-mappings.update');
+        Route::delete('/settings/project-mappings/{projectMapping}', [SettingsController::class, 'destroy'])->name('settings.project-mappings.destroy');
+        Route::post('/settings/project-mappings/{id}/restore', [SettingsController::class, 'restore'])->name('settings.project-mappings.restore');
+        Route::post('/settings/project-mappings/{projectMapping}/process', [SettingsController::class, 'process'])->name('settings.project-mappings.process');
     });
 });
 
