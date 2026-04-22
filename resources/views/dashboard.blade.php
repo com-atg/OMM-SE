@@ -43,19 +43,6 @@
             Refreshed {{ $generatedAt->diffForHumans() }}
         </span>
 
-        @can('run-process')
-            <form method="POST" action="{{ route('process.run') }}">
-                @csrf
-                <flux:button
-                    type="submit"
-                    variant="primary"
-                    icon="play"
-                    onclick="this.disabled=true; this.innerText='Starting...'; this.form.submit();"
-                >
-                    Process
-                </flux:button>
-            </form>
-        @endcan
     </x-slot:navActions>
 
     <x-slot:headerActions>

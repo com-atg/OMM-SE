@@ -59,6 +59,16 @@ class User extends Authenticatable
         return $this->isService();
     }
 
+    public function canViewSettings(): bool
+    {
+        return $this->isService() || $this->isAdmin();
+    }
+
+    public function canManageSettingsRecords(): bool
+    {
+        return $this->isService();
+    }
+
     public function canViewAllScholars(): bool
     {
         return $this->isService() || $this->isAdmin();

@@ -39,6 +39,7 @@ class ProcessController extends Controller
             'total_groups' => 0,
             'processed_groups' => 0,
             'updated' => 0,
+            'unchanged' => 0,
             'failed' => 0,
             'skip_reasons' => [],
             'error' => null,
@@ -49,6 +50,7 @@ class ProcessController extends Controller
         return view('process', [
             'pid' => $pid,
             'jobId' => $jobId,
+            'active' => 'dashboard',
         ]);
     }
 
@@ -78,6 +80,7 @@ class ProcessController extends Controller
             'total_groups' => 0,
             'processed_groups' => 0,
             'updated' => 0,
+            'unchanged' => 0,
             'failed' => 0,
             'skip_reasons' => [],
             'error' => null,
@@ -88,6 +91,7 @@ class ProcessController extends Controller
         return view('process', [
             'pid' => 'Source Project',
             'jobId' => $jobId,
+            'active' => 'dashboard',
         ]);
     }
 

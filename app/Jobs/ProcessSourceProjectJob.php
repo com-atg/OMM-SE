@@ -43,6 +43,7 @@ class ProcessSourceProjectJob implements ShouldQueue
             $state['total_groups'] = count($groups);
             $state['processed_groups'] = 0;
             $state['updated'] = 0;
+            $state['unchanged'] = 0;
             $state['failed'] = 0;
             Cache::put($cacheKey, $state, now()->addMinutes(self::TTL_MINUTES));
 
@@ -72,6 +73,13 @@ class ProcessSourceProjectJob implements ShouldQueue
                     ['record_id' => $scholarRecord['record_id']],
                     $aggregates['fields'],
                 );
+
+                if ($this->recordAlreadyHasValues($scholarRecord, $payload)) {
+                    $state['unchanged']++;
+                    $this->tick($cacheKey, $state);
+
+                    continue;
+                }
 
                 try {
                     $destination->updateScholarRecord($payload);
@@ -156,5 +164,33 @@ class ProcessSourceProjectJob implements ShouldQueue
     {
         $state['processed_groups'] = ($state['processed_groups'] ?? 0) + 1;
         Cache::put($cacheKey, $state, now()->addMinutes(self::TTL_MINUTES));
+    }
+
+    /**
+     * @param  array<string,mixed>  $record
+     * @param  array<string,mixed>  $payload
+     */
+    private function recordAlreadyHasValues(array $record, array $payload): bool
+    {
+        foreach ($payload as $field => $value) {
+            if ($field === 'record_id') {
+                continue;
+            }
+
+            if (! array_key_exists($field, $record) || ! $this->valuesMatch($record[$field], $value)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function valuesMatch(mixed $existing, mixed $incoming): bool
+    {
+        if (is_numeric($existing) && is_numeric($incoming)) {
+            return (float) $existing === (float) $incoming;
+        }
+
+        return trim((string) $existing) === trim((string) $incoming);
     }
 }

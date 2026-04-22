@@ -76,7 +76,7 @@ it('seeds cache state and schedules the job when kicked off', function () {
 
     $response = get('/process/1846');
 
-    $response->assertOk()->assertViewIs('process')->assertSee('PID');
+    $response->assertOk()->assertViewIs('process')->assertSee('Project');
 
     $jobId = $response->viewData('jobId');
     expect($jobId)->toBeString()->not->toBe('');
@@ -165,11 +165,55 @@ it('aggregates source records and pushes updates for matched scholars without em
         ->and($state['total_groups'])->toBe(3)
         ->and($state['processed_groups'])->toBe(3)
         ->and($state['updated'])->toBe(2)
+        ->and($state['unchanged'])->toBe(0)
         ->and($state['failed'])->toBe(0)
         ->and($state['skip_reasons']['scholar_not_found'])->toBe(1)
         ->and($state['skip_reasons']['missing_required_fields'])->toBe(1);
 
     Mail::assertNothingSent();
+});
+
+it('does not update destination records when aggregate values are unchanged', function () {
+    $sourceRecords = [
+        [
+            'record_id' => '1',
+            'student' => '100',
+            'semester' => '1',
+            'eval_category' => 'A',
+            'teaching_score' => '80.0',
+            'date_lab' => '2026-04-01',
+            'faculty' => 'Dr. Smith',
+        ],
+    ];
+
+    $source = mock(RedcapSourceService::class);
+    $source->shouldReceive('fetchAllRecords')->once()->with('TOKEN_X')->andReturn($sourceRecords);
+
+    $destination = mock(RedcapDestinationService::class);
+    $destination->shouldReceive('scholarMapByDatatelId')->once()->andReturn([
+        '100' => [
+            'record_id' => '10',
+            'datatelid' => '100',
+            'spring_nu_teaching' => '1',
+            'spring_avg_teaching' => '80',
+            'spring_dates_teaching' => 'Dr. Smith, 4/1/2026',
+            'spring_nu_clinic' => '0',
+            'spring_nu_research' => '0',
+            'spring_nu_didactics' => '0',
+            'spring_nu_comments' => '0',
+        ],
+    ]);
+    $destination->shouldReceive('updateScholarRecord')->never();
+
+    $job = new ProcessSourceProjectJob('job-unchanged', '1846', 'TOKEN_X');
+    $job->handle($destination, $source);
+
+    $state = Cache::get(ProcessSourceProjectJob::cacheKey('job-unchanged'));
+    expect($state['status'])->toBe('complete')
+        ->and($state['processed_groups'])->toBe(1)
+        ->and($state['updated'])->toBe(0)
+        ->and($state['unchanged'])->toBe(1)
+        ->and($state['failed'])->toBe(0);
 });
 
 it('marks the job failed when the source export throws', function () {

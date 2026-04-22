@@ -1,7 +1,7 @@
 <x-app-shell
     title="Settings"
     active="settings"
-    eyebrow="Service Settings"
+    eyebrow="Application Settings"
     heading="Settings"
     subheading="Review the application current project and maintain REDCap project mappings."
     width="wide"
@@ -32,92 +32,93 @@
             </div>
         </div>
 
-        <div class="rounded-lg border border-white/80 bg-white/86 p-6 shadow-[0_18px_50px_rgba(15,23,42,0.07)] backdrop-blur">
-            <div class="mb-5 flex items-center gap-3">
-                <span class="grid size-10 shrink-0 place-items-center rounded-lg bg-sky-100 text-sky-700">
-                    <flux:icon.plus />
-                </span>
-                <div>
-                    <div class="text-xs font-bold uppercase tracking-[0.26em] text-slate-500">Project</div>
-                    <h2 class="text-xl font-bold text-slate-950">Add Project Mapping</h2>
+        @can('manage-settings-records')
+            <div class="rounded-lg border border-white/80 bg-white/86 p-6 shadow-[0_18px_50px_rgba(15,23,42,0.07)] backdrop-blur">
+                <div class="mb-5 flex items-center gap-3">
+                    <span class="grid size-10 shrink-0 place-items-center rounded-lg bg-sky-100 text-sky-700">
+                        <flux:icon.plus />
+                    </span>
+                    <div>
+                        <div class="text-xs font-bold uppercase tracking-[0.26em] text-slate-500">Project</div>
+                        <h2 class="text-xl font-bold text-slate-950">Add Project Mapping</h2>
+                    </div>
                 </div>
+
+                <form method="POST" action="{{ route('admin.settings.project-mappings.store') }}" class="grid gap-4 sm:grid-cols-2">
+                    @csrf
+
+                    <div>
+                        <label for="academic_year" class="mb-1 block text-xs font-bold uppercase tracking-[0.22em] text-slate-500">Academic Year</label>
+                        <input
+                            type="text"
+                            name="academic_year"
+                            id="academic_year"
+                            value="{{ old('academic_year') }}"
+                            placeholder="2025-2026"
+                            required
+                            class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100 @error('academic_year') border-red-400 focus:border-red-400 focus:ring-red-100 @enderror"
+                        >
+                        @error('academic_year')
+                            <p class="mt-1 text-xs font-medium text-red-600">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    <div>
+                        <label for="graduation_year" class="mb-1 block text-xs font-bold uppercase tracking-[0.22em] text-slate-500">Graduating Year</label>
+                        <input
+                            type="text"
+                            name="graduation_year"
+                            id="graduation_year"
+                            value="{{ old('graduation_year') }}"
+                            placeholder="2028"
+                            required
+                            inputmode="numeric"
+                            class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100 @error('graduation_year') border-red-400 focus:border-red-400 focus:ring-red-100 @enderror"
+                        >
+                        @error('graduation_year')
+                            <p class="mt-1 text-xs font-medium text-red-600">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    <div>
+                        <label for="redcap_pid" class="mb-1 block text-xs font-bold uppercase tracking-[0.22em] text-slate-500">REDCap PID</label>
+                        <input
+                            type="text"
+                            name="redcap_pid"
+                            id="redcap_pid"
+                            value="{{ old('redcap_pid') }}"
+                            placeholder="1846"
+                            required
+                            inputmode="numeric"
+                            class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100 @error('redcap_pid') border-red-400 focus:border-red-400 focus:ring-red-100 @enderror"
+                        >
+                        @error('redcap_pid')
+                            <p class="mt-1 text-xs font-medium text-red-600">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    <div>
+                        <label for="redcap_token" class="mb-1 block text-xs font-bold uppercase tracking-[0.22em] text-slate-500">REDCap Token</label>
+                        <input
+                            type="password"
+                            name="redcap_token"
+                            id="redcap_token"
+                            value="{{ old('redcap_token') }}"
+                            required
+                            autocomplete="new-password"
+                            class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100 @error('redcap_token') border-red-400 focus:border-red-400 focus:ring-red-100 @enderror"
+                        >
+                        @error('redcap_token')
+                            <p class="mt-1 text-xs font-medium text-red-600">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    <div class="sm:col-span-2 sm:flex sm:justify-end">
+                        <flux:button type="submit" variant="primary" icon="plus">Add mapping</flux:button>
+                    </div>
+                </form>
             </div>
-
-            <form method="POST" action="{{ route('admin.settings.project-mappings.store') }}" class="grid gap-4 sm:grid-cols-2">
-                @csrf
-
-                <div>
-                    <label for="academic_year" class="mb-1 block text-xs font-bold uppercase tracking-[0.22em] text-slate-500">Academic Year</label>
-                    <input
-                        type="text"
-                        name="academic_year"
-                        id="academic_year"
-                        value="{{ old('academic_year') }}"
-                        placeholder="2025-2026"
-                        required
-                        class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100 @error('academic_year') border-red-400 focus:border-red-400 focus:ring-red-100 @enderror"
-                    >
-                    @error('academic_year')
-                        <p class="mt-1 text-xs font-medium text-red-600">{{ $message }}</p>
-                    @enderror
-                </div>
-
-                <div>
-                    <label for="graduation_year" class="mb-1 block text-xs font-bold uppercase tracking-[0.22em] text-slate-500">Graduating Year</label>
-                    <input
-                        type="number"
-                        name="graduation_year"
-                        id="graduation_year"
-                        value="{{ old('graduation_year') }}"
-                        placeholder="2028"
-                        required
-                        min="2000"
-                        max="2100"
-                        class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100 @error('graduation_year') border-red-400 focus:border-red-400 focus:ring-red-100 @enderror"
-                    >
-                    @error('graduation_year')
-                        <p class="mt-1 text-xs font-medium text-red-600">{{ $message }}</p>
-                    @enderror
-                </div>
-
-                <div>
-                    <label for="redcap_pid" class="mb-1 block text-xs font-bold uppercase tracking-[0.22em] text-slate-500">REDCap PID</label>
-                    <input
-                        type="number"
-                        name="redcap_pid"
-                        id="redcap_pid"
-                        value="{{ old('redcap_pid') }}"
-                        placeholder="1846"
-                        required
-                        min="1"
-                        class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100 @error('redcap_pid') border-red-400 focus:border-red-400 focus:ring-red-100 @enderror"
-                    >
-                    @error('redcap_pid')
-                        <p class="mt-1 text-xs font-medium text-red-600">{{ $message }}</p>
-                    @enderror
-                </div>
-
-                <div>
-                    <label for="redcap_token" class="mb-1 block text-xs font-bold uppercase tracking-[0.22em] text-slate-500">REDCap Token</label>
-                    <input
-                        type="password"
-                        name="redcap_token"
-                        id="redcap_token"
-                        value="{{ old('redcap_token') }}"
-                        required
-                        autocomplete="new-password"
-                        class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100 @error('redcap_token') border-red-400 focus:border-red-400 focus:ring-red-100 @enderror"
-                    >
-                    @error('redcap_token')
-                        <p class="mt-1 text-xs font-medium text-red-600">{{ $message }}</p>
-                    @enderror
-                </div>
-
-                <div class="sm:col-span-2 sm:flex sm:justify-end">
-                    <flux:button type="submit" variant="primary" icon="plus">Add mapping</flux:button>
-                </div>
-            </form>
-        </div>
+        @endcan
     </section>
 
     <section class="rounded-lg border border-white/80 bg-white/86 shadow-[0_18px_50px_rgba(15,23,42,0.07)] backdrop-blur">
@@ -154,13 +155,15 @@
                                         <flux:button type="submit" size="sm" variant="ghost" icon="arrow-path">Re-process</flux:button>
                                     </form>
 
-                                    <flux:button href="{{ route('admin.settings.project-mappings.edit', $projectMapping) }}" size="sm" variant="ghost">Edit</flux:button>
+                                    @can('manage-settings-records')
+                                        <flux:button href="{{ route('admin.settings.project-mappings.edit', $projectMapping) }}" size="sm" variant="ghost" icon="pencil-square" aria-label="Edit project mapping" title="Edit project mapping" />
 
-                                    <form method="POST" action="{{ route('admin.settings.project-mappings.destroy', $projectMapping) }}" onsubmit="return confirm('Delete this project mapping? This can be restored.')">
-                                        @csrf
-                                        @method('DELETE')
-                                        <flux:button type="submit" size="sm" variant="danger">Delete</flux:button>
-                                    </form>
+                                        <form method="POST" action="{{ route('admin.settings.project-mappings.destroy', $projectMapping) }}" onsubmit="return confirm('Delete this project mapping? This can be restored.')">
+                                            @csrf
+                                            @method('DELETE')
+                                            <flux:button type="submit" size="sm" variant="danger" icon="trash" aria-label="Delete project mapping" title="Delete project mapping" />
+                                        </form>
+                                    @endcan
                                 </div>
                             </td>
                         </tr>
@@ -200,10 +203,12 @@
                                 <td class="px-5 py-4 text-slate-600">{{ $projectMapping->redcap_pid }}</td>
                                 <td class="px-5 py-4 text-slate-500">{{ $projectMapping->deleted_at?->diffForHumans() }}</td>
                                 <td class="px-5 py-4 text-right">
-                                    <form method="POST" action="{{ route('admin.settings.project-mappings.restore', $projectMapping->id) }}">
-                                        @csrf
-                                        <flux:button type="submit" size="sm" variant="ghost">Restore</flux:button>
-                                    </form>
+                                    @can('manage-settings-records')
+                                        <form method="POST" action="{{ route('admin.settings.project-mappings.restore', $projectMapping->id) }}">
+                                            @csrf
+                                            <flux:button type="submit" size="sm" variant="ghost">Restore</flux:button>
+                                        </form>
+                                    @endcan
                                 </td>
                             </tr>
                         @endforeach

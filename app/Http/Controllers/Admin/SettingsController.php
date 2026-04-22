@@ -97,6 +97,7 @@ class SettingsController extends Controller
             'total_groups' => 0,
             'processed_groups' => 0,
             'updated' => 0,
+            'unchanged' => 0,
             'failed' => 0,
             'skip_reasons' => [],
             'error' => null,
@@ -107,6 +108,7 @@ class SettingsController extends Controller
         return view('process', [
             'pid' => "{$projectMapping->displayName()} / PID {$pid}",
             'jobId' => $jobId,
+            'active' => 'settings',
         ]);
     }
 

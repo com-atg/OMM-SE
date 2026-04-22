@@ -22,6 +22,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('view-all-scholars', fn (User $user) => $user->canViewAllScholars());
         Gate::define('run-process', fn (User $user) => $user->isService());
         Gate::define('manage-users', fn (User $user) => $user->canManageUsers());
-        Gate::define('manage-settings', fn (User $user) => $user->isService());
+        Gate::define('manage-settings', fn (User $user) => $user->canViewSettings());
+        Gate::define('manage-settings-records', fn (User $user) => $user->canManageSettingsRecords());
     }
 }
