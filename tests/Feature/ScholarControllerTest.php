@@ -2,6 +2,7 @@
 
 use App\Services\RedcapDestinationService;
 use Illuminate\Support\Facades\Cache;
+use Livewire\Livewire;
 
 use function Pest\Laravel\get;
 use function Pest\Laravel\mock;
@@ -26,6 +27,7 @@ function scholarRoster(): array
             'spring_nu_didactics' => '0', 'spring_avg_didactics' => '',
             'spring_nu_comments' => '2',
             'fall_nu_teaching' => '1', 'fall_avg_teaching' => '75.0',
+            'fall_final_score' => '91.25',
             'fall_nu_clinic' => '0',
             'fall_nu_research' => '0',
             'fall_nu_didactics' => '0',
@@ -42,7 +44,7 @@ function scholarRoster(): array
 
 it('renders the picker with a sorted roster and no selection', function () {
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('getAllScholarRecords')->once()->andReturn(scholarRoster());
+    $destination->shouldReceive('getAllScholarRecords')->twice()->andReturn(scholarRoster());
 
     $response = get('/scholar');
 
@@ -51,6 +53,8 @@ it('renders the picker with a sorted roster and no selection', function () {
         ->assertSee('Select a scholar')
         ->assertSee('NYITCOM', false)
         ->assertSee('data-flux-select-native', false)
+        ->assertDontSee('View', false)
+        ->assertDontSee('Clear', false)
         ->assertSee('Ava Adams', false)
         ->assertSee('Cat Chin', false);
 
@@ -65,13 +69,15 @@ it('renders the picker with a sorted roster and no selection', function () {
 
 it('renders per-semester eval counts when a scholar is selected', function () {
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('getAllScholarRecords')->once()->andReturn(scholarRoster());
+    $destination->shouldReceive('getAllScholarRecords')->twice()->andReturn(scholarRoster());
 
     $response = get('/scholar?id=10');
 
     $response->assertOk()
         ->assertSee('Cat Chin', false)
         ->assertSee('Scholar Profile', false)
+        ->assertSee('Final Grade', false)
+        ->assertSee('91.25', false)
         ->assertSee('https://guru.nyit.edu/GuruAdmin/StudentOverview/StudentPhotoImageHandler.ashx?id=1234567', false);
 
     $semesters = $response->viewData('semesters');
@@ -91,10 +97,35 @@ it('renders per-semester eval counts when a scholar is selected', function () {
 
 it('ignores an unknown scholar id', function () {
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('getAllScholarRecords')->once()->andReturn(scholarRoster());
+    $destination->shouldReceive('getAllScholarRecords')->twice()->andReturn(scholarRoster());
 
     $response = get('/scholar?id=999');
 
     $response->assertOk();
     expect($response->viewData('selected'))->toBeNull();
+});
+
+it('updates the scholar detail component when the selection changes', function () {
+    $destination = mock(RedcapDestinationService::class);
+    $destination->shouldReceive('getAllScholarRecords')->twice()->andReturn(scholarRoster());
+
+    Livewire::test('scholar-detail')
+        ->assertSee('Select a scholar')
+        ->assertDontSee('Scholar Profile')
+        ->set('selectedId', '10')
+        ->assertSet('selectedId', '10')
+        ->assertSee('Cat Chin')
+        ->assertSee('Final Grade')
+        ->assertSee('91.25');
+});
+
+it('shows a pending final grade when no final score exists', function () {
+    $destination = mock(RedcapDestinationService::class);
+    $destination->shouldReceive('getAllScholarRecords')->once()->andReturn(scholarRoster());
+
+    Livewire::test('scholar-detail', ['initialSelectedId' => '11'])
+        ->assertSee('Ava Adams')
+        ->assertSee('Final Grade')
+        ->assertSee('Pending')
+        ->assertSee('Final grade is not available yet.');
 });

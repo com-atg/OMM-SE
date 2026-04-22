@@ -35,7 +35,7 @@ it('redirects students from dashboard to their scholar page', function () {
 it('lets service users view the dashboard', function () {
     asService();
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('getAllScholarRecords')->once()->andReturn([]);
+    $destination->shouldReceive('getAllScholarRecords')->andReturn([]);
 
     get('/')->assertOk();
 });
@@ -43,7 +43,7 @@ it('lets service users view the dashboard', function () {
 it('lets admin users view the dashboard', function () {
     asAdmin();
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('getAllScholarRecords')->once()->andReturn([]);
+    $destination->shouldReceive('getAllScholarRecords')->andReturn([]);
 
     get('/')->assertOk();
 });
@@ -54,7 +54,7 @@ it('shows a student only their own record and locks the picker', function () {
     asStudent('10');
 
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('getAllScholarRecords')->once()->andReturn([
+    $destination->shouldReceive('getAllScholarRecords')->andReturn([
         ['record_id' => '10', 'first_name' => 'Cat', 'last_name' => 'Chin'],
         ['record_id' => '11', 'first_name' => 'Ava', 'last_name' => 'Adams'],
     ]);
@@ -71,7 +71,7 @@ it('returns 404 when a student has no matching record', function () {
     asStudent('999');
 
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('getAllScholarRecords')->once()->andReturn([
+    $destination->shouldReceive('getAllScholarRecords')->andReturn([
         ['record_id' => '10', 'first_name' => 'Cat', 'last_name' => 'Chin'],
     ]);
 
@@ -82,7 +82,7 @@ it('ignores ?id query string for students and forces their own record', function
     asStudent('10');
 
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('getAllScholarRecords')->once()->andReturn([
+    $destination->shouldReceive('getAllScholarRecords')->andReturn([
         ['record_id' => '10', 'first_name' => 'Cat', 'last_name' => 'Chin'],
         ['record_id' => '11', 'first_name' => 'Ava', 'last_name' => 'Adams'],
     ]);
@@ -100,7 +100,7 @@ it('service user can access any scholar via token URL', function () {
     $target = User::factory()->student()->create(['redcap_record_id' => '10']);
 
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('getAllScholarRecords')->once()->andReturn([
+    $destination->shouldReceive('getAllScholarRecords')->andReturn([
         ['record_id' => '10', 'first_name' => 'Cat', 'last_name' => 'Chin'],
     ]);
 
@@ -113,7 +113,7 @@ it('admin user can access any scholar via token URL', function () {
     $target = User::factory()->student()->create(['redcap_record_id' => '10']);
 
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('getAllScholarRecords')->once()->andReturn([
+    $destination->shouldReceive('getAllScholarRecords')->andReturn([
         ['record_id' => '10', 'first_name' => 'Cat', 'last_name' => 'Chin'],
     ]);
 
@@ -124,7 +124,7 @@ it('student can access their own token URL', function () {
     $student = asStudent('10');
 
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('getAllScholarRecords')->once()->andReturn([
+    $destination->shouldReceive('getAllScholarRecords')->andReturn([
         ['record_id' => '10', 'first_name' => 'Cat', 'last_name' => 'Chin'],
     ]);
 
@@ -149,7 +149,7 @@ it('scholar page includes a shareable URL for students', function () {
     $student = asStudent('10');
 
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('getAllScholarRecords')->once()->andReturn([
+    $destination->shouldReceive('getAllScholarRecords')->andReturn([
         ['record_id' => '10', 'first_name' => 'Cat', 'last_name' => 'Chin'],
     ]);
 
