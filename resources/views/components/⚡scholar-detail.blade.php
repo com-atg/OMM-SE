@@ -417,16 +417,16 @@ $chartPayload = [
                                     <div class="overflow-hidden rounded-lg border border-[#e2e8f0] bg-white">
                                         <flux:table>
                                             <flux:table.columns>
-                                                <flux:table.column class="bg-[#f0f3ff] ps-4 text-xs font-bold uppercase tracking-[0.16em] text-[#455f88]">Category</flux:table.column>
-                                                <flux:table.column class="bg-[#f0f3ff] text-xs font-bold uppercase tracking-[0.16em] text-[#455f88]" align="end">Evals</flux:table.column>
-                                                <flux:table.column class="bg-[#f0f3ff] pe-4 text-xs font-bold uppercase tracking-[0.16em] text-[#455f88]" align="end">Avg</flux:table.column>
+                                                <flux:table.column class="!ps-6 bg-[#f0f3ff] text-xs font-bold uppercase tracking-[0.16em] text-[#455f88]">Category</flux:table.column>
+                                                <flux:table.column class="bg-[#f0f3ff] px-6 text-xs font-bold uppercase tracking-[0.16em] text-[#455f88]" align="end">Evals</flux:table.column>
+                                                <flux:table.column class="!pe-6 bg-[#f0f3ff] text-xs font-bold uppercase tracking-[0.16em] text-[#455f88]" align="end">Avg</flux:table.column>
                                             </flux:table.columns>
                                             <flux:table.rows>
                                                 @foreach ($sem['category_keys'] as $j => $catKey)
                                                     <flux:table.row class="transition hover:bg-[#f9f9ff]" wire:key="semester-{{ $sem['slug'] }}-{{ $catKey }}">
-                                                        <flux:table.cell class="ps-4 font-semibold text-[#111c2c]">{{ $sem['category_labels'][$j] }}</flux:table.cell>
-                                                        <flux:table.cell class="font-medium tabular-nums text-[#43474e]" align="end">{{ $sem['counts'][$j] }}</flux:table.cell>
-                                                        <flux:table.cell class="pe-4 tabular-nums" align="end">
+                                                        <flux:table.cell class="!ps-6 font-semibold text-[#111c2c]">{{ $sem['category_labels'][$j] }}</flux:table.cell>
+                                                        <flux:table.cell class="px-6 font-medium tabular-nums text-[#43474e]" align="end">{{ $sem['counts'][$j] }}</flux:table.cell>
+                                                        <flux:table.cell class="!pe-6 tabular-nums" align="end">
                                                             @if ($sem['averages'][$j] !== null)
                                                                 <span class="font-semibold text-[#111c2c]">{{ number_format($sem['averages'][$j], 1) }}</span>
                                                                 <span class="text-xs text-[#74777f]">/100</span>
