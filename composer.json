@@ -13,6 +13,8 @@
         "ext-curl": "*",
         "laravel/framework": "^13.0",
         "laravel/tinker": "^3.0",
+        "livewire/flux": "*",
+        "livewire/flux-pro": "^2.13",
         "onelogin/php-saml": "^4.3",
         "symfony/var-dumper": "*"
     },
@@ -90,5 +92,10 @@
         }
     },
     "minimum-stability": "stable",
-    "prefer-stable": true
+    "prefer-stable": true,
+    "repositories": [{
+        "name": "flux-pro",
+        "type": "composer",
+        "url": "https://composer.fluxui.dev"
+    }]
 }

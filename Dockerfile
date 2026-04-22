@@ -1,23 +1,51 @@
-# ── Stage 1: JS/CSS assets ───────────────────────────────────────────────────
+# syntax=docker/dockerfile:1
+
+# Flux Pro Composer credentials. Pass either COMPOSER_AUTH or FLUX_USERNAME plus
+# FLUX_LICENSE_KEY. FLUX_PASSWORD is also supported for compatibility with older
+# deploy examples.
+ARG COMPOSER_AUTH
+ARG FLUX_USERNAME
+ARG FLUX_LICENSE_KEY
+ARG FLUX_PASSWORD
+
+# ── Stage 1: PHP Composer dependencies ───────────────────────────────────────
+FROM composer:2 AS composer-builder
+
+ARG COMPOSER_AUTH
+ARG FLUX_USERNAME
+ARG FLUX_LICENSE_KEY
+ARG FLUX_PASSWORD
+
+WORKDIR /app
+COPY composer.json composer.lock ./
+RUN if [ -n "$COMPOSER_AUTH" ]; then \
+        export COMPOSER_AUTH="$COMPOSER_AUTH"; \
+    elif [ -n "$FLUX_USERNAME" ] && [ -n "$FLUX_LICENSE_KEY" ]; then \
+        composer config --global http-basic.composer.fluxui.dev "$FLUX_USERNAME" "$FLUX_LICENSE_KEY"; \
+    elif [ -n "$FLUX_USERNAME" ] && [ -n "$FLUX_PASSWORD" ]; then \
+        composer config --global http-basic.composer.fluxui.dev "$FLUX_USERNAME" "$FLUX_PASSWORD"; \
+    else \
+        echo "Set COMPOSER_AUTH or both FLUX_USERNAME and FLUX_LICENSE_KEY to install Flux Pro."; \
+        exit 1; \
+    fi \
+    && composer install \
+        --no-dev \
+        --no-interaction \
+        --no-scripts \
+        --prefer-dist \
+        --optimize-autoloader \
+    && rm -f /tmp/auth.json /root/.composer/auth.json /composer/auth.json
+COPY . .
+RUN composer dump-autoload --no-dev --optimize
+
+# ── Stage 2: JS/CSS assets ───────────────────────────────────────────────────
 FROM node:22-alpine AS node-builder
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --ignore-scripts
 COPY . .
+COPY --from=composer-builder /app/vendor /app/vendor
 RUN npm run build
-
-# ── Stage 2: PHP Composer dependencies ───────────────────────────────────────
-FROM composer:2 AS composer-builder
-WORKDIR /app
-COPY composer.json composer.lock ./
-RUN composer install \
-    --no-dev \
-    --no-interaction \
-    --no-scripts \
-    --prefer-dist \
-    --optimize-autoloader
-COPY . .
-RUN composer dump-autoload --no-dev --optimize
 
 # ── Stage 3: Runtime ─────────────────────────────────────────────────────────
 FROM php:8.4-fpm-alpine AS runtime

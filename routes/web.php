@@ -20,6 +20,7 @@ use Illuminate\View\Middleware\ShareErrorsFromSession;
 Route::get('/saml/login', [SamlController::class, 'login'])->name('saml.login');
 Route::post('/saml/acs', [SamlController::class, 'acs'])->name('saml.acs');
 Route::match(['get', 'post'], '/saml/logout', [SamlController::class, 'logout'])->name('saml.logout');
+Route::get('/signed-out', fn () => view('auth.signed-out'))->name('saml.signed-out');
 Route::get('/saml/metadata', [SamlController::class, 'metadata'])
     ->withoutMiddleware([
         EncryptCookies::class,

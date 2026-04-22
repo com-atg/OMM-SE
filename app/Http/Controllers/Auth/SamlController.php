@@ -105,12 +105,12 @@ class SamlController
 
         $idpSlo = (string) config('saml.idp.singleLogoutService.url', '');
         if ($idpSlo !== '') {
-            $url = $this->saml->auth()->logout(url('/'));
+            $url = $this->saml->auth()->logout(route('saml.signed-out'));
 
             return redirect()->away($url);
         }
 
-        return redirect()->to('/');
+        return redirect()->route('saml.signed-out');
     }
 
     /**
