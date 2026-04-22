@@ -6,7 +6,8 @@ use App\Models\Redcap_lib;
 
 /**
  * Wraps Redcap_lib for the current academic year's source evaluation project.
- * The source project is recreated each year — update REDCAP_SOURCE_TOKEN in .env annually.
+ * The source project is recreated each year. Webhooks may provide a PID-specific
+ * token resolved from project mappings; otherwise REDCAP_SOURCE_TOKEN is used.
  */
 class RedcapSourceService
 {
@@ -48,7 +49,7 @@ class RedcapSourceService
      * Fetch a single evaluation record by record_id.
      * Returns the first record as an array (raw values + calculated fields).
      */
-    public function getRecord(string $recordId): array
+    public function getRecord(string $recordId, ?string $token = null): array
     {
         $result = Redcap_lib::exportRecords(
             format: 'json',
@@ -57,7 +58,7 @@ class RedcapSourceService
             rawOrLabel: 'raw',
             returnAs: 'array',
             url: $this->url,
-            token: $this->token,
+            token: $token ?? $this->token,
         );
 
         return $result[0] ?? [];
@@ -69,7 +70,7 @@ class RedcapSourceService
      * semester is the raw coded value ('1' = Spring, '2' = Fall).
      * Returns empty array if either value fails validation.
      */
-    public function getScholarEvals(string $datatelId, string $semester): array
+    public function getScholarEvals(string $datatelId, string $semester, ?string $token = null): array
     {
         if (! preg_match('/^\d+$/', $datatelId) || ! preg_match('/^[12]$/', $semester)) {
             return [];
@@ -82,7 +83,7 @@ class RedcapSourceService
             filterLogic: "[student]='{$datatelId}' and [semester]='{$semester}'",
             returnAs: 'array',
             url: $this->url,
-            token: $this->token,
+            token: $token ?? $this->token,
         );
     }
 

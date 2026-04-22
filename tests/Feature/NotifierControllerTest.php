@@ -1,6 +1,7 @@
 <?php
 
 use App\Mail\EvaluationNotification;
+use App\Models\ProjectMapping;
 use App\Services\RedcapDestinationService;
 use App\Services\RedcapSourceService;
 use Illuminate\Support\Facades\Mail;
@@ -159,6 +160,36 @@ test('sends EvaluationNotification email on successful webhook', function () {
     mockServices(sourceEvalRecord(), [sourceEvalRecord()], destScholarRecord());
 
     $this->postJson('/notify', ['record' => '1'])->assertSuccessful();
+
+    Mail::assertSent(EvaluationNotification::class);
+});
+
+test('uses mapped source project token when webhook includes project id', function () {
+    Mail::fake();
+
+    ProjectMapping::factory()->create([
+        'redcap_pid' => 1846,
+        'redcap_token' => 'PID_TOKEN_1846',
+    ]);
+
+    $source = mock(RedcapSourceService::class);
+    $source->shouldReceive('getRecord')
+        ->once()
+        ->with('1', 'PID_TOKEN_1846')
+        ->andReturn(sourceEvalRecord());
+    $source->shouldReceive('getScholarEvals')
+        ->once()
+        ->with('1', '1', 'PID_TOKEN_1846')
+        ->andReturn([sourceEvalRecord()]);
+
+    $destination = mock(RedcapDestinationService::class);
+    $destination->shouldReceive('findScholarByDatatelId')->with('1')->andReturn(destScholarRecord());
+    $destination->shouldReceive('updateScholarRecord')->once()->andReturn('1');
+
+    $this->postJson('/notify', [
+        'record' => '1',
+        'project_id' => '1846',
+    ])->assertSuccessful();
 
     Mail::assertSent(EvaluationNotification::class);
 });

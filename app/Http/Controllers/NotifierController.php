@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Mail\EvaluationNotification;
+use App\Models\ProjectMapping;
 use App\Services\RedcapDestinationService;
 use App\Services\RedcapSourceService;
 use App\Support\EvalAggregator;
@@ -28,8 +29,10 @@ class NotifierController extends Controller
             return response('', 200);
         }
 
+        $sourceToken = $this->sourceTokenFor($request);
+
         // 1. Fetch the triggering eval record from source.
-        $evalRecord = $source->getRecord($recordId);
+        $evalRecord = $source->getRecord($recordId, $sourceToken);
 
         if (empty($evalRecord)) {
             Log::error("NotifierController: record {$recordId} not found in source.");
@@ -61,7 +64,7 @@ class NotifierController extends Controller
         }
 
         // 2. Fetch all evals for this scholar + semester to recalculate aggregates.
-        $allEvals = $source->getScholarEvals($scholarCode, $semesterCode);
+        $allEvals = $source->getScholarEvals($scholarCode, $semesterCode, $sourceToken);
 
         // 3. Aggregate scores per category and collect comments.
         $aggregates = EvalAggregator::aggregate($allEvals, $semester);
@@ -112,5 +115,34 @@ class NotifierController extends Controller
         }
 
         return response('', 200);
+    }
+
+    private function sourceTokenFor(Request $request): ?string
+    {
+        $projectId = trim((string) $request->input('project_id', ''));
+
+        if ($projectId === '') {
+            return null;
+        }
+
+        $projectMapping = ProjectMapping::query()
+            ->where('redcap_pid', $projectId)
+            ->first();
+
+        if ($projectMapping) {
+            return (string) $projectMapping->redcap_token;
+        }
+
+        $projectToken = config("redcap.project_tokens.{$projectId}");
+
+        if (is_string($projectToken) && $projectToken !== '') {
+            return $projectToken;
+        }
+
+        Log::warning('NotifierController: no source token mapping found for webhook project_id; falling back to REDCAP_SOURCE_TOKEN.', [
+            'project_id' => $projectId,
+        ]);
+
+        return null;
     }
 }
