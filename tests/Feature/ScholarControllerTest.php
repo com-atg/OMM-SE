@@ -53,8 +53,8 @@ it('renders the picker with a sorted roster and no selection', function () {
         ->assertSee('Select a scholar')
         ->assertSee('NYITCOM', false)
         ->assertSee('data-flux-select-native', false)
-        ->assertDontSee('livewire.min.js', false)
-        ->assertDontSee('flux.min.js', false)
+        ->assertDontSee('scriptModule', false)
+        ->assertDontSee('scholar-detail.js', false)
         ->assertDontSee('View', false)
         ->assertDontSee('Clear', false)
         ->assertSee('Ava Adams', false)
@@ -75,7 +75,17 @@ it('bundles the Livewire and Flux runtimes through Vite', function () {
     expect($entrypoint)
         ->toContain('livewire.esm')
         ->toContain('flux-pro/dist/flux.module.js')
+        ->toContain('renderScholarCharts')
         ->toContain('Livewire.start()');
+});
+
+it('uses a path-safe Livewire config for the Vite runtime', function () {
+    $shell = file_get_contents(resource_path('views/components/app-shell.blade.php'));
+
+    expect($shell)
+        ->toContain('window.livewireScriptConfig')
+        ->toContain('parse_url(config(\'app.url\'), PHP_URL_PATH)')
+        ->not->toContain('@livewireScriptConfig');
 });
 
 it('renders per-semester eval counts when a scholar is selected', function () {

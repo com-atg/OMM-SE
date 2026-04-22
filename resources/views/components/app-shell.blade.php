@@ -21,6 +21,19 @@
     };
 
     $hasViteBuild = file_exists(public_path('build/manifest.json')) || file_exists(public_path('hot'));
+    $configuredAppPath = trim((string) parse_url(config('app.url'), PHP_URL_PATH), '/');
+    $requestBasePath = trim(request()->getBaseUrl(), '/');
+    $appPath = $requestBasePath !== '' ? $requestBasePath : $configuredAppPath;
+    $livewireEndpoint = trim(app('livewire')->getUriPrefix(), '/');
+    $livewireBrowserEndpoint = '/'.trim($appPath.'/'.$livewireEndpoint, '/');
+    $livewireProgressBar = config('livewire.navigate.show_progress_bar', true) ? '' : 'data-no-progress-bar';
+    $livewireScriptConfig = [
+        'csrf' => app()->has('session.store') ? csrf_token() : '',
+        'uri' => $livewireBrowserEndpoint.'/update',
+        'moduleUrl' => $livewireBrowserEndpoint,
+        'progressBar' => $livewireProgressBar,
+        'nonce' => \Illuminate\Support\Facades\Vite::cspNonce() ?? '',
+    ];
 @endphp
 
 <!DOCTYPE html>
@@ -34,7 +47,7 @@
     <link href="https://fonts.bunny.net/css?family=inter:400,500,600,700,800&display=swap" rel="stylesheet">
 
     @if ($hasViteBuild)
-        @livewireScriptConfig
+        <script data-navigate-once="true">window.livewireScriptConfig = @js($livewireScriptConfig);</script>
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     @else
         <script src="https://cdn.tailwindcss.com"></script>
