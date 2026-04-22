@@ -52,7 +52,7 @@
                     </span>
                     <span class="min-w-0">
                         <span class="block text-sm font-extrabold tracking-tight">
-                            <span class="text-amber-600">NYIT</span>
+                            <span class="text-amber-600">NYITCOM</span>
                             <span class="text-slate-950">OMM ACE</span>
                         </span>
                         <span class="block truncate text-xs font-medium text-slate-500">Scholar Evaluations</span>
