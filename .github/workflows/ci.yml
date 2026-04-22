@@ -35,14 +35,19 @@ jobs:
       - name: Configure Flux Pro Composer auth
         env:
           FLUX_USERNAME: ${{ secrets.FLUX_USERNAME }}
+          FLUX_USER_NAME: ${{ secrets.FLUX_USER_NAME }}
           FLUX_LICENSE_KEY: ${{ secrets.FLUX_LICENSE_KEY }}
+          FLUX_PASSWORD: ${{ secrets.FLUX_PASSWORD }}
         run: |
-          if [ -z "$FLUX_USERNAME" ] || [ -z "$FLUX_LICENSE_KEY" ]; then
-            echo "::error::Missing FLUX_USERNAME or FLUX_LICENSE_KEY repository secret."
+          FLUX_AUTH_USERNAME="${FLUX_USERNAME:-$FLUX_USER_NAME}"
+          FLUX_AUTH_PASSWORD="${FLUX_LICENSE_KEY:-$FLUX_PASSWORD}"
+
+          if [ -z "$FLUX_AUTH_USERNAME" ] || [ -z "$FLUX_AUTH_PASSWORD" ]; then
+            echo "::error::Missing Flux credentials. Add FLUX_USERNAME plus FLUX_LICENSE_KEY, or FLUX_USER_NAME plus FLUX_PASSWORD, as repository secrets."
             exit 1
           fi
 
-          composer config --global http-basic.composer.fluxui.dev "$FLUX_USERNAME" "$FLUX_LICENSE_KEY"
+          composer config --global http-basic.composer.fluxui.dev "$FLUX_AUTH_USERNAME" "$FLUX_AUTH_PASSWORD"
 
       - name: Install PHP dependencies
         run: composer install --no-interaction --prefer-dist --no-progress
@@ -143,7 +148,9 @@ jobs:
             ${{ secrets.DOCKERHUB_USERNAME }}/omm-se:latest
           build-args: |
             FLUX_USERNAME=${{ secrets.FLUX_USERNAME }}
+            FLUX_USER_NAME=${{ secrets.FLUX_USER_NAME }}
             FLUX_LICENSE_KEY=${{ secrets.FLUX_LICENSE_KEY }}
+            FLUX_PASSWORD=${{ secrets.FLUX_PASSWORD }}
 
       # ── Deploy to production server via SSH ─────────────────────────────────
       - name: Deploy to production

@@ -5,6 +5,7 @@
 # deploy examples.
 ARG COMPOSER_AUTH
 ARG FLUX_USERNAME
+ARG FLUX_USER_NAME
 ARG FLUX_LICENSE_KEY
 ARG FLUX_PASSWORD
 
@@ -13,6 +14,7 @@ FROM composer:2 AS composer-builder
 
 ARG COMPOSER_AUTH
 ARG FLUX_USERNAME
+ARG FLUX_USER_NAME
 ARG FLUX_LICENSE_KEY
 ARG FLUX_PASSWORD
 
@@ -22,10 +24,14 @@ RUN if [ -n "$COMPOSER_AUTH" ]; then \
         export COMPOSER_AUTH="$COMPOSER_AUTH"; \
     elif [ -n "$FLUX_USERNAME" ] && [ -n "$FLUX_LICENSE_KEY" ]; then \
         composer config --global http-basic.composer.fluxui.dev "$FLUX_USERNAME" "$FLUX_LICENSE_KEY"; \
+    elif [ -n "$FLUX_USER_NAME" ] && [ -n "$FLUX_LICENSE_KEY" ]; then \
+        composer config --global http-basic.composer.fluxui.dev "$FLUX_USER_NAME" "$FLUX_LICENSE_KEY"; \
     elif [ -n "$FLUX_USERNAME" ] && [ -n "$FLUX_PASSWORD" ]; then \
         composer config --global http-basic.composer.fluxui.dev "$FLUX_USERNAME" "$FLUX_PASSWORD"; \
+    elif [ -n "$FLUX_USER_NAME" ] && [ -n "$FLUX_PASSWORD" ]; then \
+        composer config --global http-basic.composer.fluxui.dev "$FLUX_USER_NAME" "$FLUX_PASSWORD"; \
     else \
-        echo "Set COMPOSER_AUTH or both FLUX_USERNAME and FLUX_LICENSE_KEY to install Flux Pro."; \
+        echo "Set COMPOSER_AUTH, FLUX_USERNAME plus FLUX_LICENSE_KEY, or FLUX_USER_NAME plus FLUX_PASSWORD to install Flux Pro."; \
         exit 1; \
     fi \
     && composer install \
