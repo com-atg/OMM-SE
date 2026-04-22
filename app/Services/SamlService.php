@@ -29,8 +29,7 @@ class SamlService
             throw new RuntimeException('SAML assertion did not include an email address.');
         }
 
-        $existing = User::withTrashed()->where('email', $email)->first();
-        $role = $existing?->role ?? $this->resolveRole($email);
+        $role = $this->resolveRole($email);
 
         $user = User::updateOrCreate(
             ['email' => $email],

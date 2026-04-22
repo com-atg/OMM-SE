@@ -178,6 +178,19 @@ it('lets service users view user management', function () {
     get('/admin/users')->assertOk()->assertSee('User Management');
 });
 
+it('lets service users create users', function () {
+    asService();
+
+    get('/admin/users/create')->assertOk()->assertSee('Add User');
+});
+
+it('lets service allowlisted users create users even if their stored role is stale', function () {
+    config(['saml.service_users' => ['stale-service@example.com']]);
+    test()->actingAs(User::factory()->student()->create(['email' => 'stale-service@example.com']));
+
+    get('/admin/users/create')->assertOk()->assertSee('Add User');
+});
+
 it('blocks service users from deleting themselves', function () {
     $me = asService();
 
