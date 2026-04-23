@@ -16,6 +16,8 @@ class RedcapDestinationService
 
     private string $url;
 
+    private ?array $finalScoreFormulas = null;
+
     public function __construct()
     {
         $this->token = config('redcap.token');
@@ -134,26 +136,40 @@ class RedcapDestinationService
      *
      * @return array<string,array{field:string,formula:string,components:array<int,array{field:string,label:string,coefficient:float,max_value:float,max_points:float,weight_percent:float}>}>
      */
-    public function finalScoreFormulas(int $cacheMinutes = 60): array
+    public function finalScoreFormulas(int $cacheMinutes = 0): array
     {
-        return Cache::remember('destination:final_score_formulas', now()->addMinutes($cacheMinutes), function () {
-            try {
-                $metadata = Redcap_lib::exportMetadata(
-                    format: 'json',
-                    returnAs: 'array',
-                    url: $this->url,
-                    token: $this->token,
-                );
-            } catch (\Throwable $e) {
-                Log::warning('Unable to fetch destination final score formulas from REDCap metadata.', [
-                    'message' => $e->getMessage(),
-                ]);
+        if ($this->finalScoreFormulas !== null) {
+            return $this->finalScoreFormulas;
+        }
 
-                return [];
-            }
+        $this->finalScoreFormulas = $cacheMinutes > 0
+            ? Cache::remember('destination:final_score_formulas', now()->addMinutes($cacheMinutes), fn (): array => $this->fetchFinalScoreFormulas())
+            : $this->fetchFinalScoreFormulas();
 
-            return is_array($metadata) ? FinalScoreFormulaParser::fromMetadata($metadata) : [];
-        });
+        return $this->finalScoreFormulas;
+    }
+
+    /**
+     * @return array<string,array{field:string,formula:string,components:array<int,array{field:string,label:string,coefficient:float,max_value:float,max_points:float,weight_percent:float}>}>
+     */
+    private function fetchFinalScoreFormulas(): array
+    {
+        try {
+            $metadata = Redcap_lib::exportMetadata(
+                format: 'json',
+                returnAs: 'array',
+                url: $this->url,
+                token: $this->token,
+            );
+        } catch (\Throwable $e) {
+            Log::warning('Unable to fetch destination final score formulas from REDCap metadata.', [
+                'message' => $e->getMessage(),
+            ]);
+
+            return [];
+        }
+
+        return is_array($metadata) ? FinalScoreFormulaParser::fromMetadata($metadata) : [];
     }
 
     /**

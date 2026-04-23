@@ -1,5 +1,6 @@
 <?php
 
+use App\Services\RedcapDestinationService;
 use App\Support\FinalScoreFormulaParser;
 
 it('derives final score weight distribution from REDCap metadata', function () {
@@ -49,4 +50,11 @@ it('derives final score weight distribution from REDCap metadata', function () {
             'max_points' => 10.0,
             'weight_percent' => 10.0,
         ]);
+});
+
+it('refreshes destination score formulas on normal page reloads by default', function () {
+    $parameter = (new ReflectionMethod(RedcapDestinationService::class, 'finalScoreFormulas'))
+        ->getParameters()[0];
+
+    expect($parameter->getDefaultValue())->toBe(0);
 });

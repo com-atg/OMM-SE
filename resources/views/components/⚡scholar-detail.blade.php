@@ -273,8 +273,20 @@ $selectedInitials = collect(explode(' ', $selected['name'] ?? ''))
     ->map(fn (string $part) => mb_substr($part, 0, 1))
     ->take(2)
     ->implode('');
+$chartSemesters = collect($semesters)
+    ->map(function (array $sem): array {
+        if (! empty($sem['score_formula'])) {
+            $sem['score_formula'] = [
+                'field' => $sem['score_formula']['field'] ?? null,
+                'components' => $sem['score_formula']['components'] ?? [],
+            ];
+        }
+
+        return $sem;
+    })
+    ->all();
 $chartPayload = [
-    'semesters' => $semesters,
+    'semesters' => $chartSemesters,
     'categoryLabels' => $categoryLabels,
     'categoryKeys' => $categoryKeys,
     'mergedMonthly' => $mergedMonthly,
@@ -517,26 +529,30 @@ $chartPayload = [
                                 </div>
 
                                 @if (! empty($scoreComponents))
-                                    <div class="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
-                                        @foreach ($scoreComponents as $component)
-                                            <div class="rounded-lg border border-[#e2e8f0] bg-white p-4">
-                                                <div class="flex items-baseline justify-between gap-3">
-                                                    <div class="min-w-0">
-                                                        <div class="truncate text-sm font-semibold text-[#111c2c]">{{ $component['label'] }}</div>
-                                                        <div class="mt-1 text-xs text-[#74777f]">{{ rtrim(rtrim(number_format((float) $component['max_points'], 1), '0'), '.') }} max pts</div>
-                                                    </div>
-                                                    <div class="shrink-0 text-lg font-semibold tabular-nums text-[#006a63]">{{ rtrim(rtrim(number_format((float) $component['weight_percent'], 1), '0'), '.') }}%</div>
-                                                </div>
-                                                <div class="mt-3 h-2 overflow-hidden rounded-full bg-[#e7eeff]">
-                                                    <div class="h-full rounded-full bg-[#006a63]" style="width: {{ min(100, max(0, (float) $component['weight_percent'])) }}%;"></div>
-                                                </div>
+                                    <div class="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[240px_minmax(0,1fr)]">
+                                        <div class="rounded-lg border border-[#e2e8f0] bg-white p-4">
+                                            <div class="mb-3 text-sm font-semibold text-[#111c2c]">Score Weights</div>
+                                            <div class="h-52">
+                                                <canvas data-scholar-chart="weights" data-semester-index="{{ $i }}"></canvas>
                                             </div>
-                                        @endforeach
-                                    </div>
+                                        </div>
 
-                                    <div class="mt-4 rounded-lg bg-white px-3 py-2 text-xs leading-5 text-[#43474e] ring-1 ring-[#e2e8f0]">
-                                        <span class="font-semibold text-[#111c2c]">REDCap formula:</span>
-                                        <code class="break-all">{{ $scoreFormula['formula'] }}</code>
+                                        <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                            @foreach ($scoreComponents as $component)
+                                                <div class="rounded-lg border border-[#e2e8f0] bg-white p-4">
+                                                    <div class="flex items-baseline justify-between gap-3">
+                                                        <div class="min-w-0">
+                                                            <div class="truncate text-sm font-semibold text-[#111c2c]">{{ $component['label'] }}</div>
+                                                            <div class="mt-1 text-xs text-[#74777f]">{{ rtrim(rtrim(number_format((float) $component['max_points'], 1), '0'), '.') }} max pts</div>
+                                                        </div>
+                                                        <div class="shrink-0 text-lg font-semibold tabular-nums text-[#006a63]">{{ rtrim(rtrim(number_format((float) $component['weight_percent'], 1), '0'), '.') }}%</div>
+                                                    </div>
+                                                    <div class="mt-3 h-2 overflow-hidden rounded-full bg-[#e7eeff]">
+                                                        <div class="h-full rounded-full bg-[#006a63]" style="width: {{ min(100, max(0, (float) $component['weight_percent'])) }}%;"></div>
+                                                    </div>
+                                                </div>
+                                            @endforeach
+                                        </div>
                                     </div>
                                 @else
                                     <div class="mt-5 rounded-lg border border-dashed border-[#c4c6cf] bg-white p-5 text-sm leading-6 text-[#74777f]">

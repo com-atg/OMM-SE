@@ -112,7 +112,9 @@ it('bundles the Livewire and Flux runtimes through Vite', function () {
 
     expect(file_get_contents(resource_path('js/scholar-detail-charts.js')))
         ->toContain('renderScholarCharts')
-        ->toContain('bootScholarDetailCharts');
+        ->toContain('bootScholarDetailCharts')
+        ->toContain('data-scholar-chart="weights"')
+        ->toContain("type: 'doughnut'");
 });
 
 it('uses a path-safe Livewire config for the Vite runtime', function () {
@@ -160,9 +162,11 @@ it('renders per-semester eval counts when a scholar is selected', function () {
         ->assertSee('Leadership', false)
         ->assertSee('17/20', false)
         ->assertSee('Weight Distribution', false)
+        ->assertSee('data-scholar-chart="weights"', false)
         ->assertSee('spring_final_score', false)
         ->assertSee('25%', false)
-        ->assertSee('REDCap formula', false)
+        ->assertDontSee('REDCap formula', false)
+        ->assertDontSee('round(([spring_avg_teaching]*0.25)', false)
         ->assertSee('https://guru.nyit.edu/GuruAdmin/StudentOverview/StudentPhotoImageHandler.ashx?id=1234567', false);
 
     $semesters = $response->viewData('semesters');

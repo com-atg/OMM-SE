@@ -18,7 +18,7 @@ function renderScholarCharts(root = document) {
     }
 
     const payload = JSON.parse(payloadNode.textContent || '{}');
-    const palette = ['#2563eb', '#059669', '#d97706', '#7c3aed'];
+    const palette = ['#2563eb', '#059669', '#d97706', '#7c3aed', '#e11d48'];
     const gridColor = 'rgba(100, 116, 139, 0.16)';
     const tickColor = '#64748b';
 
@@ -88,6 +88,48 @@ function renderScholarCharts(root = document) {
                 scales: {
                     x: { grid: { color: gridColor }, ticks: { color: tickColor } },
                     y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: tickColor, precision: 0, stepSize: 1 } },
+                },
+            },
+        }));
+    });
+
+    root.querySelectorAll('[data-scholar-chart="weights"]').forEach((canvas) => {
+        const sem = payload.semesters[Number(canvas.dataset.semesterIndex)];
+        const components = sem?.score_formula?.components || [];
+
+        if (components.length === 0) {
+            return;
+        }
+
+        window.scholarDetailCharts.push(new Chart(canvas, {
+            type: 'doughnut',
+            data: {
+                labels: components.map((component) => component.label),
+                datasets: [{
+                    data: components.map((component) => component.max_points),
+                    backgroundColor: components.map((component, index) => palette[index % palette.length]),
+                    borderColor: '#ffffff',
+                    borderWidth: 3,
+                    hoverOffset: 6,
+                }],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '58%',
+                plugins: {
+                    legend: { position: 'bottom', labels: { color: tickColor, boxWidth: 10, font: { size: 11 } } },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => {
+                                const component = components[ctx.dataIndex];
+                                const percent = Number(component.weight_percent).toFixed(1).replace(/\.0$/, '');
+                                const points = Number(component.max_points).toFixed(1).replace(/\.0$/, '');
+
+                                return `${component.label}: ${percent}% (${points} pts)`;
+                            },
+                        },
+                    },
                 },
             },
         }));
