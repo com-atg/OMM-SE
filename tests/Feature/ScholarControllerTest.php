@@ -97,6 +97,17 @@ it('uses a path-safe Livewire config for the Vite runtime', function () {
         ->not->toContain('@fluxScripts');
 });
 
+it('centers evaluation summary table columns', function () {
+    $component = file_get_contents(resource_path('views/components/⚡scholar-detail.blade.php'));
+
+    expect($component)
+        ->toContain('align="center">Category')
+        ->toContain('align="center">Evals')
+        ->toContain('align="center">Avg')
+        ->toContain('align="center">{{ $sem[\'category_labels\'][$j] }}')
+        ->toContain('align="center">{{ $sem[\'counts\'][$j] }}');
+});
+
 it('serves runtime fallback assets without js or css route extensions', function () {
     get(route('runtime.livewire', absolute: false))->assertOk();
     get(route('runtime.flux', absolute: false))->assertOk();
