@@ -79,7 +79,25 @@ it('uses a categorical y axis for the coverage chart', function () {
     expect($dashboard)
         ->toContain("indexAxis: 'y'")
         ->toContain("label: '% of Scholars'")
-        ->toContain("type: 'category'");
+        ->toContain("type: 'category'")
+        ->toContain("type: 'linear'")
+        ->toContain('min: 0')
+        ->toContain('offset: false')
+        ->toContain('grid: { ...baseOptions.scales.x.grid, offset: false }')
+        ->toContain("text: '% of roster'");
+});
+
+it('labels dashboard charts with concise metric definitions', function () {
+    $dashboard = file_get_contents(resource_path('views/dashboard.blade.php'));
+
+    expect($dashboard)
+        ->toContain('Evaluation-weighted average score on a 0-100 scale.')
+        ->toContain('Completed evaluation count by category and semester.')
+        ->toContain('Scholar category averages grouped into score bands.')
+        ->toContain('Scholars with 1+ eval in that category divided by total roster.')
+        ->toContain("text: 'Avg score (0-100)'")
+        ->toContain("text: '# evaluations'")
+        ->toContain("text: '# scholar-category averages'");
 });
 
 it('renders gracefully when the destination service throws', function () {

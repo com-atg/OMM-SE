@@ -133,6 +133,7 @@
                     <div>
                         <div class="text-[0.72rem] font-bold uppercase tracking-[0.3em] text-sky-700">Submissions</div>
                         <h2 class="mt-2 text-lg font-bold text-slate-950">Average Score by Category</h2>
+                        <p class="mt-1 text-sm leading-5 text-slate-500">Evaluation-weighted average score on a 0-100 scale.</p>
                     </div>
                     <flux:badge color="blue">Score</flux:badge>
                 </div>
@@ -144,6 +145,7 @@
                     <div>
                         <div class="text-[0.72rem] font-bold uppercase tracking-[0.3em] text-sky-700">Activity</div>
                         <h2 class="mt-2 text-lg font-bold text-slate-950">Evaluation Volume</h2>
+                        <p class="mt-1 text-sm leading-5 text-slate-500">Completed evaluation count by category and semester.</p>
                     </div>
                     <flux:badge color="amber">Spring/Fall</flux:badge>
                 </div>
@@ -155,6 +157,7 @@
                     <div>
                         <div class="text-[0.72rem] font-bold uppercase tracking-[0.3em] text-sky-700">Scores</div>
                         <h2 class="mt-2 text-lg font-bold text-slate-950">Score Distribution</h2>
+                        <p class="mt-1 text-sm leading-5 text-slate-500">Scholar category averages grouped into score bands.</p>
                     </div>
                     <flux:badge color="violet">Bands</flux:badge>
                 </div>
@@ -166,6 +169,7 @@
                     <div>
                         <div class="text-[0.72rem] font-bold uppercase tracking-[0.3em] text-sky-700">Coverage</div>
                         <h2 class="mt-2 text-lg font-bold text-slate-950">Category Coverage</h2>
+                        <p class="mt-1 text-sm leading-5 text-slate-500">Scholars with 1+ eval in that category divided by total roster.</p>
                     </div>
                     <flux:badge color="emerald">Coverage</flux:badge>
                 </div>
@@ -295,7 +299,11 @@
                         plugins: { ...baseOptions.plugins, legend: { display: false } },
                         scales: {
                             ...baseOptions.scales,
-                            y: { ...baseOptions.scales.y, suggestedMax: 100 },
+                            y: {
+                                ...baseOptions.scales.y,
+                                suggestedMax: 100,
+                                title: { display: true, text: 'Avg score (0-100)', color: '#94a3b8', font: { size: 11, family: 'Inter, system-ui, sans-serif' } },
+                            },
                         },
                     },
                 });
@@ -309,7 +317,16 @@
                             { label: 'Fall', data: stats.volume_by_semester.fall, backgroundColor: '#f59e0b', borderRadius: 6, borderSkipped: false },
                         ],
                     },
-                    options: baseOptions,
+                    options: {
+                        ...baseOptions,
+                        scales: {
+                            ...baseOptions.scales,
+                            y: {
+                                ...baseOptions.scales.y,
+                                title: { display: true, text: '# evaluations', color: '#94a3b8', font: { size: 11, family: 'Inter, system-ui, sans-serif' } },
+                            },
+                        },
+                    },
                 });
 
                 new Chart(document.getElementById('chartScoreDistribution'), {
@@ -324,7 +341,16 @@
                             borderSkipped: false,
                         })),
                     },
-                    options: baseOptions,
+                    options: {
+                        ...baseOptions,
+                        scales: {
+                            ...baseOptions.scales,
+                            y: {
+                                ...baseOptions.scales.y,
+                                title: { display: true, text: '# scholar-category averages', color: '#94a3b8', font: { size: 11, family: 'Inter, system-ui, sans-serif' } },
+                            },
+                        },
+                    },
                 });
 
                 new Chart(document.getElementById('chartCoverage'), {
@@ -346,8 +372,13 @@
                         scales: {
                             x: {
                                 ...baseOptions.scales.x,
+                                type: 'linear',
                                 beginAtZero: true,
+                                min: 0,
+                                offset: false,
                                 suggestedMax: 100,
+                                grid: { ...baseOptions.scales.x.grid, offset: false },
+                                title: { display: true, text: '% of roster', color: '#94a3b8', font: { size: 11, family: 'Inter, system-ui, sans-serif' } },
                                 ticks: {
                                     ...baseOptions.scales.x.ticks,
                                     callback: (value) => `${value}%`,
