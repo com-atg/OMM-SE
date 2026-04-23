@@ -210,6 +210,18 @@ test('faculty feedback panel is absent when comments are empty', function () {
     expect($rendered)->not->toContain('Faculty Feedback');
 });
 
+test('renders evaluation date when redcap sends iso date format', function () {
+    $mailable = new EvaluationNotification(
+        evalRecord: makeEvalRecord('A', ['date_lab' => '2026-04-22']),
+        scholarRecord: makeScholarRecord(),
+        semester: 'spring',
+        aggregates: makeAggregates(),
+        evalCategory: 'A',
+    );
+
+    expect($mailable->render())->toContain('Apr 22, 2026');
+});
+
 test('semester summary table shows correct category averages', function () {
     $aggregates = [
         'semester' => 'spring',

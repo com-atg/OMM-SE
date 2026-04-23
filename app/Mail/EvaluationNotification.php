@@ -8,6 +8,7 @@ use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Carbon;
 
 class EvaluationNotification extends Mailable
 {
@@ -93,6 +94,7 @@ class EvaluationNotification extends Mailable
                 'categoryLabel' => RedcapSourceService::CATEGORY_LABELS[$this->evalCategory] ?? '',
                 'scoreField' => RedcapSourceService::SCORE_FIELDS[$this->evalCategory] ?? '',
                 'currentCategoryKey' => RedcapSourceService::DEST_CATEGORY[$this->evalCategory] ?? null,
+                'evalDate' => $this->formattedEvalDate(),
             ],
         );
     }
@@ -100,5 +102,28 @@ class EvaluationNotification extends Mailable
     public function attachments(): array
     {
         return [];
+    }
+
+    private function formattedEvalDate(): string
+    {
+        $rawDate = trim((string) ($this->evalRecord['date_lab'] ?? ''));
+
+        if ($rawDate === '') {
+            return 'Unknown date';
+        }
+
+        foreach (['m-d-Y', 'Y-m-d', 'm/d/Y', 'Y/m/d'] as $format) {
+            try {
+                return Carbon::createFromFormat('!'.$format, $rawDate)->toFormattedDateString();
+            } catch (\Throwable) {
+                continue;
+            }
+        }
+
+        try {
+            return Carbon::parse($rawDate)->toFormattedDateString();
+        } catch (\Throwable) {
+            return $rawDate;
+        }
     }
 }

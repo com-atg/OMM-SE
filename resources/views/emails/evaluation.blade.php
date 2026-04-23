@@ -1,9 +1,6 @@
 @php
-    use Carbon\Carbon;
-
     $firstName = $scholarRecord['goes_by'] !== '' ? $scholarRecord['goes_by'] : $scholarRecord['first_name'];
     $facultyName = trim((string) ($evalRecord['faculty'] ?? '')) !== '' ? $evalRecord['faculty'] : 'Faculty';
-    $evalDate = Carbon::createFromFormat('m-d-Y', $evalRecord['date_lab'])->toFormattedDateString();
     $overallScore = $evalRecord[$scoreField] ?? null;
 
     $categoryRows = [
@@ -53,7 +50,7 @@ A new **{{ $categoryLabel }}** evaluation has just been added to your record. He
 
 ## {{ ucfirst($semester) }} Semester Progress
 
-<p style="color:#71717a;font-size:13px;margin-top:-12px;">As of {{ Carbon::now()->toFormattedDateString() }} &nbsp;&middot;&nbsp; Each category contributes 25% to your semester score.</p>
+<p style="color:#71717a;font-size:13px;margin-top:-12px;">As of {{ now()->toFormattedDateString() }} &nbsp;&middot;&nbsp; Each category contributes 25% to your semester score.</p>
 
 <x-mail::table>
 | Category | Evaluations | Average |
