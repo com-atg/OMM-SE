@@ -3,7 +3,9 @@
 namespace App\Services;
 
 use App\Models\Redcap_lib;
+use App\Support\FinalScoreFormulaParser;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Wraps Redcap_lib for the destination scholar list project (REDCAP_TOKEN).
@@ -124,6 +126,33 @@ class RedcapDestinationService
             );
 
             return is_array($records) ? $records : [];
+        });
+    }
+
+    /**
+     * Fetch and parse destination REDCap calculated-field formulas for final scores.
+     *
+     * @return array<string,array{field:string,formula:string,components:array<int,array{field:string,label:string,coefficient:float,max_value:float,max_points:float,weight_percent:float}>}>
+     */
+    public function finalScoreFormulas(int $cacheMinutes = 60): array
+    {
+        return Cache::remember('destination:final_score_formulas', now()->addMinutes($cacheMinutes), function () {
+            try {
+                $metadata = Redcap_lib::exportMetadata(
+                    format: 'json',
+                    returnAs: 'array',
+                    url: $this->url,
+                    token: $this->token,
+                );
+            } catch (\Throwable $e) {
+                Log::warning('Unable to fetch destination final score formulas from REDCap metadata.', [
+                    'message' => $e->getMessage(),
+                ]);
+
+                return [];
+            }
+
+            return is_array($metadata) ? FinalScoreFormulaParser::fromMetadata($metadata) : [];
         });
     }
 

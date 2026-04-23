@@ -68,8 +68,18 @@ it('centers dashboard category detail table columns', function () {
         ->toContain('align="center">Spring')
         ->toContain('align="center">Fall')
         ->toContain('align="center">Coverage')
+        ->toContain('container:class="w-full" class="w-full min-w-[760px]')
         ->toContain('align="center">{{ number_format($row[\'spring\']) }}')
         ->toContain('align="center">{{ number_format($row[\'fall\']) }}');
+});
+
+it('uses a categorical y axis for the coverage chart', function () {
+    $dashboard = file_get_contents(resource_path('views/dashboard.blade.php'));
+
+    expect($dashboard)
+        ->toContain("indexAxis: 'y'")
+        ->toContain("label: '% of Scholars'")
+        ->toContain("type: 'category'");
 });
 
 it('renders gracefully when the destination service throws', function () {

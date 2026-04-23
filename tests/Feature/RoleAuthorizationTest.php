@@ -58,6 +58,7 @@ it('shows a student only their own record and locks the picker', function () {
         ['record_id' => '10', 'first_name' => 'Cat', 'last_name' => 'Chin'],
         ['record_id' => '11', 'first_name' => 'Ava', 'last_name' => 'Adams'],
     ]);
+    $destination->shouldReceive('finalScoreFormulas')->andReturn([]);
 
     $response = get('/scholar');
 
@@ -86,6 +87,7 @@ it('ignores ?id query string for students and forces their own record', function
         ['record_id' => '10', 'first_name' => 'Cat', 'last_name' => 'Chin'],
         ['record_id' => '11', 'first_name' => 'Ava', 'last_name' => 'Adams'],
     ]);
+    $destination->shouldReceive('finalScoreFormulas')->andReturn([]);
 
     $response = get('/scholar?id=11');
 
@@ -103,6 +105,7 @@ it('service user can access any scholar via token URL', function () {
     $destination->shouldReceive('getAllScholarRecords')->andReturn([
         ['record_id' => '10', 'first_name' => 'Cat', 'last_name' => 'Chin'],
     ]);
+    $destination->shouldReceive('finalScoreFormulas')->andReturn([]);
 
     get(route('scholar.token', $target->public_token))->assertOk();
 });
@@ -116,6 +119,7 @@ it('admin user can access any scholar via token URL', function () {
     $destination->shouldReceive('getAllScholarRecords')->andReturn([
         ['record_id' => '10', 'first_name' => 'Cat', 'last_name' => 'Chin'],
     ]);
+    $destination->shouldReceive('finalScoreFormulas')->andReturn([]);
 
     get(route('scholar.token', $target->public_token))->assertOk();
 });
@@ -127,6 +131,7 @@ it('student can access their own token URL', function () {
     $destination->shouldReceive('getAllScholarRecords')->andReturn([
         ['record_id' => '10', 'first_name' => 'Cat', 'last_name' => 'Chin'],
     ]);
+    $destination->shouldReceive('finalScoreFormulas')->andReturn([]);
 
     get(route('scholar.token', $student->public_token))->assertOk();
 });
@@ -152,6 +157,7 @@ it('scholar page hides the shareable URL for students', function () {
     $destination->shouldReceive('getAllScholarRecords')->andReturn([
         ['record_id' => '10', 'first_name' => 'Cat', 'last_name' => 'Chin'],
     ]);
+    $destination->shouldReceive('finalScoreFormulas')->andReturn([]);
 
     get('/scholar')->assertOk()->assertDontSee($student->public_token);
 });

@@ -183,7 +183,7 @@
             </div>
 
             <div class="mt-5 rounded-lg border border-slate-200/80 bg-white/72 p-3 shadow-sm">
-                <flux:table class="min-w-[760px] overflow-hidden rounded-md bg-white/88">
+                <flux:table container:class="w-full" class="w-full min-w-[760px] overflow-hidden rounded-md bg-white/88">
                     <flux:table.columns>
                         <flux:table.column class="w-[42%] bg-slate-50/90 px-5 text-xs font-bold uppercase tracking-[0.18em] text-slate-500" align="center">Category</flux:table.column>
                         <flux:table.column class="w-[14%] bg-slate-50/90 px-5 text-xs font-bold uppercase tracking-[0.18em] text-slate-500" align="center">Avg score</flux:table.column>
@@ -353,7 +353,12 @@
                                     callback: (value) => `${value}%`,
                                 },
                             },
-                            y: baseOptions.scales.y,
+                            y: {
+                                type: 'category',
+                                grid: { color: gridColor, drawTicks: false },
+                                border: { display: false },
+                                ticks: { color: tickColor, font: { size: 11, family: 'Inter, system-ui, sans-serif' } },
+                            },
                         },
                     },
                 });
