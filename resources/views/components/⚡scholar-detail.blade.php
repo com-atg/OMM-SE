@@ -531,7 +531,7 @@ $chartPayload = [
                                 @if (! empty($scoreComponents))
                                     <div class="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[240px_minmax(0,1fr)]">
                                         <div class="rounded-lg border border-[#e2e8f0] bg-white p-4">
-                                            <div class="mb-3 text-sm font-semibold text-[#111c2c]">Score Weights</div>
+                                            <div class="mb-3 text-sm font-semibold text-[#111c2c]">Formula Weights</div>
                                             <div class="h-52">
                                                 <canvas data-scholar-chart="weights" data-semester-index="{{ $i }}"></canvas>
                                             </div>
@@ -543,7 +543,7 @@ $chartPayload = [
                                                     <div class="flex items-baseline justify-between gap-3">
                                                         <div class="min-w-0">
                                                             <div class="truncate text-sm font-semibold text-[#111c2c]">{{ $component['label'] }}</div>
-                                                            <div class="mt-1 text-xs text-[#74777f]">{{ rtrim(rtrim(number_format((float) $component['max_points'], 1), '0'), '.') }} max pts</div>
+                                                            <div class="mt-1 text-xs text-[#74777f]">{{ rtrim(rtrim(number_format((float) $component['max_points'], 1), '0'), '.') }} max contribution</div>
                                                         </div>
                                                         <div class="shrink-0 text-lg font-semibold tabular-nums text-[#006a63]">{{ rtrim(rtrim(number_format((float) $component['weight_percent'], 1), '0'), '.') }}%</div>
                                                     </div>

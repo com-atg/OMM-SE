@@ -101,13 +101,14 @@ class FinalScoreFormulaParser
             '/(?P<before>(?:[-+]?\s*(?:\d*\.?\d+)\s*[*\/]\s*)*)'.$fieldToken.'(?P<after>(?:\s*[*\/]\s*(?:\d*\.?\d+))*)/i',
             $formula,
             $matches,
-            PREG_SET_ORDER,
+            PREG_SET_ORDER | PREG_OFFSET_CAPTURE,
         );
 
         return collect($matches)
             ->map(fn (array $match): float => abs(
-                self::beforeCoefficient((string) ($match['before'] ?? ''))
-                * self::afterCoefficient((string) ($match['after'] ?? ''))
+                self::beforeCoefficient((string) ($match['before'][0] ?? ''))
+                * self::afterCoefficient((string) ($match['after'][0] ?? ''))
+                * self::wrappingCoefficient($formula, (int) ($match[0][1] ?? 0), mb_strlen($match[0][0] ?? ''))
             ))
             ->sum();
     }
@@ -136,6 +137,76 @@ class FinalScoreFormulaParser
                 ? $coefficient * $number
                 : ($number !== 0.0 ? $coefficient / $number : $coefficient);
         }, 1.0);
+    }
+
+    private static function wrappingCoefficient(string $formula, int $tokenOffset, int $tokenLength): float
+    {
+        $tokenEnd = $tokenOffset + max(0, $tokenLength - 1);
+
+        return collect(self::parenthesesRanges($formula))
+            ->filter(fn (array $range): bool => $range['start'] < $tokenOffset && $range['end'] > $tokenEnd)
+            ->reduce(function (float $coefficient, array $range) use ($formula): float {
+                return $coefficient
+                    * self::trailingWrapperCoefficient($formula, $range['end'])
+                    * self::leadingWrapperCoefficient($formula, $range['start']);
+            }, 1.0);
+    }
+
+    /**
+     * @return array<int,array{start:int,end:int}>
+     */
+    private static function parenthesesRanges(string $formula): array
+    {
+        $stack = [];
+        $ranges = [];
+        $length = mb_strlen($formula);
+
+        for ($i = 0; $i < $length; $i++) {
+            $char = $formula[$i];
+
+            if ($char === '(') {
+                $stack[] = $i;
+            }
+
+            if ($char === ')' && $stack !== []) {
+                $ranges[] = [
+                    'start' => array_pop($stack),
+                    'end' => $i,
+                ];
+            }
+        }
+
+        return $ranges;
+    }
+
+    private static function trailingWrapperCoefficient(string $formula, int $end): float
+    {
+        $after = mb_substr($formula, $end + 1);
+
+        if (! preg_match('/^\s*([*\/])\s*([-+]?\d*\.?\d+)/', $after, $match)) {
+            return 1.0;
+        }
+
+        $number = (float) $match[2];
+
+        return $match[1] === '*'
+            ? $number
+            : ($number !== 0.0 ? 1.0 / $number : 1.0);
+    }
+
+    private static function leadingWrapperCoefficient(string $formula, int $start): float
+    {
+        $before = mb_substr($formula, 0, $start);
+
+        if (! preg_match('/([-+]?\d*\.?\d+)\s*([*\/])\s*$/', $before, $match)) {
+            return 1.0;
+        }
+
+        $number = (float) $match[1];
+
+        return $match[2] === '*'
+            ? $number
+            : ($number !== 0.0 ? 1.0 / $number : 1.0);
     }
 
     /**

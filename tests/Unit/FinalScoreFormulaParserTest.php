@@ -58,3 +58,28 @@ it('refreshes destination score formulas on normal page reloads by default', fun
 
     expect($parameter->getDefaultValue())->toBe(0);
 });
+
+it('applies global formula divisors around grouped REDCap calculations', function () {
+    $formulas = FinalScoreFormulaParser::fromMetadata([
+        ['field_name' => 'spring_avg_teaching', 'text_validation_max' => '100'],
+        ['field_name' => 'spring_avg_clinic', 'text_validation_max' => '100'],
+        ['field_name' => 'spring_avg_research', 'text_validation_max' => '100'],
+        ['field_name' => 'spring_avg_didactics', 'text_validation_max' => '100'],
+        ['field_name' => 'spring_leadership', 'text_validation_max' => '10'],
+        [
+            'field_name' => 'spring_final_score',
+            'select_choices_or_calculations' => 'round((([spring_avg_teaching]*23.5)+([spring_avg_clinic]*23.5)+([spring_avg_research]*23.5)+([spring_avg_didactics]*23.5)+([spring_leadership]*11))/100, 1)',
+        ],
+    ]);
+
+    expect($formulas['spring']['components'][0])->toMatchArray([
+        'field' => 'spring_avg_teaching',
+        'max_points' => 23.5,
+        'weight_percent' => 24.7,
+    ])
+        ->and($formulas['spring']['components'][4])->toMatchArray([
+            'field' => 'spring_leadership',
+            'max_points' => 1.1,
+            'weight_percent' => 1.2,
+        ]);
+});
