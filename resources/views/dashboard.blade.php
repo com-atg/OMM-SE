@@ -185,18 +185,18 @@
             <div class="mt-5 rounded-lg border border-slate-200/80 bg-white/72 p-3 shadow-sm">
                 <flux:table class="min-w-[760px] overflow-hidden rounded-md bg-white/88">
                     <flux:table.columns>
-                        <flux:table.column class="w-[42%] bg-slate-50/90 ps-5 text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Category</flux:table.column>
-                        <flux:table.column class="w-[14%] bg-slate-50/90 text-xs font-bold uppercase tracking-[0.18em] text-slate-500" align="end">Avg score</flux:table.column>
-                        <flux:table.column class="w-[12%] bg-slate-50/90 text-xs font-bold uppercase tracking-[0.18em] text-slate-500" align="end">Spring</flux:table.column>
-                        <flux:table.column class="w-[12%] bg-slate-50/90 text-xs font-bold uppercase tracking-[0.18em] text-slate-500" align="end">Fall</flux:table.column>
-                        <flux:table.column class="w-[20%] bg-slate-50/90 pe-5 text-xs font-bold uppercase tracking-[0.18em] text-slate-500" align="end">Coverage</flux:table.column>
+                        <flux:table.column class="w-[42%] bg-slate-50/90 px-5 text-xs font-bold uppercase tracking-[0.18em] text-slate-500" align="center">Category</flux:table.column>
+                        <flux:table.column class="w-[14%] bg-slate-50/90 px-5 text-xs font-bold uppercase tracking-[0.18em] text-slate-500" align="center">Avg score</flux:table.column>
+                        <flux:table.column class="w-[12%] bg-slate-50/90 px-5 text-xs font-bold uppercase tracking-[0.18em] text-slate-500" align="center">Spring</flux:table.column>
+                        <flux:table.column class="w-[12%] bg-slate-50/90 px-5 text-xs font-bold uppercase tracking-[0.18em] text-slate-500" align="center">Fall</flux:table.column>
+                        <flux:table.column class="w-[20%] bg-slate-50/90 px-5 text-xs font-bold uppercase tracking-[0.18em] text-slate-500" align="center">Coverage</flux:table.column>
                     </flux:table.columns>
 
                     <flux:table.rows>
                         @foreach ($categoryRows as $row)
                             <flux:table.row class="transition hover:bg-slate-50/80">
-                                <flux:table.cell class="ps-5">
-                                    <div class="flex items-center gap-3">
+                                <flux:table.cell class="px-5" align="center">
+                                    <div class="inline-flex items-center justify-center gap-3 text-left">
                                         <span
                                             class="size-2.5 rounded-full"
                                             style="background-color: {{ $row['marker_color'] }}; box-shadow: 0 0 0 5px {{ $row['marker_ring'] }}"
@@ -207,15 +207,15 @@
                                         </div>
                                     </div>
                                 </flux:table.cell>
-                                <flux:table.cell class="text-slate-700" align="end">
-                                    <span class="inline-flex min-w-16 justify-end rounded-md bg-slate-100 px-2.5 py-1 font-semibold tabular-nums text-slate-800">
+                                <flux:table.cell class="px-5 text-slate-700" align="center">
+                                    <span class="inline-flex min-w-16 justify-center rounded-md bg-slate-100 px-2.5 py-1 font-semibold tabular-nums text-slate-800">
                                         {{ $row['average'] > 0 ? number_format($row['average'], 1) : '-' }}
                                     </span>
                                 </flux:table.cell>
-                                <flux:table.cell class="font-medium tabular-nums text-slate-600" align="end">{{ number_format($row['spring']) }}</flux:table.cell>
-                                <flux:table.cell class="font-medium tabular-nums text-slate-600" align="end">{{ number_format($row['fall']) }}</flux:table.cell>
-                                <flux:table.cell class="pe-5" align="end">
-                                    <div class="ml-auto flex w-40 flex-col gap-1.5">
+                                <flux:table.cell class="px-5 font-medium tabular-nums text-slate-600" align="center">{{ number_format($row['spring']) }}</flux:table.cell>
+                                <flux:table.cell class="px-5 font-medium tabular-nums text-slate-600" align="center">{{ number_format($row['fall']) }}</flux:table.cell>
+                                <flux:table.cell class="px-5" align="center">
+                                    <div class="mx-auto flex w-40 flex-col gap-1.5">
                                         <div class="text-sm font-semibold tabular-nums text-slate-700">{{ number_format($row['coverage'], 1) }}%</div>
                                         <div class="h-1.5 overflow-hidden rounded-full bg-slate-100">
                                             <div class="h-full rounded-full bg-emerald-500" style="width: {{ min(100, max(0, $row['coverage'])) }}%"></div>

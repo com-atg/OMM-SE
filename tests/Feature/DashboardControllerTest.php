@@ -59,6 +59,19 @@ it('renders the dashboard with aggregated stats', function () {
         ->and($stats['histogram']['labels'])->toHaveCount(5);
 });
 
+it('centers dashboard category detail table columns', function () {
+    $dashboard = file_get_contents(resource_path('views/dashboard.blade.php'));
+
+    expect($dashboard)
+        ->toContain('align="center">Category')
+        ->toContain('align="center">Avg score')
+        ->toContain('align="center">Spring')
+        ->toContain('align="center">Fall')
+        ->toContain('align="center">Coverage')
+        ->toContain('align="center">{{ number_format($row[\'spring\']) }}')
+        ->toContain('align="center">{{ number_format($row[\'fall\']) }}');
+});
+
 it('renders gracefully when the destination service throws', function () {
     $destination = mock(RedcapDestinationService::class);
     $destination->shouldReceive('getAllScholarRecords')->once()->andThrow(new RuntimeException('REDCap down'));
