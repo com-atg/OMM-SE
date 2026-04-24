@@ -1,9 +1,12 @@
 <?php
 
+use App\Enums\WeightCategory;
+use App\Models\ProjectMapping;
 use App\Services\RedcapDestinationService;
 use App\Services\RedcapSourceService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Livewire\Attributes\Url;
 use Livewire\Component;
 
@@ -31,7 +34,7 @@ new class extends Component
         $records = $destination->getAllScholarRecords();
         $selectedRecord = $this->resolveRecord($records, $this->selectedId);
         $selected = $selectedRecord ? $this->selectedScholar($selectedRecord) : null;
-        $scoreFormulas = $selectedRecord ? $destination->finalScoreFormulas() : [];
+        $scoreFormulas = $selectedRecord ? $this->scoreFormulasFromDb() : [];
         $semesters = $selectedRecord ? $this->buildSemesters($selectedRecord, $scoreFormulas) : [];
 
         return view('components.⚡scholar-detail', [
@@ -39,7 +42,50 @@ new class extends Component
             'selected' => $selected,
             'semesters' => $semesters,
             'finalGrade' => $this->finalGrade($semesters),
+            'academicYear' => ProjectMapping::current()?->academic_year,
         ]);
+    }
+
+    /**
+     * @return array<string,array{field:string,components:array<int,array{field:string,label:string,coefficient:float,max_value:float,max_points:float,weight_percent:float}>}>
+     */
+    private function scoreFormulasFromDb(): array
+    {
+        $mapping = ProjectMapping::current();
+
+        if (! $mapping) {
+            return [];
+        }
+
+        /** @var Collection<string,\App\Models\CategoryWeight> $weights */
+        $weights = $mapping->categoryWeights()->get()->keyBy(fn ($w) => $w->category->value);
+
+        if ($weights->isEmpty()) {
+            return [];
+        }
+
+        $components = collect(WeightCategory::cases())
+            ->filter(fn (WeightCategory $cat): bool => $weights->has($cat->value))
+            ->map(function (WeightCategory $cat) use ($weights): array {
+                $weight = (float) $weights->get($cat->value)->weight;
+                $maxValue = $cat === WeightCategory::Leadership ? 10.0 : 100.0;
+
+                return [
+                    'field' => $cat->value,
+                    'label' => $cat->label(),
+                    'coefficient' => round($weight / 100, 4),
+                    'max_value' => $maxValue,
+                    'max_points' => $weight,
+                    'weight_percent' => $weight,
+                ];
+            })
+            ->values()
+            ->all();
+
+        return [
+            'spring' => ['field' => 'spring_final_score', 'components' => $components],
+            'fall' => ['field' => 'fall_final_score', 'components' => $components],
+        ];
     }
 
     /**
@@ -426,6 +472,31 @@ $chartPayload = [
                         </section>
                     @endif
 
+                    @php $weightComponents = $semesters[0]['score_formula']['components'] ?? []; @endphp
+                    <section class="rounded-lg border border-[#d8e3fa] bg-white/92 p-6 shadow-[0_16px_42px_rgba(26,54,93,0.06)] backdrop-blur">
+                        <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                                <div class="text-[0.72rem] font-bold uppercase tracking-[0.24em] text-[#455f88]">Score Weights</div>
+                                <h2 class="mt-2 text-lg font-semibold text-[#111c2c]">Weight Distribution</h2>
+                            </div>
+                            @if ($academicYear)
+                                <span class="rounded-full bg-[#d6e3ff] px-3 py-1 text-xs font-bold uppercase tracking-[0.12em] text-[#001b3c]">{{ $academicYear }}</span>
+                            @endif
+                        </div>
+
+                        @if (! empty($weightComponents))
+                            <div class="mt-5 mx-auto max-w-xs">
+                                <div class="h-64">
+                                    <canvas data-scholar-chart="weights" data-semester-index="0"></canvas>
+                                </div>
+                            </div>
+                        @else
+                            <div class="mt-5 rounded-lg border border-dashed border-[#c4c6cf] bg-white p-5 text-sm leading-6 text-[#74777f]">
+                                No category weights configured for this academic year. Add them in Settings → Project Mapping → Weights.
+                            </div>
+                        @endif
+                    </section>
+
                     @foreach ($semesters as $i => $sem)
                         <section class="rounded-lg border border-[#d8e3fa] bg-white/92 p-6 shadow-[0_16px_42px_rgba(26,54,93,0.06)] backdrop-blur" wire:key="semester-{{ $selected['record_id'] }}-{{ $sem['slug'] }}">
                             <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -513,53 +584,6 @@ $chartPayload = [
                                 @endif
                             @endif
 
-                            @php
-                                $scoreFormula = $sem['score_formula'] ?? null;
-                                $scoreComponents = $scoreFormula['components'] ?? [];
-                            @endphp
-                            <div class="mt-5 rounded-lg border border-[#e2e8f0] bg-[#f9f9ff] p-5">
-                                <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                    <div>
-                                        <div class="text-[0.72rem] font-bold uppercase tracking-[0.22em] text-[#455f88]">Final Score</div>
-                                        <h3 class="mt-1 text-base font-semibold text-[#111c2c]">Weight Distribution</h3>
-                                    </div>
-                                    @if (! empty($scoreFormula['field']))
-                                        <span class="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#455f88] ring-1 ring-[#d8e3fa]">{{ $scoreFormula['field'] }}</span>
-                                    @endif
-                                </div>
-
-                                @if (! empty($scoreComponents))
-                                    <div class="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[240px_minmax(0,1fr)]">
-                                        <div class="rounded-lg border border-[#e2e8f0] bg-white p-4">
-                                            <div class="mb-3 text-sm font-semibold text-[#111c2c]">Formula Weights</div>
-                                            <div class="h-52">
-                                                <canvas data-scholar-chart="weights" data-semester-index="{{ $i }}"></canvas>
-                                            </div>
-                                        </div>
-
-                                        <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-                                            @foreach ($scoreComponents as $component)
-                                                <div class="rounded-lg border border-[#e2e8f0] bg-white p-4">
-                                                    <div class="flex items-baseline justify-between gap-3">
-                                                        <div class="min-w-0">
-                                                            <div class="truncate text-sm font-semibold text-[#111c2c]">{{ $component['label'] }}</div>
-                                                            <div class="mt-1 text-xs text-[#74777f]">{{ rtrim(rtrim(number_format((float) $component['max_points'], 1), '0'), '.') }} max contribution</div>
-                                                        </div>
-                                                        <div class="shrink-0 text-lg font-semibold tabular-nums text-[#006a63]">{{ rtrim(rtrim(number_format((float) $component['weight_percent'], 1), '0'), '.') }}%</div>
-                                                    </div>
-                                                    <div class="mt-3 h-2 overflow-hidden rounded-full bg-[#e7eeff]">
-                                                        <div class="h-full rounded-full bg-[#006a63]" style="width: {{ min(100, max(0, (float) $component['weight_percent'])) }}%;"></div>
-                                                    </div>
-                                                </div>
-                                            @endforeach
-                                        </div>
-                                    </div>
-                                @else
-                                    <div class="mt-5 rounded-lg border border-dashed border-[#c4c6cf] bg-white p-5 text-sm leading-6 text-[#74777f]">
-                                        Final score formula was not available in the destination REDCap data dictionary for this semester.
-                                    </div>
-                                @endif
-                            </div>
                         </section>
                     @endforeach
                 </div>

@@ -16,6 +16,7 @@ new class extends Component
     public array $weights = [
         'teaching' => '',
         'clinic' => '',
+        'research' => '',
         'didactics' => '',
         'leadership' => '',
     ];
@@ -44,11 +45,13 @@ new class extends Component
         $validated = $this->validate([
             'weights.teaching' => ['required', 'numeric', 'min:0', 'max:100'],
             'weights.clinic' => ['required', 'numeric', 'min:0', 'max:100'],
+            'weights.research' => ['required', 'numeric', 'min:0', 'max:100'],
             'weights.didactics' => ['required', 'numeric', 'min:0', 'max:100'],
             'weights.leadership' => ['required', 'numeric', 'min:0', 'max:100'],
         ], [
             'weights.teaching.required' => 'Teaching weight is required.',
             'weights.clinic.required' => 'Clinic weight is required.',
+            'weights.research.required' => 'Research weight is required.',
             'weights.didactics.required' => 'Didactics weight is required.',
             'weights.leadership.required' => 'Leadership weight is required.',
         ]);

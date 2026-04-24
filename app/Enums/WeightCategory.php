@@ -6,6 +6,7 @@ enum WeightCategory: string
 {
     case Teaching = 'teaching';
     case Clinic = 'clinic';
+    case Research = 'research';
     case Didactics = 'didactics';
     case Leadership = 'leadership';
 
@@ -14,6 +15,7 @@ enum WeightCategory: string
         return match ($this) {
             self::Teaching => 'Teaching',
             self::Clinic => 'Clinic',
+            self::Research => 'Research',
             self::Didactics => 'Didactics',
             self::Leadership => 'Leadership',
         };
