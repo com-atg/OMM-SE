@@ -189,11 +189,11 @@
             <div class="mt-5 rounded-lg border border-slate-200/80 bg-white/72 p-3 shadow-sm">
                 <flux:table container:class="w-full" class="w-full min-w-[760px] overflow-hidden rounded-md bg-white/88">
                     <flux:table.columns>
-                        <flux:table.column class="w-[42%] bg-slate-50/90 px-5 text-xs font-bold uppercase tracking-[0.18em] text-slate-500" align="center">Category</flux:table.column>
-                        <flux:table.column class="w-[14%] bg-slate-50/90 px-5 text-xs font-bold uppercase tracking-[0.18em] text-slate-500" align="center">Avg score</flux:table.column>
-                        <flux:table.column class="w-[12%] bg-slate-50/90 px-5 text-xs font-bold uppercase tracking-[0.18em] text-slate-500" align="center">Spring</flux:table.column>
-                        <flux:table.column class="w-[12%] bg-slate-50/90 px-5 text-xs font-bold uppercase tracking-[0.18em] text-slate-500" align="center">Fall</flux:table.column>
-                        <flux:table.column class="w-[20%] bg-slate-50/90 px-5 text-xs font-bold uppercase tracking-[0.18em] text-slate-500" align="center">Coverage</flux:table.column>
+                        <flux:table.column class="w-[30%] bg-slate-50/90 px-5 text-xs font-bold uppercase tracking-[0.18em] text-slate-500" align="center">Category</flux:table.column>
+                        <flux:table.column class="w-[18%] bg-slate-50/90 px-5 text-xs font-bold uppercase tracking-[0.18em] text-slate-500" align="center">Avg score</flux:table.column>
+                        <flux:table.column class="w-[13%] bg-slate-50/90 px-5 text-xs font-bold uppercase tracking-[0.18em] text-slate-500" align="center">Spring</flux:table.column>
+                        <flux:table.column class="w-[13%] bg-slate-50/90 px-5 text-xs font-bold uppercase tracking-[0.18em] text-slate-500" align="center">Fall</flux:table.column>
+                        <flux:table.column class="w-[26%] bg-slate-50/90 px-5 text-xs font-bold uppercase tracking-[0.18em] text-slate-500" align="center">Coverage</flux:table.column>
                     </flux:table.columns>
 
                     <flux:table.rows>
