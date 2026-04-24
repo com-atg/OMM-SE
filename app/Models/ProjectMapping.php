@@ -6,6 +6,7 @@ use Database\Factories\ProjectMappingFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 #[Fillable(['academic_year', 'graduation_year', 'redcap_pid', 'redcap_token'])]
@@ -24,6 +25,11 @@ class ProjectMapping extends Model
             'redcap_pid' => 'integer',
             'redcap_token' => 'encrypted',
         ];
+    }
+
+    public function categoryWeights(): HasMany
+    {
+        return $this->hasMany(CategoryWeight::class);
     }
 
     public static function current(): ?self

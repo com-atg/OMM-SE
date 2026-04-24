@@ -156,6 +156,14 @@
                                     </form>
 
                                     @can('manage-settings-records')
+                                        <flux:button
+                                            size="sm"
+                                            variant="ghost"
+                                            icon="scale"
+                                            title="Edit category weights"
+                                            onclick="Livewire.dispatch('open-weights', { id: {{ $projectMapping->id }} })"
+                                        >Weights</flux:button>
+
                                         <flux:button href="{{ route('admin.settings.project-mappings.edit', $projectMapping) }}" size="sm" variant="ghost" icon="pencil-square" aria-label="Edit project mapping" title="Edit project mapping" />
 
                                         <form method="POST" action="{{ route('admin.settings.project-mappings.destroy', $projectMapping) }}" onsubmit="return confirm('Delete this project mapping? This can be restored.')">
@@ -217,4 +225,8 @@
             </div>
         </details>
     @endif
+
+    @can('manage-settings-records')
+        <livewire:edit-weights-modal />
+    @endcan
 </x-app-shell>
