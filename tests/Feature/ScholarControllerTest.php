@@ -1,5 +1,8 @@
 <?php
 
+use App\Enums\WeightCategory;
+use App\Models\CategoryWeight;
+use App\Models\ProjectMapping;
 use App\Services\RedcapDestinationService;
 use Illuminate\Support\Facades\Cache;
 use Livewire\Livewire;
@@ -40,34 +43,6 @@ function scholarRoster(): array
             'first_name' => 'Ava',
             'last_name' => 'Adams',
             'goes_by' => '',
-        ],
-    ];
-}
-
-function scholarFinalScoreFormulas(): array
-{
-    return [
-        'spring' => [
-            'field' => 'spring_final_score',
-            'formula' => 'round(([spring_avg_teaching]*0.25)+([spring_avg_clinic]*0.25)+([spring_avg_research]*0.2)+([spring_avg_didactics]*0.2)+[spring_leadership], 2)',
-            'components' => [
-                ['field' => 'spring_avg_teaching', 'label' => 'Teaching', 'coefficient' => 0.25, 'max_value' => 100.0, 'max_points' => 25.0, 'weight_percent' => 25.0],
-                ['field' => 'spring_avg_clinic', 'label' => 'Clinic', 'coefficient' => 0.25, 'max_value' => 100.0, 'max_points' => 25.0, 'weight_percent' => 25.0],
-                ['field' => 'spring_avg_research', 'label' => 'Research', 'coefficient' => 0.2, 'max_value' => 100.0, 'max_points' => 20.0, 'weight_percent' => 20.0],
-                ['field' => 'spring_avg_didactics', 'label' => 'Didactics', 'coefficient' => 0.2, 'max_value' => 100.0, 'max_points' => 20.0, 'weight_percent' => 20.0],
-                ['field' => 'spring_leadership', 'label' => 'Leadership', 'coefficient' => 1.0, 'max_value' => 10.0, 'max_points' => 10.0, 'weight_percent' => 10.0],
-            ],
-        ],
-        'fall' => [
-            'field' => 'fall_final_score',
-            'formula' => 'round(([fall_avg_teaching]*0.25)+([fall_avg_clinic]*0.25)+([fall_avg_research]*0.2)+([fall_avg_didactics]*0.2)+[fall_leadership], 2)',
-            'components' => [
-                ['field' => 'fall_avg_teaching', 'label' => 'Teaching', 'coefficient' => 0.25, 'max_value' => 100.0, 'max_points' => 25.0, 'weight_percent' => 25.0],
-                ['field' => 'fall_avg_clinic', 'label' => 'Clinic', 'coefficient' => 0.25, 'max_value' => 100.0, 'max_points' => 25.0, 'weight_percent' => 25.0],
-                ['field' => 'fall_avg_research', 'label' => 'Research', 'coefficient' => 0.2, 'max_value' => 100.0, 'max_points' => 20.0, 'weight_percent' => 20.0],
-                ['field' => 'fall_avg_didactics', 'label' => 'Didactics', 'coefficient' => 0.2, 'max_value' => 100.0, 'max_points' => 20.0, 'weight_percent' => 20.0],
-                ['field' => 'fall_leadership', 'label' => 'Leadership', 'coefficient' => 1.0, 'max_value' => 10.0, 'max_points' => 10.0, 'weight_percent' => 10.0],
-            ],
         ],
     ];
 }
@@ -148,9 +123,14 @@ it('serves runtime fallback assets without js or css route extensions', function
 });
 
 it('renders per-semester eval counts when a scholar is selected', function () {
+    $mapping = ProjectMapping::factory()->create();
+    $weights = ['teaching' => 25.0, 'clinic' => 25.0, 'research' => 20.0, 'didactics' => 20.0, 'leadership' => 10.0];
+    foreach (WeightCategory::cases() as $category) {
+        CategoryWeight::create(['project_mapping_id' => $mapping->id, 'category' => $category->value, 'weight' => $weights[$category->value]]);
+    }
+
     $destination = mock(RedcapDestinationService::class);
     $destination->shouldReceive('getAllScholarRecords')->twice()->andReturn(scholarRoster());
-    $destination->shouldReceive('finalScoreFormulas')->once()->andReturn(scholarFinalScoreFormulas());
 
     $response = get('/scholar?id=10');
 
@@ -163,8 +143,6 @@ it('renders per-semester eval counts when a scholar is selected', function () {
         ->assertSee('17/20', false)
         ->assertSee('Weight Distribution', false)
         ->assertSee('data-scholar-chart="weights"', false)
-        ->assertSee('spring_final_score', false)
-        ->assertSee('25%', false)
         ->assertDontSee('REDCap formula', false)
         ->assertDontSee('round(([spring_avg_teaching]*0.25)', false)
         ->assertSee('https://guru.nyit.edu/GuruAdmin/StudentOverview/StudentPhotoImageHandler.ashx?id=1234567', false);
@@ -197,7 +175,6 @@ it('ignores an unknown scholar id', function () {
 it('updates the scholar detail component when the selection changes', function () {
     $destination = mock(RedcapDestinationService::class);
     $destination->shouldReceive('getAllScholarRecords')->twice()->andReturn(scholarRoster());
-    $destination->shouldReceive('finalScoreFormulas')->once()->andReturn(scholarFinalScoreFormulas());
 
     Livewire::test('scholar-detail')
         ->assertSee('Select a scholar')
@@ -212,7 +189,6 @@ it('updates the scholar detail component when the selection changes', function (
 it('shows a pending final grade when no final score exists', function () {
     $destination = mock(RedcapDestinationService::class);
     $destination->shouldReceive('getAllScholarRecords')->once()->andReturn(scholarRoster());
-    $destination->shouldReceive('finalScoreFormulas')->once()->andReturn(scholarFinalScoreFormulas());
 
     Livewire::test('scholar-detail', ['initialSelectedId' => '11'])
         ->assertSee('Ava Adams')
@@ -226,7 +202,6 @@ it('hides student-only navigation and sharing controls on the scholar view', fun
 
     $destination = mock(RedcapDestinationService::class);
     $destination->shouldReceive('getAllScholarRecords')->twice()->andReturn(scholarRoster());
-    $destination->shouldReceive('finalScoreFormulas')->once()->andReturn(scholarFinalScoreFormulas());
 
     $response = get('/scholar');
 
