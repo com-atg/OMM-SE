@@ -1,5 +1,15 @@
 @php
     $totalEvaluations = count($evaluations);
+    $categoryColors = [
+        'Teaching'  => 'blue',
+        'Clinic'    => 'emerald',
+        'Research'  => 'amber',
+        'Didactics' => 'violet',
+    ];
+    $semesterColors = [
+        'Spring' => 'sky',
+        'Fall'   => 'amber',
+    ];
 @endphp
 
 <div class="flex flex-col gap-7">
@@ -61,7 +71,7 @@
                     </div>
                     <div class="flex flex-wrap gap-2">
                         @foreach ($categoryCounts as $category => $count)
-                            <flux:badge color="blue">{{ $category }} {{ $count }}</flux:badge>
+                            <flux:badge color="{{ $categoryColors[$category] ?? 'zinc' }}">{{ $category }} {{ $count }}</flux:badge>
                         @endforeach
                     </div>
                 </div>
@@ -80,31 +90,25 @@
                                 <flux:table.column class="bg-[#f0f3ff] px-8 py-4 text-xs font-bold uppercase tracking-[0.16em] text-[#455f88]" align="center">Category</flux:table.column>
                                 <flux:table.column class="bg-[#f0f3ff] px-8 py-4 text-xs font-bold uppercase tracking-[0.16em] text-[#455f88]" align="center">Score</flux:table.column>
                                 <flux:table.column class="bg-[#f0f3ff] px-8 py-4 text-xs font-bold uppercase tracking-[0.16em] text-[#455f88]" align="center">Date</flux:table.column>
-                                <flux:table.column class="bg-[#f0f3ff] px-8 py-4 text-xs font-bold uppercase tracking-[0.16em] text-[#455f88]" align="center">Detail</flux:table.column>
                             </flux:table.columns>
                             <flux:table.rows>
                                 @foreach ($evaluations as $evaluation)
-                                    <flux:table.row class="transition hover:bg-[#f9f9ff]" wire:key="faculty-eval-{{ $evaluation['record_id'] }}">
+                                    <flux:table.row
+                                        class="cursor-pointer transition hover:bg-[#f9f9ff]"
+                                        wire:key="faculty-eval-{{ $evaluation['record_id'] }}"
+                                        wire:click="openEvaluation('{{ $evaluation['record_id'] }}')"
+                                    >
                                         <flux:table.cell class="px-8 py-4 font-semibold text-[#111c2c]" align="center">{{ $evaluation['student_name'] }}</flux:table.cell>
-                                        <flux:table.cell class="px-8 py-4 text-[#43474e]" align="center">{{ $evaluation['semester_label'] }}</flux:table.cell>
                                         <flux:table.cell class="px-8 py-4" align="center">
-                                            <flux:badge color="zinc">{{ $evaluation['category_label'] }}</flux:badge>
+                                            <flux:badge color="{{ $semesterColors[$evaluation['semester_label']] ?? 'zinc' }}">{{ $evaluation['semester_label'] }}</flux:badge>
+                                        </flux:table.cell>
+                                        <flux:table.cell class="px-8 py-4" align="center">
+                                            <flux:badge color="{{ $categoryColors[$evaluation['category_label']] ?? 'zinc' }}">{{ $evaluation['category_label'] }}</flux:badge>
                                         </flux:table.cell>
                                         <flux:table.cell class="px-8 py-4 tabular-nums" align="center">
                                             {{ $evaluation['score'] !== '' ? $evaluation['score'].'%' : '-' }}
                                         </flux:table.cell>
                                         <flux:table.cell class="px-8 py-4 text-[#43474e]" align="center">{{ $evaluation['date'] }}</flux:table.cell>
-                                        <flux:table.cell class="px-8 py-4" align="center">
-                                            <flux:button
-                                                type="button"
-                                                size="sm"
-                                                variant="ghost"
-                                                icon="eye"
-                                                wire:click="openEvaluation('{{ $evaluation['record_id'] }}')"
-                                            >
-                                                View
-                                            </flux:button>
-                                        </flux:table.cell>
                                     </flux:table.row>
                                 @endforeach
                             </flux:table.rows>
@@ -121,9 +125,11 @@
                 <div>
                     <div class="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-[#455f88]">Evaluation Detail</div>
                     <flux:heading size="lg" class="mt-2">{{ $selectedEvaluation['student_name'] }}</flux:heading>
-                    <flux:text class="mt-2">
-                        {{ $selectedEvaluation['category_label'] }} · {{ $selectedEvaluation['semester_label'] }} · {{ $selectedEvaluation['date'] }}
-                    </flux:text>
+                    <div class="mt-2 flex flex-wrap items-center gap-2 text-sm text-[#43474e]">
+                        <flux:badge color="{{ $categoryColors[$selectedEvaluation['category_label']] ?? 'zinc' }}">{{ $selectedEvaluation['category_label'] }}</flux:badge>
+                        <flux:badge color="{{ $semesterColors[$selectedEvaluation['semester_label']] ?? 'zinc' }}">{{ $selectedEvaluation['semester_label'] }}</flux:badge>
+                        <span>{{ $selectedEvaluation['date'] }}</span>
+                    </div>
                 </div>
 
                 <dl class="grid grid-cols-1 gap-3 sm:grid-cols-3">

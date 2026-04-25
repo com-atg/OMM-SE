@@ -12,6 +12,8 @@
             <flux:button type="submit" variant="ghost" icon="arrow-down-tray">Import from REDCap</flux:button>
         </form>
 
+        @livewire('admin.csv-user-import')
+
         <flux:button href="{{ route('admin.users.create') }}" variant="primary" icon="plus">Add User</flux:button>
     </x-slot:headerActions>
 
@@ -80,17 +82,17 @@
             <table class="w-full min-w-[760px] text-sm" id="userTable">
                 <thead class="border-b border-slate-200/80 bg-slate-50/80 text-[0.7rem] uppercase tracking-[0.24em] text-slate-500">
                     <tr>
-                        <th class="px-5 py-3 text-left">User</th>
-                        <th class="px-5 py-3 text-left">Role</th>
-                        <th class="px-5 py-3 text-left">REDCap Record</th>
-                        <th class="px-5 py-3 text-left">Last Login</th>
-                        <th class="px-5 py-3 text-right">Actions</th>
+                        <th class="py-3 pl-8 pr-5 text-center">User</th>
+                        <th class="px-5 py-3 text-center">Role</th>
+                        <th class="px-5 py-3 text-center">REDCap Record</th>
+                        <th class="px-5 py-3 text-center">Last Login</th>
+                        <th class="px-5 py-3 text-center">Actions</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100" id="userTableBody">
                     @forelse ($users as $u)
                         <tr data-role="{{ $u->role?->value }}" data-search="{{ strtolower($u->email.' '.$u->name) }}" class="transition hover:bg-sky-50/55">
-                            <td class="px-5 py-4">
+                            <td class="py-4 pl-8 pr-5">
                                 <div class="flex items-center gap-3">
                                     <div class="grid size-10 shrink-0 place-items-center rounded-lg text-sm font-bold
                                         @if ($u->isService()) bg-violet-100 text-violet-700
@@ -106,7 +108,7 @@
                                     </div>
                                 </div>
                             </td>
-                            <td class="px-5 py-4">
+                            <td class="px-5 py-4 text-center">
                                 <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-bold
                                     @if ($u->isService()) bg-violet-100 text-violet-800
                                     @elseif ($u->isAdmin()) bg-sky-100 text-sky-800
@@ -116,26 +118,40 @@
                                     {{ $u->role?->label() }}
                                 </span>
                             </td>
-                            <td class="px-5 py-4 text-slate-600">{{ $u->redcap_record_id ?? '-' }}</td>
-                            <td class="px-5 py-4 text-slate-500">{{ $u->last_login_at?->diffForHumans() ?? 'never' }}</td>
+                            <td class="px-5 py-4 text-center text-slate-600">{{ $u->redcap_record_id ?? '-' }}</td>
+                            <td class="px-5 py-4 text-center text-slate-500">{{ $u->last_login_at?->diffForHumans() ?? 'never' }}</td>
                             <td class="px-5 py-4">
-                                <div class="flex items-center justify-end gap-2">
-                                    @if (! $u->isService() && $u->id !== auth()->id() && ! session('impersonating_original_id'))
-                                        <form method="POST" action="{{ route('admin.users.impersonate', $u) }}">
-                                            @csrf
-                                            <flux:button type="submit" size="sm" variant="ghost">Impersonate</flux:button>
-                                        </form>
-                                    @endif
+                                <div class="flex items-center justify-center">
+                                    <flux:dropdown position="bottom end">
+                                        <flux:button
+                                            size="sm"
+                                            variant="ghost"
+                                            icon="ellipsis-horizontal"
+                                            aria-label="User actions"
+                                            class="text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                                        />
+                                        <flux:menu class="min-w-[160px]">
+                                            <flux:menu.heading>{{ $u->name }}</flux:menu.heading>
+                                            <flux:menu.separator />
+                                            <flux:menu.item href="{{ route('admin.users.edit', $u) }}" icon="pencil-square">Edit</flux:menu.item>
 
-                                    <flux:button href="{{ route('admin.users.edit', $u) }}" size="sm" variant="ghost" icon="pencil-square" aria-label="Edit user" title="Edit user" />
+                                            @if (! $u->isService() && $u->id !== auth()->id() && ! session('impersonating_original_id'))
+                                                <form method="POST" action="{{ route('admin.users.impersonate', $u) }}">
+                                                    @csrf
+                                                    <flux:menu.item type="submit" icon="user-circle">Impersonate</flux:menu.item>
+                                                </form>
+                                            @endif
 
-                                    @if ($u->id !== auth()->id())
-                                        <form method="POST" action="{{ route('admin.users.destroy', $u) }}" onsubmit="return confirm('Delete this user? This can be undone.')">
-                                            @csrf
-                                            @method('DELETE')
-                                            <flux:button type="submit" size="sm" variant="danger" icon="trash" aria-label="Delete user" title="Delete user" />
-                                        </form>
-                                    @endif
+                                            @if ($u->id !== auth()->id())
+                                                <flux:menu.separator />
+                                                <form method="POST" action="{{ route('admin.users.destroy', $u) }}" onsubmit="return confirm('Delete {{ $u->name }}? This can be undone.')">
+                                                    @csrf
+                                                    @method('DELETE')
+                                                    <flux:menu.item type="submit" variant="danger" icon="trash">Delete</flux:menu.item>
+                                                </form>
+                                            @endif
+                                        </flux:menu>
+                                    </flux:dropdown>
                                 </div>
                             </td>
                         </tr>
@@ -164,16 +180,16 @@
                 <table class="w-full min-w-[640px] text-sm">
                     <thead class="bg-red-50/80 text-[0.7rem] uppercase tracking-[0.24em] text-red-500">
                         <tr>
-                            <th class="px-5 py-3 text-left">User</th>
-                            <th class="px-5 py-3 text-left">Role</th>
-                            <th class="px-5 py-3 text-left">Deleted</th>
-                            <th class="px-5 py-3 text-right">Actions</th>
+                            <th class="py-3 pl-8 pr-5 text-center">User</th>
+                            <th class="px-5 py-3 text-center">Role</th>
+                            <th class="px-5 py-3 text-center">Deleted</th>
+                            <th class="px-5 py-3 text-center">Actions</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
                         @foreach ($trashedUsers as $u)
                             <tr class="opacity-70">
-                                <td class="px-5 py-4">
+                                <td class="py-4 pl-8 pr-5">
                                     <div class="flex items-center gap-3">
                                         <div class="grid size-10 shrink-0 place-items-center rounded-lg bg-slate-100 text-sm font-bold text-slate-500">
                                             {{ strtoupper(substr($u->name, 0, 1)) }}
@@ -184,9 +200,9 @@
                                         </div>
                                     </div>
                                 </td>
-                                <td class="px-5 py-4 text-slate-600">{{ $u->role?->label() }}</td>
-                                <td class="px-5 py-4 text-slate-500">{{ $u->deleted_at?->diffForHumans() }}</td>
-                                <td class="px-5 py-4 text-right">
+                                <td class="px-5 py-4 text-center text-slate-600">{{ $u->role?->label() }}</td>
+                                <td class="px-5 py-4 text-center text-slate-500">{{ $u->deleted_at?->diffForHumans() }}</td>
+                                <td class="px-5 py-4 text-center">
                                     <form method="POST" action="{{ route('admin.users.restore', $u->id) }}">
                                         @csrf
                                         <flux:button type="submit" size="sm" variant="ghost">Restore</flux:button>

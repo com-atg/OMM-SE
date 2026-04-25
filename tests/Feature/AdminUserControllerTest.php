@@ -26,14 +26,13 @@ it('lists all users with their role badges', function () {
         ->assertSee('student@example.com');
 });
 
-it('renders user actions with impersonate before icon-only edit and delete controls', function () {
+it('renders user actions as a dropdown with edit, impersonate, and delete options', function () {
     User::factory()->student()->create(['email' => 'actions@example.com']);
 
     get('/admin/users')
         ->assertOk()
-        ->assertSeeInOrder(['Impersonate', 'Edit user', 'Delete user'], false)
-        ->assertDontSee('>Edit</', false)
-        ->assertDontSee('>Delete</', false);
+        ->assertSee('User actions', false)
+        ->assertSeeInOrder(['Edit', 'Impersonate', 'Delete'], false);
 });
 
 it('shows deleted users in the trashed section on the index page', function () {

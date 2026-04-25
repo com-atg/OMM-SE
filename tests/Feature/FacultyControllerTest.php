@@ -212,7 +212,6 @@ it('centers the faculty and modal table columns', function () {
         ->toContain('align="center">Category')
         ->toContain('align="center">Score')
         ->toContain('align="center">Date')
-        ->toContain('align="center">Detail')
         ->toContain('align="center">Criterion')
         ->toContain('align="center">{{ $evaluation[\'student_name\'] }}')
         ->toContain('align="center">{{ $criterion[\'label\'] }}');

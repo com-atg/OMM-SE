@@ -56,7 +56,7 @@
                 <div class="mb-3 text-[0.7rem] font-bold uppercase tracking-[0.36em] text-amber-700">
                     Student Evaluation Overview
                 </div>
-                <h2 class="text-2xl font-bold tracking-tight text-slate-950">Retrieval Quality Overview</h2>
+                <h2 class="text-2xl font-bold tracking-tight text-slate-950">Data Quality Overview</h2>
                 <p class="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
                     Snapshot of student roster coverage, score health, and evaluation volume from the latest REDCap sync.
                 </p>
