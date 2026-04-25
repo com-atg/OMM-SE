@@ -9,6 +9,7 @@ use App\Services\RedcapDestinationService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\Rule;
@@ -40,6 +41,19 @@ class UserController extends Controller
     {
         return view('admin.users.create', [
             'roles' => Role::cases(),
+        ]);
+    }
+
+    public function csvSample(): Response
+    {
+        $csv = "name,email,role\n"
+            ."Jane Faculty,jane.faculty@example.com,faculty\n"
+            ."Alex Admin,alex.admin@example.com,admin\n"
+            ."Sam Student,sam.student@example.com,student\n";
+
+        return response($csv, 200, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="user-import-sample.csv"',
         ]);
     }
 

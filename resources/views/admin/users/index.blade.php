@@ -12,7 +12,7 @@
             <flux:button type="submit" variant="ghost" icon="arrow-down-tray">Import from REDCap</flux:button>
         </form>
 
-        @livewire('admin.csv-user-import')
+        <flux:button href="{{ route('admin.users.import-csv') }}" variant="ghost" icon="table-cells">Import CSV</flux:button>
 
         <flux:button href="{{ route('admin.users.create') }}" variant="primary" icon="plus">Add User</flux:button>
     </x-slot:headerActions>

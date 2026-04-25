@@ -95,6 +95,8 @@ Route::middleware(RequireSamlAuth::class)->group(function () {
         Route::get('/users/create', [AdminUserController::class, 'create'])->name('users.create');
         Route::post('/users', [AdminUserController::class, 'store'])->name('users.store');
         Route::post('/users/import', [AdminUserController::class, 'import'])->name('users.import');
+        Route::view('/users/import-csv', 'admin.users.import-csv')->name('users.import-csv');
+        Route::get('/users/import-csv/sample', [AdminUserController::class, 'csvSample'])->name('users.import-csv.sample');
         Route::get('/users/{user}/edit', [AdminUserController::class, 'edit'])->name('users.edit');
         Route::patch('/users/{user}', [AdminUserController::class, 'update'])->name('users.update');
         Route::delete('/users/{user}', [AdminUserController::class, 'destroy'])->name('users.destroy');
