@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Models\Redcap_lib;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 
 /**
  * Wraps Redcap_lib for the current academic year's source evaluation project.
@@ -70,7 +72,7 @@ class RedcapSourceService
      * semester is the raw coded value ('1' = Spring, '2' = Fall).
      * Returns empty array if either value fails validation.
      */
-    public function getScholarEvals(string $datatelId, string $semester, ?string $token = null): array
+    public function getStudentEvals(string $datatelId, string $semester, ?string $token = null): array
     {
         if (! preg_match('/^\d+$/', $datatelId) || ! preg_match('/^[12]$/', $semester)) {
             return [];
@@ -105,5 +107,55 @@ class RedcapSourceService
         );
 
         return is_array($records) ? $records : [];
+    }
+
+    /**
+     * Fetch completed evaluation records from the current source project.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    public function getCompletedEvaluationRecords(int $cacheMinutes = 5, ?string $token = null): array
+    {
+        $sourceToken = $token ?? $this->token;
+
+        if ($sourceToken === '') {
+            return [];
+        }
+
+        $cacheKey = 'source:completed_evaluations:'.Str::substr(hash('sha256', $sourceToken), 0, 16);
+
+        return Cache::remember($cacheKey, now()->addMinutes($cacheMinutes), function () use ($sourceToken): array {
+            return collect($this->fetchAllRecords($sourceToken))
+                ->filter(fn (array $record): bool => $this->isCompletedEvaluationRecord($record))
+                ->values()
+                ->all();
+        });
+    }
+
+    /**
+     * @param  array<string,mixed>  $record
+     */
+    private function isCompletedEvaluationRecord(array $record): bool
+    {
+        $completionStatuses = collect($record)
+            ->filter(fn (mixed $value, string $field): bool => str_ends_with($field, '_complete') && (string) $value !== '')
+            ->map(fn (mixed $value): string => (string) $value);
+
+        $hasRequiredFields = trim((string) ($record['student'] ?? '')) !== ''
+            && trim((string) ($record['semester'] ?? '')) !== ''
+            && trim((string) ($record['eval_category'] ?? '')) !== ''
+            && trim((string) ($record['faculty'] ?? '')) !== '';
+
+        if (! $hasRequiredFields) {
+            return false;
+        }
+
+        if ($completionStatuses->isNotEmpty()) {
+            return $completionStatuses->contains('2');
+        }
+
+        $scoreField = self::SCORE_FIELDS[(string) ($record['eval_category'] ?? '')] ?? null;
+
+        return $scoreField !== null && trim((string) ($record[$scoreField] ?? '')) !== '';
     }
 }

@@ -30,7 +30,7 @@ it('triggers the source project job and renders the process view', function () {
     $source = mock(RedcapSourceService::class);
     $source->shouldReceive('fetchAllRecords')->andReturn([]);
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('scholarMapByDatatelId')->andReturn([]);
+    $destination->shouldReceive('studentMapByDatatelId')->andReturn([]);
 
     $response = post(route('process.run'));
 
@@ -72,7 +72,7 @@ it('seeds cache state and schedules the job when kicked off', function () {
     $source = mock(RedcapSourceService::class);
     $source->shouldReceive('fetchAllRecords')->andReturn([]);
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('scholarMapByDatatelId')->andReturn([]);
+    $destination->shouldReceive('studentMapByDatatelId')->andReturn([]);
 
     $response = get('/process/1846');
 
@@ -118,7 +118,7 @@ it('returns the current state of a known job', function () {
 
 // ─── Job execution ───────────────────────────────────────────────────────────
 
-it('aggregates source records and pushes updates for matched scholars without emailing', function () {
+it('aggregates source records and pushes updates for matched students without emailing', function () {
     Mail::fake();
 
     $sourceRecords = [
@@ -135,7 +135,7 @@ it('aggregates source records and pushes updates for matched scholars without em
             'record_id' => '3', 'student' => '100', 'semester' => '2',
             'eval_category' => 'B', 'clinical_performance_score' => '85.0',
         ],
-        // Unknown scholar — destination map has no match.
+        // Unknown student — destination map has no match.
         [
             'record_id' => '4', 'student' => '999', 'semester' => '1',
             'eval_category' => 'A', 'teaching_score' => '70.0',
@@ -151,10 +151,10 @@ it('aggregates source records and pushes updates for matched scholars without em
     $source->shouldReceive('fetchAllRecords')->once()->with('TOKEN_X')->andReturn($sourceRecords);
 
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('scholarMapByDatatelId')->once()->andReturn([
+    $destination->shouldReceive('studentMapByDatatelId')->once()->andReturn([
         '100' => ['record_id' => '10', 'datatelid' => '100', 'first_name' => 'Cat', 'last_name' => 'Chin'],
     ]);
-    $destination->shouldReceive('updateScholarRecord')->twice()->andReturn('1');
+    $destination->shouldReceive('updateStudentRecord')->twice()->andReturn('1');
 
     $job = new ProcessSourceProjectJob('job-xyz', '1846', 'TOKEN_X');
     $job->handle($destination, $source);
@@ -167,7 +167,7 @@ it('aggregates source records and pushes updates for matched scholars without em
         ->and($state['updated'])->toBe(2)
         ->and($state['unchanged'])->toBe(0)
         ->and($state['failed'])->toBe(0)
-        ->and($state['skip_reasons']['scholar_not_found'])->toBe(1)
+        ->and($state['skip_reasons']['student_not_found'])->toBe(1)
         ->and($state['skip_reasons']['missing_required_fields'])->toBe(1);
 
     Mail::assertNothingSent();
@@ -190,7 +190,7 @@ it('does not update destination records when aggregate values are unchanged', fu
     $source->shouldReceive('fetchAllRecords')->once()->with('TOKEN_X')->andReturn($sourceRecords);
 
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('scholarMapByDatatelId')->once()->andReturn([
+    $destination->shouldReceive('studentMapByDatatelId')->once()->andReturn([
         '100' => [
             'record_id' => '10',
             'datatelid' => '100',
@@ -203,7 +203,7 @@ it('does not update destination records when aggregate values are unchanged', fu
             'spring_nu_comments' => '0',
         ],
     ]);
-    $destination->shouldReceive('updateScholarRecord')->never();
+    $destination->shouldReceive('updateStudentRecord')->never();
 
     $job = new ProcessSourceProjectJob('job-unchanged', '1846', 'TOKEN_X');
     $job->handle($destination, $source);

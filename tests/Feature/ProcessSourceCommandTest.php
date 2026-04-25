@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Cache;
 
 use function Pest\Laravel\mock;
 
-// Records with two matched scholars and one skipped (missing student field).
+// Records with two matched students and one skipped (missing student field).
 function sourceRecords(): array
 {
     return [
@@ -18,7 +18,7 @@ function sourceRecords(): array
     ];
 }
 
-function scholarMap(): array
+function studentMap(): array
 {
     return [
         '100' => ['record_id' => '10', 'datatelid' => '100'],
@@ -44,23 +44,23 @@ it('processes records and updates the destination project', function () {
     $source->shouldReceive('fetchAllRecords')->once()->with('SOURCE_TOKEN')->andReturn(sourceRecords());
 
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('scholarMapByDatatelId')->once()->andReturn(scholarMap());
-    $destination->shouldReceive('updateScholarRecord')->times(3)->andReturn('1');
+    $destination->shouldReceive('studentMapByDatatelId')->once()->andReturn(studentMap());
+    $destination->shouldReceive('updateStudentRecord')->times(3)->andReturn('1');
 
     $this->artisan('omm:process-source')
         ->assertSuccessful()
         ->expectsOutputToContain('Processing complete.');
 });
 
-it('runs dry-run without calling updateScholarRecord', function () {
+it('runs dry-run without calling updateStudentRecord', function () {
     config(['redcap.source_token' => 'SOURCE_TOKEN']);
 
     $source = mock(RedcapSourceService::class);
     $source->shouldReceive('fetchAllRecords')->once()->andReturn(sourceRecords());
 
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('scholarMapByDatatelId')->once()->andReturn(scholarMap());
-    $destination->shouldNotReceive('updateScholarRecord');
+    $destination->shouldReceive('studentMapByDatatelId')->once()->andReturn(studentMap());
+    $destination->shouldNotReceive('updateStudentRecord');
 
     $this->artisan('omm:process-source --dry-run')
         ->assertSuccessful()
@@ -92,8 +92,8 @@ it('processes using a specific PID token', function () {
     $source->shouldReceive('fetchAllRecords')->once()->andReturn(sourceRecords());
 
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('scholarMapByDatatelId')->once()->andReturn(scholarMap());
-    $destination->shouldReceive('updateScholarRecord')->times(3)->andReturn('1');
+    $destination->shouldReceive('studentMapByDatatelId')->once()->andReturn(studentMap());
+    $destination->shouldReceive('updateStudentRecord')->times(3)->andReturn('1');
 
     $this->artisan('omm:process-source --pid=1846')
         ->assertSuccessful()
@@ -106,49 +106,49 @@ it('returns success with a warning when source returns no records', function () 
     $source = mock(RedcapSourceService::class);
     $source->shouldReceive('fetchAllRecords')->once()->andReturn([]);
 
-    // Early exit before scholarMapByDatatelId is reached.
+    // Early exit before studentMapByDatatelId is reached.
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldNotReceive('scholarMapByDatatelId');
+    $destination->shouldNotReceive('studentMapByDatatelId');
 
     $this->artisan('omm:process-source')
         ->assertSuccessful()
         ->expectsOutputToContain('No source records found');
 });
 
-it('invalidates dashboard and scholar caches after a successful run', function () {
+it('invalidates dashboard and student caches after a successful run', function () {
     config(['redcap.source_token' => 'SOURCE_TOKEN']);
 
     Cache::put('dashboard:stats', ['cached' => true], 600);
-    Cache::put('destination:all_scholars', ['cached' => true], 600);
+    Cache::put('destination:all_students', ['cached' => true], 600);
 
     $source = mock(RedcapSourceService::class);
     $source->shouldReceive('fetchAllRecords')->once()->andReturn(sourceRecords());
 
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('scholarMapByDatatelId')->once()->andReturn(scholarMap());
-    $destination->shouldReceive('updateScholarRecord')->andReturn('1');
+    $destination->shouldReceive('studentMapByDatatelId')->once()->andReturn(studentMap());
+    $destination->shouldReceive('updateStudentRecord')->andReturn('1');
 
     $this->artisan('omm:process-source')->assertSuccessful();
 
     expect(Cache::has('dashboard:stats'))->toBeFalse()
-        ->and(Cache::has('destination:all_scholars'))->toBeFalse();
+        ->and(Cache::has('destination:all_students'))->toBeFalse();
 });
 
 it('does not invalidate caches on dry-run', function () {
     config(['redcap.source_token' => 'SOURCE_TOKEN']);
 
     Cache::put('dashboard:stats', ['cached' => true], 600);
-    Cache::put('destination:all_scholars', ['cached' => true], 600);
+    Cache::put('destination:all_students', ['cached' => true], 600);
 
     $source = mock(RedcapSourceService::class);
     $source->shouldReceive('fetchAllRecords')->once()->andReturn(sourceRecords());
 
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('scholarMapByDatatelId')->once()->andReturn(scholarMap());
-    $destination->shouldNotReceive('updateScholarRecord');
+    $destination->shouldReceive('studentMapByDatatelId')->once()->andReturn(studentMap());
+    $destination->shouldNotReceive('updateStudentRecord');
 
     $this->artisan('omm:process-source --dry-run')->assertSuccessful();
 
     expect(Cache::has('dashboard:stats'))->toBeTrue()
-        ->and(Cache::has('destination:all_scholars'))->toBeTrue();
+        ->and(Cache::has('destination:all_students'))->toBeTrue();
 });

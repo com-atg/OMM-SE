@@ -7,6 +7,7 @@ enum Role: string
     case Service = 'service';
     case Admin = 'admin';
     case Student = 'student';
+    case Faculty = 'faculty';
 
     public function label(): string
     {
@@ -14,6 +15,7 @@ enum Role: string
             self::Service => 'Service',
             self::Admin => 'Admin',
             self::Student => 'Student',
+            self::Faculty => 'Faculty',
         };
     }
 
@@ -22,8 +24,18 @@ enum Role: string
         return $this === self::Service;
     }
 
-    public function canViewAllScholars(): bool
+    public function canViewAllStudents(): bool
     {
         return $this === self::Service || $this === self::Admin;
+    }
+
+    public function canViewDashboard(): bool
+    {
+        return $this !== self::Student;
+    }
+
+    public function canViewFacultyDetail(): bool
+    {
+        return $this === self::Service || $this === self::Admin || $this === self::Faculty;
     }
 }

@@ -9,26 +9,26 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
-#[Signature('scholars:assign-uuids {--dry-run : Report without writing changes} {--force : Overwrite existing UUID values}')]
-#[Description('Assign a UUID to each destination scholar record (skips records that already have one unless --force is passed).')]
-class AssignScholarUuidsCommand extends Command
+#[Signature('students:assign-uuids {--dry-run : Report without writing changes} {--force : Overwrite existing UUID values}')]
+#[Description('Assign a UUID to each destination student record (skips records that already have one unless --force is passed).')]
+class AssignStudentUuidsCommand extends Command
 {
     public function handle(RedcapDestinationService $destination): int
     {
         $dryRun = (bool) $this->option('dry-run');
         $force = (bool) $this->option('force');
 
-        $records = $destination->getAllScholarRecords();
+        $records = $destination->getAllStudentRecords();
 
         $total = count($records);
         if ($total === 0) {
-            $this->warn('No scholar records returned from the destination project.');
+            $this->warn('No student records returned from the destination project.');
 
             return self::SUCCESS;
         }
 
         $this->line(sprintf(
-            '<fg=cyan>Found %d scholar record%s.</> Mode: <fg=yellow>%s</>',
+            '<fg=cyan>Found %d student record%s.</> Mode: <fg=yellow>%s</>',
             $total,
             $total === 1 ? '' : 's',
             $dryRun ? 'dry-run' : ($force ? 'overwrite existing' : 'fill missing only'),
@@ -68,7 +68,7 @@ class AssignScholarUuidsCommand extends Command
             }
 
             try {
-                $destination->updateScholarRecord([
+                $destination->updateStudentRecord([
                     'record_id' => $recordId,
                     'uuid' => $newUuid,
                 ]);
@@ -91,7 +91,7 @@ class AssignScholarUuidsCommand extends Command
         );
 
         if (! $dryRun && $assigned > 0) {
-            Cache::forget('destination:all_scholars');
+            Cache::forget('destination:all_students');
             Cache::forget('dashboard:stats');
             $this->info('Caches invalidated. Dashboard will refresh on next request.');
         }

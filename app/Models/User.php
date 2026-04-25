@@ -51,7 +51,12 @@ class User extends Authenticatable
 
     public function isStudent(): bool
     {
-        return ! $this->isService() && ! $this->isAdmin();
+        return $this->role === Role::Student && ! $this->isService() && ! $this->isAdmin();
+    }
+
+    public function isFaculty(): bool
+    {
+        return $this->role === Role::Faculty && ! $this->isService() && ! $this->isAdmin();
     }
 
     public function canManageUsers(): bool
@@ -69,9 +74,19 @@ class User extends Authenticatable
         return $this->isService();
     }
 
-    public function canViewAllScholars(): bool
+    public function canViewAllStudents(): bool
     {
         return $this->isService() || $this->isAdmin();
+    }
+
+    public function canViewDashboard(): bool
+    {
+        return $this->canViewAllStudents() || $this->isFaculty();
+    }
+
+    public function canViewFacultyDetail(): bool
+    {
+        return $this->canViewAllStudents() || $this->isFaculty();
     }
 
     private function emailIsInConfigList(string $key): bool

@@ -30,6 +30,11 @@ class SamlService
         }
 
         $role = $this->resolveRole($email);
+        $existingUser = User::where('email', $email)->first();
+
+        if ($role === Role::Student && $existingUser?->role === Role::Faculty) {
+            $role = Role::Faculty;
+        }
 
         $user = User::updateOrCreate(
             ['email' => $email],

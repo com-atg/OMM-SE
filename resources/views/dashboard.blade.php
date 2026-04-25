@@ -1,15 +1,15 @@
 @php
     $generatedAt = \Illuminate\Support\Carbon::parse($stats['generated_at']);
     $overallAverage = $stats['kpis']['overall_avg'];
-    $evaluatedPct = $stats['kpis']['total_scholars'] > 0
-        ? round($stats['kpis']['scholars_evaluated'] / $stats['kpis']['total_scholars'] * 100)
+    $evaluatedPct = $stats['kpis']['total_students'] > 0
+        ? round($stats['kpis']['students_evaluated'] / $stats['kpis']['total_students'] * 100)
         : 0;
 
     $kpis = [
-        ['label' => 'Scholars', 'value' => number_format($stats['kpis']['total_scholars']), 'sub' => $stats['kpis']['scholars_evaluated'].' with evaluations', 'icon' => 'academic-cap', 'tone' => 'text-sky-700 bg-sky-50 ring-sky-100'],
+        ['label' => 'Students', 'value' => number_format($stats['kpis']['total_students']), 'sub' => $stats['kpis']['students_evaluated'].' with evaluations', 'icon' => 'academic-cap', 'tone' => 'text-sky-700 bg-sky-50 ring-sky-100'],
         ['label' => 'Evaluations', 'value' => number_format($stats['kpis']['total_evals']), 'sub' => 'Across spring and fall', 'icon' => 'clipboard-document-check', 'tone' => 'text-emerald-700 bg-emerald-50 ring-emerald-100'],
         ['label' => 'Overall avg', 'value' => $overallAverage !== null ? number_format($overallAverage, 1) : '-', 'sub' => 'Weighted by evaluation count', 'icon' => 'chart-bar', 'tone' => 'text-amber-700 bg-amber-50 ring-amber-100'],
-        ['label' => 'Coverage', 'value' => $evaluatedPct.'%', 'sub' => number_format($stats['kpis']['scholars_without_evals']).' without evaluations', 'icon' => 'shield-check', 'tone' => 'text-indigo-700 bg-indigo-50 ring-indigo-100'],
+        ['label' => 'Coverage', 'value' => $evaluatedPct.'%', 'sub' => number_format($stats['kpis']['students_without_evals']).' without evaluations', 'icon' => 'shield-check', 'tone' => 'text-indigo-700 bg-indigo-50 ring-indigo-100'],
     ];
 
     $chartPalette = ['#2563eb', '#059669', '#d97706', '#7c3aed', '#0ea5e9', '#db2777'];
@@ -37,7 +37,7 @@
     active="dashboard"
     eyebrow="Governance Overview"
     heading="OMM ACE Dashboard"
-    subheading="OMM Scholar Evaluations reporting across teaching, clinic, research, and didactics."
+    subheading="OMM Student Evaluations reporting across teaching, clinic, research, and didactics."
 >
     <x-slot:head>
         <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
@@ -54,18 +54,18 @@
         <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div class="max-w-3xl">
                 <div class="mb-3 text-[0.7rem] font-bold uppercase tracking-[0.36em] text-amber-700">
-                    Scholar Evaluation Overview
+                    Student Evaluation Overview
                 </div>
                 <h2 class="text-2xl font-bold tracking-tight text-slate-950">Retrieval Quality Overview</h2>
                 <p class="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
-                    Snapshot of scholar roster coverage, score health, and evaluation volume from the latest REDCap sync.
+                    Snapshot of student roster coverage, score health, and evaluation volume from the latest REDCap sync.
                 </p>
             </div>
 
             <div class="grid w-full gap-3 sm:grid-cols-2 lg:max-w-xl">
                 <div class="rounded-lg border border-slate-200 bg-white/80 p-4 shadow-sm">
                     <div class="mb-2 inline-flex size-6 items-center justify-center rounded-full bg-amber-100 text-xs font-bold text-amber-800">1</div>
-                    <p class="text-sm font-medium leading-6 text-slate-600">Review coverage against the expected scholar roster.</p>
+                    <p class="text-sm font-medium leading-6 text-slate-600">Review coverage against the expected student roster.</p>
                 </div>
                 <div class="rounded-lg border border-slate-200 bg-white/80 p-4 shadow-sm">
                     <div class="mb-2 inline-flex size-6 items-center justify-center rounded-full bg-sky-100 text-xs font-bold text-sky-800">2</div>
@@ -106,12 +106,12 @@
         @endforeach
     </section>
 
-    @if (! $stats['has_scholars'])
+    @if (! $stats['has_students'])
         <section class="rounded-lg border border-slate-200 bg-white/82 p-8 text-center shadow-sm">
             <div class="mx-auto grid size-12 place-items-center rounded-lg bg-slate-100 text-slate-500">
                 <flux:icon.inbox variant="mini" />
             </div>
-            <h2 class="mt-4 text-lg font-semibold text-slate-950">No scholar records are available</h2>
+            <h2 class="mt-4 text-lg font-semibold text-slate-950">No student records are available</h2>
             <p class="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-600">
                 The destination REDCap project returned no records. Check the REDCap connection settings and roster load.
             </p>
@@ -123,7 +123,7 @@
             </div>
             <h2 class="mt-4 text-lg font-semibold text-slate-950">No evaluations recorded yet</h2>
             <p class="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-600">
-                {{ $stats['kpis']['total_scholars'] }} scholar{{ $stats['kpis']['total_scholars'] === 1 ? '' : 's' }} are available. Charts will appear once evaluation records have been processed.
+                {{ $stats['kpis']['total_students'] }} student{{ $stats['kpis']['total_students'] === 1 ? '' : 's' }} are available. Charts will appear once evaluation records have been processed.
             </p>
         </section>
     @else
@@ -157,7 +157,7 @@
                     <div>
                         <div class="text-[0.72rem] font-bold uppercase tracking-[0.3em] text-sky-700">Scores</div>
                         <h2 class="mt-2 text-lg font-bold text-slate-950">Score Distribution</h2>
-                        <p class="mt-1 text-sm leading-5 text-slate-500">Scholar category averages grouped into score bands.</p>
+                        <p class="mt-1 text-sm leading-5 text-slate-500">Student category averages grouped into score bands.</p>
                     </div>
                     <flux:badge color="violet">Bands</flux:badge>
                 </div>
@@ -169,7 +169,7 @@
                     <div>
                         <div class="text-[0.72rem] font-bold uppercase tracking-[0.3em] text-sky-700">Coverage</div>
                         <h2 class="mt-2 text-lg font-bold text-slate-950">Category Coverage</h2>
-                        <p class="mt-1 text-sm leading-5 text-slate-500">Scholars with 1+ eval in that category divided by total roster.</p>
+                        <p class="mt-1 text-sm leading-5 text-slate-500">Students with 1+ eval in that category divided by total roster.</p>
                     </div>
                     <flux:badge color="emerald">Coverage</flux:badge>
                 </div>
@@ -234,7 +234,7 @@
         </section>
     @endif
 
-    @if ($stats['has_scholars'] && $stats['has_evals'])
+    @if ($stats['has_students'] && $stats['has_evals'])
         <x-slot:scripts>
             <script>
                 const stats = @json($stats);
@@ -347,7 +347,7 @@
                             ...baseOptions.scales,
                             y: {
                                 ...baseOptions.scales.y,
-                                title: { display: true, text: '# scholar-category averages', color: '#94a3b8', font: { size: 11, family: 'Inter, system-ui, sans-serif' } },
+                                title: { display: true, text: '# student-category averages', color: '#94a3b8', font: { size: 11, family: 'Inter, system-ui, sans-serif' } },
                             },
                         },
                     },
@@ -358,7 +358,7 @@
                     data: {
                         labels: stats.category_labels,
                         datasets: [{
-                            label: '% of Scholars',
+                            label: '% of Students',
                             data: stats.coverage_pct,
                             backgroundColor: palette.slice(0, stats.category_labels.length),
                             borderRadius: 6,

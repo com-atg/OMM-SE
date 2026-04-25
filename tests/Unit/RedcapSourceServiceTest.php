@@ -1,6 +1,7 @@
 <?php
 
 use App\Services\RedcapSourceService;
+use Illuminate\Support\Facades\Cache;
 
 test('SCORE_FIELDS maps all four categories to correct source fields', function () {
     expect(RedcapSourceService::SCORE_FIELDS)->toBe([
@@ -36,22 +37,71 @@ test('SCORE_FIELDS DEST_CATEGORY and CATEGORY_LABELS all share the same category
         ->and(array_keys(RedcapSourceService::CATEGORY_LABELS))->toBe($keys);
 });
 
-// ─── getScholarEvals input validation ─────────────────────────────────────────
+// ─── getStudentEvals input validation ─────────────────────────────────────────
 
-test('getScholarEvals returns empty array for non-numeric datatelid', function () {
+test('getStudentEvals returns empty array for non-numeric datatelid', function () {
     $service = new RedcapSourceService;
 
-    expect($service->getScholarEvals("1' OR '1'='1", '1'))->toBe([]);
+    expect($service->getStudentEvals("1' OR '1'='1", '1'))->toBe([]);
 });
 
-test('getScholarEvals returns empty array for invalid semester code', function () {
+test('getStudentEvals returns empty array for invalid semester code', function () {
     $service = new RedcapSourceService;
 
-    expect($service->getScholarEvals('1', '9'))->toBe([]);
+    expect($service->getStudentEvals('1', '9'))->toBe([]);
 });
 
-test('getScholarEvals returns empty array when semester contains injection attempt', function () {
+test('getStudentEvals returns empty array when semester contains injection attempt', function () {
     $service = new RedcapSourceService;
 
-    expect($service->getScholarEvals('1', "1' OR '1'='1"))->toBe([]);
+    expect($service->getStudentEvals('1', "1' OR '1'='1"))->toBe([]);
+});
+
+test('getCompletedEvaluationRecords returns only completed source evaluations', function () {
+    Cache::flush();
+    config(['redcap.source_token' => 'SOURCE_TOKEN']);
+
+    $service = new class extends RedcapSourceService
+    {
+        public function fetchAllRecords(string $token): array
+        {
+            expect($token)->toBe('SOURCE_TOKEN');
+
+            return [
+                [
+                    'record_id' => '1',
+                    'student' => '100',
+                    'semester' => '1',
+                    'eval_category' => 'A',
+                    'faculty' => 'Dr. Smith',
+                    'teaching_score' => '90',
+                    'omm_evaluation_complete' => '2',
+                ],
+                [
+                    'record_id' => '2',
+                    'student' => '100',
+                    'semester' => '1',
+                    'eval_category' => 'A',
+                    'faculty' => 'Dr. Smith',
+                    'teaching_score' => '80',
+                    'omm_evaluation_complete' => '1',
+                ],
+                [
+                    'record_id' => '3',
+                    'student' => '200',
+                    'semester' => '2',
+                    'eval_category' => 'B',
+                    'faculty' => '',
+                    'clinical_performance_score' => '85',
+                    'omm_evaluation_complete' => '2',
+                ],
+            ];
+        }
+    };
+
+    $records = $service->getCompletedEvaluationRecords();
+
+    expect($records)
+        ->toHaveCount(1)
+        ->and($records[0]['record_id'])->toBe('1');
 });

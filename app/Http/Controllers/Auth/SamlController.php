@@ -70,9 +70,9 @@ class SamlController
         );
 
         if ($user->role === Role::Student) {
-            $scholar = $this->destination->findScholarByEmail($user->email);
+            $student = $this->destination->findStudentByEmail($user->email);
 
-            if ($scholar === null) {
+            if ($student === null) {
                 Auth::logout();
                 $request->session()->invalidate();
 
@@ -81,7 +81,7 @@ class SamlController
                 ], 404);
             }
 
-            $recordId = (string) ($scholar['record_id'] ?? '');
+            $recordId = (string) ($student['record_id'] ?? '');
             if ($recordId !== '' && $user->redcap_record_id !== $recordId) {
                 $user->forceFill(['redcap_record_id' => $recordId])->save();
             }

@@ -31,13 +31,13 @@ new class extends Component
     public function render(): View
     {
         $destination = app(RedcapDestinationService::class);
-        $records = $destination->getAllScholarRecords();
+        $records = $destination->getAllStudentRecords();
         $selectedRecord = $this->resolveRecord($records, $this->selectedId);
-        $selected = $selectedRecord ? $this->selectedScholar($selectedRecord) : null;
+        $selected = $selectedRecord ? $this->selectedStudent($selectedRecord) : null;
         $scoreFormulas = $selectedRecord ? $this->scoreFormulasFromDb() : [];
         $semesters = $selectedRecord ? $this->buildSemesters($selectedRecord, $scoreFormulas) : [];
 
-        return view('components.⚡scholar-detail', [
+        return view('components.⚡student-detail', [
             'roster' => $this->lockSelection ? [] : $this->roster($records),
             'selected' => $selected,
             'semesters' => $semesters,
@@ -133,7 +133,7 @@ new class extends Component
      * @param  array<string,mixed>  $record
      * @return array{record_id:string,name:string,datatelid:string|null,photo_url:string|null}
      */
-    private function selectedScholar(array $record): array
+    private function selectedStudent(array $record): array
     {
         $datatelId = trim((string) ($record['datatelid'] ?? ''));
 
@@ -346,12 +346,12 @@ $chartPayload = [
             <flux:select
                 class="max-w-sm"
                 wire:model.live="selectedId"
-                label="Choose a scholar"
+                label="Choose a student"
             >
-                <flux:select.option value="">Select a scholar...</flux:select.option>
-                @foreach ($roster as $scholar)
-                    <flux:select.option value="{{ $scholar['record_id'] }}" wire:key="scholar-option-{{ $scholar['record_id'] }}">
-                        {{ $scholar['name'] }}
+                <flux:select.option value="">Select a student...</flux:select.option>
+                @foreach ($roster as $student)
+                    <flux:select.option value="{{ $student['record_id'] }}" wire:key="student-option-{{ $student['record_id'] }}">
+                        {{ $student['name'] }}
                     </flux:select.option>
                 @endforeach
             </flux:select>
@@ -363,13 +363,13 @@ $chartPayload = [
             <div class="mx-auto grid size-12 place-items-center rounded-lg bg-[#e7eeff] text-[#455f88]">
                 <flux:icon.user-group variant="mini" />
             </div>
-            <h2 class="mt-4 text-lg font-semibold text-[#111c2c]">Select a scholar</h2>
+            <h2 class="mt-4 text-lg font-semibold text-[#111c2c]">Select a student</h2>
             <p class="mx-auto mt-2 max-w-xl text-sm leading-6 text-[#43474e]">
-                Use the scholar selector to open an individual evaluation profile.
+                Use the student selector to open an individual evaluation profile.
             </p>
         </section>
     @else
-        <section class="flex flex-col gap-6" wire:key="scholar-detail-{{ $selected['record_id'] }}">
+        <section class="flex flex-col gap-6" wire:key="student-detail-{{ $selected['record_id'] }}">
             <div class="rounded-lg border border-[#d8e3fa] bg-white/92 p-5 shadow-[0_16px_42px_rgba(26,54,93,0.06)] backdrop-blur">
                 <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
                     <div class="flex min-w-0 items-start gap-4">
@@ -393,7 +393,7 @@ $chartPayload = [
 
                         <div class="min-w-0">
                             <div class="flex flex-wrap items-center gap-2">
-                                <span class="rounded-full bg-[#d6e3ff] px-3 py-1 text-[0.68rem] font-bold uppercase tracking-[0.22em] text-[#001b3c]">Scholar Profile</span>
+                                <span class="rounded-full bg-[#d6e3ff] px-3 py-1 text-[0.68rem] font-bold uppercase tracking-[0.22em] text-[#001b3c]">Student Profile</span>
                             </div>
                             <h2 class="mt-3 text-3xl font-semibold tracking-tight text-[#111c2c] sm:text-4xl">{{ $selected['name'] }}</h2>
                             <div class="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm text-[#43474e]">
@@ -446,7 +446,7 @@ $chartPayload = [
                                 variant="ghost"
                                 size="sm"
                                 icon="clipboard"
-                                onclick="copyScholarLink(this, @js($shareableUrl))"
+                                onclick="copyStudentLink(this, @js($shareableUrl))"
                             >
                                 Copy link
                             </flux:button>
@@ -467,7 +467,7 @@ $chartPayload = [
                                 <span class="rounded-full bg-[#d6e3ff] px-3 py-1 text-xs font-bold uppercase tracking-[0.12em] text-[#001b3c]">{{ count($monthKeys) }} months</span>
                             </div>
                             <div class="mt-6 h-72">
-                                <canvas data-scholar-chart="monthly"></canvas>
+                                <canvas data-student-chart="monthly"></canvas>
                             </div>
                         </section>
                     @endif
@@ -487,7 +487,7 @@ $chartPayload = [
                         @if (! empty($weightComponents))
                             <div class="mt-5 mx-auto max-w-xs">
                                 <div class="h-64">
-                                    <canvas data-scholar-chart="weights" data-semester-index="0"></canvas>
+                                    <canvas data-student-chart="weights" data-semester-index="0"></canvas>
                                 </div>
                             </div>
                         @else
@@ -551,7 +551,7 @@ $chartPayload = [
                                     <div class="rounded-lg border border-[#e2e8f0] bg-[#f9f9ff] p-4">
                                         <div class="mb-3 text-sm font-semibold text-[#111c2c]">Evaluations by Category</div>
                                         <div class="h-56">
-                                            <canvas data-scholar-chart="semester" data-semester-index="{{ $i }}"></canvas>
+                                            <canvas data-student-chart="semester" data-semester-index="{{ $i }}"></canvas>
                                         </div>
                                     </div>
                                 </div>
@@ -603,7 +603,7 @@ $chartPayload = [
 
                     @if ($allComments->isEmpty())
                         <div class="p-6 text-sm leading-6 text-[#74777f]">
-                            No faculty comments have been recorded for this scholar.
+                            No faculty comments have been recorded for this student.
                         </div>
                     @else
                         <div class="max-h-[720px] space-y-5 overflow-y-auto p-5">
@@ -633,5 +633,5 @@ $chartPayload = [
         </section>
     @endif
 
-    <script type="application/json" data-scholar-chart-payload>@json($chartPayload)</script>
+    <script type="application/json" data-student-chart-payload>@json($chartPayload)</script>
 </div>

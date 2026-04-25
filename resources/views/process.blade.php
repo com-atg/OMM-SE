@@ -131,7 +131,7 @@
                 const banner = document.getElementById('summaryBanner');
                 if (state.status === 'complete') {
                     banner.className = 'mb-5 rounded-lg px-4 py-3 text-sm font-medium bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200';
-                    banner.textContent = `Completed - processed ${state.processed_groups || 0} scholar-semester group(s), ${unchanged} unchanged.`;
+                    banner.textContent = `Completed - processed ${state.processed_groups || 0} student-semester group(s), ${unchanged} unchanged.`;
                 } else {
                     banner.className = 'mb-5 rounded-lg px-4 py-3 text-sm font-medium bg-rose-50 text-rose-800 ring-1 ring-rose-200';
                     banner.textContent = 'Failed - see error details below.';

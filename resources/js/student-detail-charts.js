@@ -1,6 +1,6 @@
-window.scholarDetailCharts ??= [];
+window.studentDetailCharts ??= [];
 
-window.copyScholarLink = function (button, url) {
+window.copyStudentLink = function (button, url) {
     navigator.clipboard.writeText(url).then(() => {
         const original = button.innerHTML;
         button.innerHTML = original.replace('Copy link', 'Copied');
@@ -10,8 +10,8 @@ window.copyScholarLink = function (button, url) {
     });
 };
 
-function renderScholarCharts(root = document) {
-    const payloadNode = root.querySelector('[data-scholar-chart-payload]');
+function renderStudentCharts(root = document) {
+    const payloadNode = root.querySelector('[data-student-chart-payload]');
 
     if (! payloadNode || typeof Chart === 'undefined') {
         return;
@@ -22,12 +22,12 @@ function renderScholarCharts(root = document) {
     const gridColor = 'rgba(100, 116, 139, 0.16)';
     const tickColor = '#64748b';
 
-    window.scholarDetailCharts.forEach((chart) => chart.destroy());
-    window.scholarDetailCharts = [];
+    window.studentDetailCharts.forEach((chart) => chart.destroy());
+    window.studentDetailCharts = [];
 
-    const monthlyCanvas = root.querySelector('[data-scholar-chart="monthly"]');
+    const monthlyCanvas = root.querySelector('[data-student-chart="monthly"]');
     if (monthlyCanvas && payload.monthKeys?.length > 0) {
-        window.scholarDetailCharts.push(new Chart(monthlyCanvas, {
+        window.studentDetailCharts.push(new Chart(monthlyCanvas, {
             type: 'bar',
             data: {
                 labels: payload.monthKeys,
@@ -52,14 +52,14 @@ function renderScholarCharts(root = document) {
         }));
     }
 
-    root.querySelectorAll('[data-scholar-chart="semester"]').forEach((canvas) => {
+    root.querySelectorAll('[data-student-chart="semester"]').forEach((canvas) => {
         const sem = payload.semesters[Number(canvas.dataset.semesterIndex)];
 
         if (! sem) {
             return;
         }
 
-        window.scholarDetailCharts.push(new Chart(canvas, {
+        window.studentDetailCharts.push(new Chart(canvas, {
             type: 'bar',
             data: {
                 labels: sem.category_labels,
@@ -93,7 +93,7 @@ function renderScholarCharts(root = document) {
         }));
     });
 
-    root.querySelectorAll('[data-scholar-chart="weights"]').forEach((canvas) => {
+    root.querySelectorAll('[data-student-chart="weights"]').forEach((canvas) => {
         const sem = payload.semesters[Number(canvas.dataset.semesterIndex)];
         const components = sem?.score_formula?.components || [];
 
@@ -101,7 +101,7 @@ function renderScholarCharts(root = document) {
             return;
         }
 
-        window.scholarDetailCharts.push(new Chart(canvas, {
+        window.studentDetailCharts.push(new Chart(canvas, {
             type: 'doughnut',
             data: {
                 labels: components.map((component) => component.label),
@@ -136,13 +136,13 @@ function renderScholarCharts(root = document) {
     });
 }
 
-export function bootScholarDetailCharts(Livewire) {
-    document.addEventListener('DOMContentLoaded', () => renderScholarCharts(document));
-    document.addEventListener('livewire:navigated', () => renderScholarCharts(document));
+export function bootStudentDetailCharts(Livewire) {
+    document.addEventListener('DOMContentLoaded', () => renderStudentCharts(document));
+    document.addEventListener('livewire:navigated', () => renderStudentCharts(document));
 
     Livewire.hook('morphed', ({ el }) => {
-        if (el.querySelector('[data-scholar-chart-payload]')) {
-            renderScholarCharts(el);
+        if (el.querySelector('[data-student-chart-payload]')) {
+            renderStudentCharts(el);
         }
     });
 }

@@ -41,13 +41,13 @@ class NotifierController extends Controller
         }
 
         // Validate required fields before processing.
-        $scholarCode = (string) ($evalRecord['student'] ?? '');
+        $studentCode = (string) ($evalRecord['student'] ?? '');
         $semesterCode = (string) ($evalRecord['semester'] ?? '');
         $evalCategory = (string) ($evalRecord['eval_category'] ?? '');
 
-        if ($scholarCode === '' || $semesterCode === '' || $evalCategory === '') {
+        if ($studentCode === '' || $semesterCode === '' || $evalCategory === '') {
             Log::error("NotifierController: record {$recordId} is missing required fields.", [
-                'student' => $scholarCode,
+                'student' => $studentCode,
                 'semester' => $semesterCode,
                 'eval_category' => $evalCategory,
             ]);
@@ -63,47 +63,47 @@ class NotifierController extends Controller
             return response('', 200);
         }
 
-        // 2. Fetch all evals for this scholar + semester to recalculate aggregates.
-        $allEvals = $source->getScholarEvals($scholarCode, $semesterCode, $sourceToken);
+        // 2. Fetch all evals for this student + semester to recalculate aggregates.
+        $allEvals = $source->getStudentEvals($studentCode, $semesterCode, $sourceToken);
 
         // 3. Aggregate scores per category and collect comments.
         $aggregates = EvalAggregator::aggregate($allEvals, $semester);
 
         // 4. Find destination record by datatelid (the raw value of the source 'student' field).
-        $scholarRecord = $destination->findScholarByDatatelId($scholarCode);
+        $studentRecord = $destination->findStudentByDatatelId($studentCode);
 
-        if (! $scholarRecord) {
-            Log::error("NotifierController: no destination record found for datatelid '{$scholarCode}'.");
+        if (! $studentRecord) {
+            Log::error("NotifierController: no destination record found for datatelid '{$studentCode}'.");
 
             return response('', 200);
         }
 
-        $fullName = trim(($scholarRecord['first_name'] ?? '').' '.($scholarRecord['last_name'] ?? ''));
+        $fullName = trim(($studentRecord['first_name'] ?? '').' '.($studentRecord['last_name'] ?? ''));
 
         // 5. Push updated aggregates to destination.
         $updatePayload = array_merge(
-            ['record_id' => $scholarRecord['record_id']],
+            ['record_id' => $studentRecord['record_id']],
             $aggregates['fields'],
         );
 
-        $destination->updateScholarRecord($updatePayload);
+        $destination->updateStudentRecord($updatePayload);
 
-        Log::info("NotifierController: updated destination record {$scholarRecord['record_id']} for {$fullName}.");
+        Log::info("NotifierController: updated destination record {$studentRecord['record_id']} for {$fullName}.");
 
-        // 6. Send email notification — email and name come from the destination scholar record.
-        $scholarEmail = filter_var($scholarRecord['email'] ?? '', FILTER_VALIDATE_EMAIL) ?: null;
+        // 6. Send email notification — email and name come from the destination student record.
+        $studentEmail = filter_var($studentRecord['email'] ?? '', FILTER_VALIDATE_EMAIL) ?: null;
         $facultyEmail = filter_var($evalRecord['faculty_email'] ?? '', FILTER_VALIDATE_EMAIL) ?: null;
 
-        if ($scholarEmail) {
+        if ($studentEmail) {
             $mailable = new EvaluationNotification(
                 evalRecord: $evalRecord,
-                scholarRecord: $scholarRecord,
+                studentRecord: $studentRecord,
                 semester: $semester,
                 aggregates: $aggregates,
                 evalCategory: $evalCategory,
             );
 
-            $mailer = Mail::to($scholarEmail);
+            $mailer = Mail::to($studentEmail);
 
             if ($facultyEmail) {
                 $mailer->cc($facultyEmail);
@@ -111,7 +111,7 @@ class NotifierController extends Controller
 
             $mailer->bcc(config('mail.from.address'))->send($mailable);
 
-            Log::info("NotifierController: email sent to {$scholarEmail}.");
+            Log::info("NotifierController: email sent to {$studentEmail}.");
         }
 
         return response('', 200);

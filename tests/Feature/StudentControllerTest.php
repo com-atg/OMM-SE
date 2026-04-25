@@ -15,7 +15,7 @@ beforeEach(function () {
     asService();
 });
 
-function scholarRoster(): array
+function studentRoster(): array
 {
     return [
         [
@@ -49,17 +49,17 @@ function scholarRoster(): array
 
 it('renders the picker with a sorted roster and no selection', function () {
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('getAllScholarRecords')->twice()->andReturn(scholarRoster());
+    $destination->shouldReceive('getAllStudentRecords')->twice()->andReturn(studentRoster());
 
-    $response = get('/scholar');
+    $response = get('/student');
 
     $response->assertOk()
-        ->assertViewIs('scholar')
-        ->assertSee('Select a scholar')
+        ->assertViewIs('student')
+        ->assertSee('Select a student')
         ->assertSee('NYITCOM', false)
         ->assertSee('data-flux-select-native', false)
         ->assertDontSee('scriptModule', false)
-        ->assertDontSee('scholar-detail.js', false)
+        ->assertDontSee('student-detail.js', false)
         ->assertDontSee('livewire.min.js', false)
         ->assertDontSee('flux.min.js', false)
         ->assertDontSee('View', false)
@@ -82,13 +82,13 @@ it('bundles the Livewire and Flux runtimes through Vite', function () {
     expect($entrypoint)
         ->toContain('livewire.esm')
         ->toContain('flux-pro/dist/flux.module.js')
-        ->toContain('scholar-detail-charts')
+        ->toContain('student-detail-charts')
         ->toContain('Livewire.start()');
 
-    expect(file_get_contents(resource_path('js/scholar-detail-charts.js')))
-        ->toContain('renderScholarCharts')
-        ->toContain('bootScholarDetailCharts')
-        ->toContain('data-scholar-chart="weights"')
+    expect(file_get_contents(resource_path('js/student-detail-charts.js')))
+        ->toContain('renderStudentCharts')
+        ->toContain('bootStudentDetailCharts')
+        ->toContain('data-student-chart="weights"')
         ->toContain("type: 'doughnut'");
 });
 
@@ -105,7 +105,7 @@ it('uses a path-safe Livewire config for the Vite runtime', function () {
 });
 
 it('centers evaluation summary table columns', function () {
-    $component = file_get_contents(resource_path('views/components/⚡scholar-detail.blade.php'));
+    $component = file_get_contents(resource_path('views/components/⚡student-detail.blade.php'));
 
     expect($component)
         ->toContain('align="center">Category')
@@ -118,11 +118,11 @@ it('centers evaluation summary table columns', function () {
 it('serves runtime fallback assets without js or css route extensions', function () {
     get(route('runtime.livewire', absolute: false))->assertOk();
     get(route('runtime.flux', absolute: false))->assertOk();
-    get(route('runtime.scholar-detail-charts', absolute: false))->assertOk();
+    get(route('runtime.student-detail-charts', absolute: false))->assertOk();
     get(route('runtime.flux-styles', absolute: false))->assertOk();
 });
 
-it('renders per-semester eval counts when a scholar is selected', function () {
+it('renders per-semester eval counts when a student is selected', function () {
     $mapping = ProjectMapping::factory()->create();
     $weights = ['teaching' => 25.0, 'clinic' => 25.0, 'research' => 20.0, 'didactics' => 20.0, 'leadership' => 10.0];
     foreach (WeightCategory::cases() as $category) {
@@ -130,19 +130,19 @@ it('renders per-semester eval counts when a scholar is selected', function () {
     }
 
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('getAllScholarRecords')->twice()->andReturn(scholarRoster());
+    $destination->shouldReceive('getAllStudentRecords')->twice()->andReturn(studentRoster());
 
-    $response = get('/scholar?id=10');
+    $response = get('/student?id=10');
 
     $response->assertOk()
         ->assertSee('Cat Chin', false)
-        ->assertSee('Scholar Profile', false)
+        ->assertSee('Student Profile', false)
         ->assertSee('Final Grade', false)
         ->assertSee('91.25', false)
         ->assertSee('Leadership', false)
         ->assertSee('17/20', false)
         ->assertSee('Weight Distribution', false)
-        ->assertSee('data-scholar-chart="weights"', false)
+        ->assertSee('data-student-chart="weights"', false)
         ->assertDontSee('REDCap formula', false)
         ->assertDontSee('round(([spring_avg_teaching]*0.25)', false)
         ->assertSee('https://guru.nyit.edu/GuruAdmin/StudentOverview/StudentPhotoImageHandler.ashx?id=1234567', false);
@@ -162,23 +162,23 @@ it('renders per-semester eval counts when a scholar is selected', function () {
         ->and($semesters[1]['total'])->toBe(1);
 });
 
-it('ignores an unknown scholar id', function () {
+it('ignores an unknown student id', function () {
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('getAllScholarRecords')->twice()->andReturn(scholarRoster());
+    $destination->shouldReceive('getAllStudentRecords')->twice()->andReturn(studentRoster());
 
-    $response = get('/scholar?id=999');
+    $response = get('/student?id=999');
 
     $response->assertOk();
     expect($response->viewData('selected'))->toBeNull();
 });
 
-it('updates the scholar detail component when the selection changes', function () {
+it('updates the student detail component when the selection changes', function () {
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('getAllScholarRecords')->twice()->andReturn(scholarRoster());
+    $destination->shouldReceive('getAllStudentRecords')->twice()->andReturn(studentRoster());
 
-    Livewire::test('scholar-detail')
-        ->assertSee('Select a scholar')
-        ->assertDontSee('Scholar Profile')
+    Livewire::test('student-detail')
+        ->assertSee('Select a student')
+        ->assertDontSee('Student Profile')
         ->set('selectedId', '10')
         ->assertSet('selectedId', '10')
         ->assertSee('Cat Chin')
@@ -188,27 +188,27 @@ it('updates the scholar detail component when the selection changes', function (
 
 it('shows a pending final grade when no final score exists', function () {
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('getAllScholarRecords')->once()->andReturn(scholarRoster());
+    $destination->shouldReceive('getAllStudentRecords')->once()->andReturn(studentRoster());
 
-    Livewire::test('scholar-detail', ['initialSelectedId' => '11'])
+    Livewire::test('student-detail', ['initialSelectedId' => '11'])
         ->assertSee('Ava Adams')
         ->assertSee('Final Grade')
         ->assertSee('Pending')
         ->assertSee('Final grade is not available yet.');
 });
 
-it('hides student-only navigation and sharing controls on the scholar view', function () {
+it('hides student-only navigation and sharing controls on the student view', function () {
     $student = asStudent('10');
 
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('getAllScholarRecords')->twice()->andReturn(scholarRoster());
+    $destination->shouldReceive('getAllStudentRecords')->twice()->andReturn(studentRoster());
 
-    $response = get('/scholar');
+    $response = get('/student');
 
     $response->assertOk()
         ->assertSee('Cat Chin', false)
         ->assertDontSee('Shareable Link', false)
-        ->assertDontSee(route('scholar.token', $student->public_token), false)
+        ->assertDontSee(route('student.token', $student->public_token), false)
         ->assertDontSee('href="'.route('dashboard', absolute: false).'"', false);
 
     expect($response->viewData('shareable_url'))->toBeNull();

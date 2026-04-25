@@ -2,11 +2,13 @@
 
 use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
+use App\Http\Controllers\Auth\LocalLoginController;
 use App\Http\Controllers\Auth\SamlController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\FacultyController;
 use App\Http\Controllers\NotifierController;
 use App\Http\Controllers\ProcessController;
-use App\Http\Controllers\ScholarController;
+use App\Http\Controllers\StudentController;
 use App\Http\Middleware\RequireSamlAuth;
 use App\Http\Middleware\VerifyWebhookToken;
 use App\Mail\EvaluationNotification;
@@ -29,17 +31,23 @@ Route::get('/runtime/flux', function () {
     ]);
 })->name('runtime.flux');
 
-Route::get('/runtime/scholar-detail-charts', function () {
-    return response()->file(resource_path('js/scholar-detail-charts.js'), [
+Route::get('/runtime/student-detail-charts', function () {
+    return response()->file(resource_path('js/student-detail-charts.js'), [
         'Content-Type' => 'text/javascript; charset=UTF-8',
     ]);
-})->name('runtime.scholar-detail-charts');
+})->name('runtime.student-detail-charts');
 
 Route::get('/runtime/flux-styles', function () {
     return response()->file(base_path('vendor/livewire/flux/dist/flux.css'), [
         'Content-Type' => 'text/css; charset=UTF-8',
     ]);
 })->name('runtime.flux-styles');
+
+// Local development login bypass (APP_ENV=local only)
+if (app()->environment('local')) {
+    Route::get('/local/login', [LocalLoginController::class, 'index'])->name('local.login');
+    Route::post('/local/login', [LocalLoginController::class, 'login'])->name('local.login.post');
+}
 
 // SAML SSO (Okta)
 Route::get('/saml/login', [SamlController::class, 'login'])->name('saml.login');
@@ -58,10 +66,11 @@ Route::get('/saml/metadata', [SamlController::class, 'metadata'])
 
 Route::middleware(RequireSamlAuth::class)->group(function () {
     Route::get('/', DashboardController::class)->name('dashboard');
-    Route::get('/scholar', ScholarController::class)->name('scholar');
-    Route::get('/scholar/{token}', [ScholarController::class, 'show'])
+    Route::get('/student', StudentController::class)->name('student');
+    Route::get('/faculty', FacultyController::class)->name('faculty');
+    Route::get('/student/{token}', [StudentController::class, 'show'])
         ->where('token', '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
-        ->name('scholar.token');
+        ->name('student.token');
 
     // Bulk aggregation for a source REDCap project identified by PID.
     // Token resolved from .env as REDCAP_TOKEN_PID_{pid}.
@@ -129,7 +138,7 @@ Route::get('/test/email', function () {
         ]
     );
 
-    $scholarRecord = [
+    $studentRecord = [
         'record_id' => '1',
         'first_name' => 'Catherine',
         'last_name' => 'Chin',
@@ -150,7 +159,7 @@ Route::get('/test/email', function () {
 
     return new EvaluationNotification(
         evalRecord: $evalRecord,
-        scholarRecord: $scholarRecord,
+        studentRecord: $studentRecord,
         semester: 'spring',
         aggregates: $aggregates,
         evalCategory: 'A',

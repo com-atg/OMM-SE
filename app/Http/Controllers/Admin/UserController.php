@@ -23,6 +23,7 @@ class UserController extends Controller
         $counts = [
             'service' => $users->where('role', Role::Service)->count(),
             'admin' => $users->where('role', Role::Admin)->count(),
+            'faculty' => $users->where('role', Role::Faculty)->count(),
             'student' => $users->where('role', Role::Student)->count(),
             'deleted' => $trashedUsers->count(),
         ];
@@ -136,14 +137,14 @@ class UserController extends Controller
 
     public function import(RedcapDestinationService $destination): RedirectResponse
     {
-        Cache::forget('destination:all_scholars');
-        $scholars = $destination->getAllScholarRecords();
+        Cache::forget('destination:all_students');
+        $students = $destination->getAllStudentRecords();
 
         $created = 0;
         $skipped = 0;
 
-        foreach ($scholars as $scholar) {
-            $email = strtolower(trim((string) ($scholar['email'] ?? '')));
+        foreach ($students as $student) {
+            $email = strtolower(trim((string) ($student['email'] ?? '')));
 
             if ($email === '') {
                 continue;
@@ -155,15 +156,15 @@ class UserController extends Controller
                 continue;
             }
 
-            $firstName = trim((string) ($scholar['goes_by'] ?: ($scholar['first_name'] ?? '')));
-            $lastName = trim((string) ($scholar['last_name'] ?? ''));
+            $firstName = trim((string) ($student['goes_by'] ?: ($student['first_name'] ?? '')));
+            $lastName = trim((string) ($student['last_name'] ?? ''));
             $name = trim("{$firstName} {$lastName}") ?: $email;
 
             User::create([
                 'email' => $email,
                 'name' => $name,
                 'role' => Role::Student,
-                'redcap_record_id' => (string) ($scholar['record_id'] ?? '') ?: null,
+                'redcap_record_id' => (string) ($student['record_id'] ?? '') ?: null,
             ]);
 
             $created++;

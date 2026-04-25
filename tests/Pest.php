@@ -70,3 +70,14 @@ function asStudent(?string $redcapRecordId = null): User
 
     return $user;
 }
+
+function asFaculty(?string $email = null, ?string $name = null): User
+{
+    $user = User::factory()->faculty()->create(array_filter([
+        'email' => $email ? strtolower($email) : null,
+        'name' => $name,
+    ]));
+    test()->actingAs($user);
+
+    return $user;
+}

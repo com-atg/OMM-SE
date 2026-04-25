@@ -18,8 +18,9 @@ class AppServiceProvider extends ServiceProvider
             URL::forceRootUrl(config('app.url'));
         }
 
-        Gate::define('view-dashboard', fn (User $user) => $user->canViewAllScholars());
-        Gate::define('view-all-scholars', fn (User $user) => $user->canViewAllScholars());
+        Gate::define('view-dashboard', fn (User $user) => $user->canViewDashboard());
+        Gate::define('view-all-students', fn (User $user) => $user->canViewAllStudents());
+        Gate::define('view-faculty-detail', fn (User $user) => $user->canViewFacultyDetail());
         Gate::define('run-process', fn (User $user) => $user->isService());
         Gate::define('manage-users', fn (User $user) => $user->canManageUsers());
         Gate::define('manage-settings', fn (User $user) => $user->canViewSettings());

@@ -10,35 +10,35 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 
-class ScholarController extends Controller
+class StudentController extends Controller
 {
     private const SEMESTERS = ['spring' => 'Spring', 'fall' => 'Fall'];
 
     /**
-     * Standard scholar page — students see their own record, Service/Admin see the full roster.
+     * Standard student page — students see their own record, Service/Admin see the full roster.
      */
     public function __invoke(Request $request, RedcapDestinationService $destination): View
     {
         $user = Auth::user();
         abort_unless($user !== null, 403);
 
-        $records = $destination->getAllScholarRecords();
+        $records = $destination->getAllStudentRecords();
 
         if ($user->isStudent()) {
             $match = $this->resolveRecord($records, (string) ($user->redcap_record_id ?? ''));
 
             abort_unless($match, 404, 'No evaluation records found for your account.');
 
-            return view('scholar', [
+            return view('student', [
                 'roster' => [],
-                'selected' => $this->selectedScholar($match),
+                'selected' => $this->selectedStudent($match),
                 'semesters' => $this->buildSemesters($match),
                 'lock_selection' => true,
                 'shareable_url' => null,
             ]);
         }
 
-        abort_unless($user->canViewAllScholars(), 403);
+        abort_unless($user->canViewAllStudents(), 403);
 
         $roster = collect($records)
             ->map(fn ($r) => [
@@ -58,12 +58,12 @@ class ScholarController extends Controller
             $match = $this->resolveRecord($records, $selectedId);
 
             if ($match) {
-                $selected = $this->selectedScholar($match);
+                $selected = $this->selectedStudent($match);
                 $semesters = $this->buildSemesters($match);
             }
         }
 
-        return view('scholar', [
+        return view('student', [
             'roster' => $roster,
             'selected' => $selected,
             'semesters' => $semesters,
@@ -73,7 +73,7 @@ class ScholarController extends Controller
     }
 
     /**
-     * Token-resolved scholar page — resolves a specific student by their public UUID.
+     * Token-resolved student page — resolves a specific student by their public UUID.
      * Service/Admin may view any token; Students may only view their own.
      */
     public function show(string $token, RedcapDestinationService $destination): View
@@ -88,19 +88,19 @@ class ScholarController extends Controller
             abort(403);
         }
 
-        abort_unless($viewer->canViewAllScholars() || $viewer->id === $target->id, 403);
+        abort_unless($viewer->canViewAllStudents() || $viewer->id === $target->id, 403);
 
-        $records = $destination->getAllScholarRecords();
+        $records = $destination->getAllStudentRecords();
         $match = $this->resolveRecord($records, (string) ($target->redcap_record_id ?? ''));
 
         abort_unless($match, 404, 'No evaluation records found for this token.');
 
-        return view('scholar', [
+        return view('student', [
             'roster' => [],
-            'selected' => $this->selectedScholar($match),
+            'selected' => $this->selectedStudent($match),
             'semesters' => $this->buildSemesters($match),
             'lock_selection' => true,
-            'shareable_url' => $viewer->isStudent() ? null : route('scholar.token', $target->public_token),
+            'shareable_url' => $viewer->isStudent() ? null : route('student.token', $target->public_token),
         ]);
     }
 
@@ -129,7 +129,7 @@ class ScholarController extends Controller
      * @param  array<string,mixed>  $record
      * @return array{record_id:string,name:string,datatelid:string|null,photo_url:string|null}
      */
-    private function selectedScholar(array $record): array
+    private function selectedStudent(array $record): array
     {
         $datatelId = trim((string) ($record['datatelid'] ?? ''));
 
@@ -143,7 +143,7 @@ class ScholarController extends Controller
 
     /**
      * Build per-semester eval counts, averages, scores, dates, comments,
-     * and monthly activity data for the scholar view.
+     * and monthly activity data for the student view.
      *
      * @param  array<string,mixed>  $record
      * @return array<int,array<string,mixed>>

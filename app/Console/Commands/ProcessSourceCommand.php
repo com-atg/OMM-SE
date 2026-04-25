@@ -67,7 +67,7 @@ class ProcessSourceCommand extends Command
             return self::SUCCESS;
         }
 
-        // ── Group by scholar + semester ───────────────────────────────────────
+        // ── Group by student + semester ───────────────────────────────────────
 
         $groups = [];
         $skipped = ['missing_required_fields' => 0];
@@ -86,17 +86,17 @@ class ProcessSourceCommand extends Command
         }
 
         $groupCount = count($groups);
-        $this->line("  <info>{$groupCount}</info> scholar-semester group(s) identified.");
+        $this->line("  <info>{$groupCount}</info> student-semester group(s) identified.");
 
-        // ── Load destination scholar map ──────────────────────────────────────
+        // ── Load destination student map ──────────────────────────────────────
 
-        $this->line('  Loading destination scholar map…');
+        $this->line('  Loading destination student map…');
 
         try {
-            $scholarMap = $destination->scholarMapByDatatelId();
+            $studentMap = $destination->studentMapByDatatelId();
         } catch (\Throwable $e) {
-            $this->error("Failed to fetch destination scholar map: {$e->getMessage()}");
-            Log::error('omm:process-source scholar map failed', ['error' => $e->getMessage()]);
+            $this->error("Failed to fetch destination student map: {$e->getMessage()}");
+            Log::error('omm:process-source student map failed', ['error' => $e->getMessage()]);
 
             return self::FAILURE;
         }
@@ -126,11 +126,11 @@ class ProcessSourceCommand extends Command
                 continue;
             }
 
-            $scholarRecord = $scholarMap[$datatelId] ?? null;
+            $studentRecord = $studentMap[$datatelId] ?? null;
 
-            if (! $scholarRecord) {
+            if (! $studentRecord) {
                 $notFound++;
-                $bar->setMessage("scholar {$datatelId} not found in destination");
+                $bar->setMessage("student {$datatelId} not found in destination");
                 $bar->advance();
 
                 continue;
@@ -138,12 +138,12 @@ class ProcessSourceCommand extends Command
 
             $aggregates = EvalAggregator::aggregate($groupEvals, $semester);
 
-            $bar->setMessage("{$scholarRecord['record_id']} · {$semester} · {$aggregates['by_category']['teaching']['nu']}T/{$aggregates['by_category']['clinic']['nu']}C/{$aggregates['by_category']['research']['nu']}R/{$aggregates['by_category']['didactics']['nu']}D evals");
+            $bar->setMessage("{$studentRecord['record_id']} · {$semester} · {$aggregates['by_category']['teaching']['nu']}T/{$aggregates['by_category']['clinic']['nu']}C/{$aggregates['by_category']['research']['nu']}R/{$aggregates['by_category']['didactics']['nu']}D evals");
 
             if (! $dryRun) {
                 try {
-                    $destination->updateScholarRecord(array_merge(
-                        ['record_id' => $scholarRecord['record_id']],
+                    $destination->updateStudentRecord(array_merge(
+                        ['record_id' => $studentRecord['record_id']],
                         $aggregates['fields'],
                     ));
                     $updated++;
@@ -170,7 +170,7 @@ class ProcessSourceCommand extends Command
 
         if (! $dryRun) {
             Cache::forget('dashboard:stats');
-            Cache::forget('destination:all_scholars');
+            Cache::forget('destination:all_students');
         }
 
         // ── Summary ───────────────────────────────────────────────────────────
@@ -179,10 +179,10 @@ class ProcessSourceCommand extends Command
             ['Metric', 'Count'],
             [
                 ['Source records', $total],
-                ['Scholar-semester groups', $groupCount],
+                ['Student-semester groups', $groupCount],
                 [$dryRun ? 'Would update' : 'Updated', $updated],
                 ['Failed', $failed],
-                ['Scholar not found', $notFound],
+                ['Student not found', $notFound],
                 ['Unknown semester', $unknownSemester],
                 ['Missing required fields', $skipped['missing_required_fields']],
             ],

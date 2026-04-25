@@ -1,5 +1,5 @@
 @php
-    $firstName = $scholarRecord['goes_by'] !== '' ? $scholarRecord['goes_by'] : $scholarRecord['first_name'];
+    $firstName = $studentRecord['goes_by'] !== '' ? $studentRecord['goes_by'] : $studentRecord['first_name'];
     $facultyName = trim((string) ($evalRecord['faculty'] ?? '')) !== '' ? $evalRecord['faculty'] : 'Faculty';
     $overallScore = $evalRecord[$scoreField] ?? null;
 

@@ -3,7 +3,7 @@
     'eyebrow' => null,
     'heading' => null,
     'subheading' => null,
-    'title' => config('app.name', 'OMM Scholar Evaluations'),
+    'title' => config('app.name', 'OMM Student Evaluations'),
     'width' => '7xl',
 ])
 
@@ -14,7 +14,9 @@
         default => 'max-w-6xl',
     };
     $user = auth()->user();
-    $showDashboardLink = ! $user?->isStudent();
+    $showDashboardLink = $user?->canViewDashboard() ?? false;
+    $showStudentLink = $user?->isStudent() || $user?->canViewAllStudents();
+    $showFacultyLink = $user?->canViewFacultyDetail() ?? false;
 
     $navLink = function (string $section) use ($active): string {
         return $active === $section
@@ -43,7 +45,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ $title }} - {{ config('app.name', 'OMM Scholar Evaluations') }}</title>
+    <title>{{ $title }} - {{ config('app.name', 'OMM Student Evaluations') }}</title>
 
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=inter:400,500,600,700,800&display=swap" rel="stylesheet">
@@ -59,12 +61,12 @@
         <script type="module" data-navigate-once>
             import { Livewire, Alpine } from @js(route('runtime.livewire'));
             import @js(route('runtime.flux'));
-            import { bootScholarDetailCharts } from @js(route('runtime.scholar-detail-charts'));
+            import { bootStudentDetailCharts } from @js(route('runtime.student-detail-charts'));
 
             window.Alpine = Alpine;
             window.Livewire = Livewire;
 
-            bootScholarDetailCharts(Livewire);
+            bootStudentDetailCharts(Livewire);
             Livewire.start();
         </script>
     @endif
@@ -86,7 +88,7 @@
                             <span class="text-amber-600">NYITCOM</span>
                             <span class="text-slate-950">OMM ACE</span>
                         </span>
-                        <span class="block truncate text-xs font-medium text-slate-500">Scholar Evaluations</span>
+                        <span class="block truncate text-xs font-medium text-slate-500">Student Evaluations</span>
                     </span>
                 </a>
 
@@ -96,9 +98,16 @@
                             Dashboard
                         </a>
                     @endif
-                    <a href="{{ route('scholar') }}" class="{{ $navLink('scholars') }} rounded-lg px-3 py-2 text-sm font-semibold transition">
-                        Scholars
-                    </a>
+                    @if ($showStudentLink)
+                        <a href="{{ route('student') }}" class="{{ $navLink('students') }} rounded-lg px-3 py-2 text-sm font-semibold transition">
+                            Students
+                        </a>
+                    @endif
+                    @if ($showFacultyLink)
+                        <a href="{{ route('faculty') }}" class="{{ $navLink('faculty') }} rounded-lg px-3 py-2 text-sm font-semibold transition">
+                            Faculty
+                        </a>
+                    @endif
                     @can('manage-users')
                         <a href="{{ route('admin.users.index') }}" class="{{ $navLink('users') }} rounded-lg px-3 py-2 text-sm font-semibold transition">
                             Users
@@ -129,7 +138,12 @@
                         @if ($showDashboardLink)
                             <flux:menu.item href="{{ route('dashboard') }}" icon="chart-pie">Dashboard</flux:menu.item>
                         @endif
-                        <flux:menu.item href="{{ route('scholar') }}" icon="users">Scholars</flux:menu.item>
+                        @if ($showStudentLink)
+                            <flux:menu.item href="{{ route('student') }}" icon="users">Students</flux:menu.item>
+                        @endif
+                        @if ($showFacultyLink)
+                            <flux:menu.item href="{{ route('faculty') }}" icon="identification">Faculty</flux:menu.item>
+                        @endif
                         @can('manage-users')
                             <flux:menu.item href="{{ route('admin.users.index') }}" icon="shield-check">Users</flux:menu.item>
                         @endcan

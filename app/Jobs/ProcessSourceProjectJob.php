@@ -34,9 +34,9 @@ class ProcessSourceProjectJob implements ShouldQueue
         try {
             $records = $source->fetchAllRecords($this->sourceToken);
 
-            $groups = $this->groupByScholarSemester($records, $state);
+            $groups = $this->groupByStudentSemester($records, $state);
 
-            $scholarMap = $destination->scholarMapByDatatelId();
+            $studentMap = $destination->studentMapByDatatelId();
 
             $state['status'] = 'running';
             $state['total_records'] = count($records);
@@ -58,10 +58,10 @@ class ProcessSourceProjectJob implements ShouldQueue
                     continue;
                 }
 
-                $scholarRecord = $scholarMap[$datatelId] ?? null;
+                $studentRecord = $studentMap[$datatelId] ?? null;
 
-                if (! $scholarRecord) {
-                    $this->bumpSkip($state, 'scholar_not_found');
+                if (! $studentRecord) {
+                    $this->bumpSkip($state, 'student_not_found');
                     $this->tick($cacheKey, $state);
 
                     continue;
@@ -70,11 +70,11 @@ class ProcessSourceProjectJob implements ShouldQueue
                 $aggregates = EvalAggregator::aggregate($groupEvals, $semester);
 
                 $payload = array_merge(
-                    ['record_id' => $scholarRecord['record_id']],
+                    ['record_id' => $studentRecord['record_id']],
                     $aggregates['fields'],
                 );
 
-                if ($this->recordAlreadyHasValues($scholarRecord, $payload)) {
+                if ($this->recordAlreadyHasValues($studentRecord, $payload)) {
                     $state['unchanged']++;
                     $this->tick($cacheKey, $state);
 
@@ -82,7 +82,7 @@ class ProcessSourceProjectJob implements ShouldQueue
                 }
 
                 try {
-                    $destination->updateScholarRecord($payload);
+                    $destination->updateStudentRecord($payload);
                     $state['updated']++;
                 } catch (\Throwable $e) {
                     Log::error('ProcessSourceProjectJob: update failed', [
@@ -102,7 +102,7 @@ class ProcessSourceProjectJob implements ShouldQueue
 
             // Invalidate dashboard cache so fresh data appears.
             Cache::forget('dashboard:stats');
-            Cache::forget('destination:all_scholars');
+            Cache::forget('destination:all_students');
         } catch (\Throwable $e) {
             Log::error('ProcessSourceProjectJob: fatal error', [
                 'pid' => $this->pid,
@@ -128,7 +128,7 @@ class ProcessSourceProjectJob implements ShouldQueue
      * @param  array<string,mixed>  $state
      * @return array<string,array<int,array<string,mixed>>>
      */
-    private function groupByScholarSemester(array $records, array &$state): array
+    private function groupByStudentSemester(array $records, array &$state): array
     {
         $groups = [];
 

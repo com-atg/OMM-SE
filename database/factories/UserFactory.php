@@ -41,6 +41,11 @@ class UserFactory extends Factory
         return $this->state(fn (array $attributes) => ['role' => Role::Student]);
     }
 
+    public function faculty(): static
+    {
+        return $this->state(fn (array $attributes) => ['role' => Role::Faculty]);
+    }
+
     public function withRedcapRecord(string $recordId): static
     {
         return $this->state(fn (array $attributes) => ['redcap_record_id' => $recordId]);

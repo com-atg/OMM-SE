@@ -40,6 +40,13 @@ class ProjectMapping extends Model
             ->first();
     }
 
+    public static function latestSourceProject(): ?self
+    {
+        return self::query()
+            ->orderByDesc('redcap_pid')
+            ->first();
+    }
+
     public function displayName(): string
     {
         return "Academic Year {$this->academic_year} (Class of {$this->graduation_year})";

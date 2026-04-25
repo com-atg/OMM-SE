@@ -67,6 +67,16 @@ it('creates a new user and redirects to the index', function () {
         ->and($user->name)->toBe('New Person');
 });
 
+it('creates a faculty user', function () {
+    post(route('admin.users.store'), [
+        'email' => 'faculty@example.com',
+        'name' => 'Faculty Person',
+        'role' => 'faculty',
+    ])->assertRedirect(route('admin.users.index'));
+
+    expect(User::where('email', 'faculty@example.com')->first()->role)->toBe(Role::Faculty);
+});
+
 it('rejects a duplicate email on store', function () {
     User::factory()->create(['email' => 'existing@example.com']);
 
@@ -203,9 +213,9 @@ it('cannot impersonate while already impersonating', function () {
 
 // ── REDCap Import ─────────────────────────────────────────────────────────────
 
-it('imports scholars from REDCap as student users', function () {
+it('imports students from REDCap as student users', function () {
     $mock = Mockery::mock(RedcapDestinationService::class);
-    $mock->shouldReceive('getAllScholarRecords')->once()->andReturn([
+    $mock->shouldReceive('getAllStudentRecords')->once()->andReturn([
         ['record_id' => '1', 'first_name' => 'Alice', 'last_name' => 'Smith', 'goes_by' => '', 'email' => 'alice@example.com'],
         ['record_id' => '2', 'first_name' => 'Bob', 'last_name' => 'Jones', 'goes_by' => 'Bobby', 'email' => 'bob@example.com'],
     ]);
@@ -219,11 +229,11 @@ it('imports scholars from REDCap as student users', function () {
         ->and(User::where('email', 'bob@example.com')->value('name'))->toBe('Bobby Jones');
 });
 
-it('skips scholars that already have a user account during import', function () {
+it('skips students that already have a user account during import', function () {
     User::factory()->student()->create(['email' => 'existing@example.com']);
 
     $mock = Mockery::mock(RedcapDestinationService::class);
-    $mock->shouldReceive('getAllScholarRecords')->once()->andReturn([
+    $mock->shouldReceive('getAllStudentRecords')->once()->andReturn([
         ['record_id' => '5', 'first_name' => 'Existing', 'last_name' => 'User', 'goes_by' => '', 'email' => 'existing@example.com'],
         ['record_id' => '6', 'first_name' => 'New', 'last_name' => 'Person', 'goes_by' => '', 'email' => 'new@example.com'],
     ]);
@@ -233,9 +243,9 @@ it('skips scholars that already have a user account during import', function () 
         ->assertSessionHas('status', fn ($v) => str_contains($v, '1 created') && str_contains($v, '1 already existed'));
 });
 
-it('skips scholars without an email during import', function () {
+it('skips students without an email during import', function () {
     $mock = Mockery::mock(RedcapDestinationService::class);
-    $mock->shouldReceive('getAllScholarRecords')->once()->andReturn([
+    $mock->shouldReceive('getAllStudentRecords')->once()->andReturn([
         ['record_id' => '7', 'first_name' => 'No', 'last_name' => 'Email', 'goes_by' => '', 'email' => ''],
     ]);
     app()->instance(RedcapDestinationService::class, $mock);

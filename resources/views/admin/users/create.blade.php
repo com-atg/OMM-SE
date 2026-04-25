@@ -61,7 +61,7 @@
                         </option>
                     @endforeach
                 </select>
-                <p class="mt-1 text-xs leading-5 text-slate-500">Service has full access, Admin can view all scholars, and Student sees their own evaluations.</p>
+                <p class="mt-1 text-xs leading-5 text-slate-500">Service has full access, Admin can view all students, and Student sees their own evaluations.</p>
                 @error('role')
                     <p class="mt-1 text-xs font-medium text-red-600">{{ $message }}</p>
                 @enderror

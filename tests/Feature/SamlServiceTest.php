@@ -52,6 +52,15 @@ it('promotes an existing student record to service when the email is allowlisted
         ->and($user->canManageUsers())->toBeTrue();
 });
 
+it('preserves an existing faculty role for non allowlisted logins', function () {
+    User::factory()->faculty()->create(['email' => 'faculty@example.com']);
+
+    $user = app(SamlService::class)->loginFromAssertion('faculty@example.com', 'Faculty User', null);
+
+    expect($user->role)->toBe(Role::Faculty)
+        ->and($user->isFaculty())->toBeTrue();
+});
+
 it('uses the allowlist role for first-time logins', function () {
     app(SamlService::class)->loginFromAssertion('boss@example.com', 'The Boss', null);
 

@@ -12,7 +12,7 @@ return new class extends Migration
             $table->id();
             $table->string('email')->unique();
             $table->string('name');
-            $table->enum('role', ['service', 'admin', 'student'])->default('student')->index();
+            $table->enum('role', ['service', 'admin', 'student', 'faculty'])->default('student')->index();
             $table->string('okta_nameid')->nullable();
             $table->string('redcap_record_id', 64)->nullable()->index();
             $table->timestamp('last_login_at')->nullable();

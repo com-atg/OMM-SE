@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Records not found — {{ config('app.name', 'OMM Scholar Evaluations') }}</title>
+    <title>Records not found — {{ config('app.name', 'OMM Student Evaluations') }}</title>
 
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=instrument-sans:400,500,600,700" rel="stylesheet">
@@ -26,7 +26,7 @@
                 No evaluation records found
             </h1>
             <p class="mt-3 text-sm text-slate-600">
-                We couldn't find any scholar evaluation records linked to
+                We couldn't find any student evaluation records linked to
                 <span class="font-medium text-slate-800">{{ $email }}</span>.
             </p>
             <p class="mt-4 text-sm text-slate-500">

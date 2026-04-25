@@ -29,7 +29,9 @@ class RequireSamlAuth
                 $request->session()->put('url.intended', $intendedUrl);
             }
 
-            return redirect()->route('saml.login');
+            return app()->environment('local')
+                ? redirect()->route('local.login')
+                : redirect()->route('saml.login');
         }
 
         return $next($request);

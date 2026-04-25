@@ -2,8 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ProjectMapping;
+use App\Models\User;
 use App\Services\RedcapDestinationService;
 use App\Services\RedcapSourceService;
+use App\Support\EvalAggregator;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
@@ -12,7 +15,7 @@ use Illuminate\Support\Facades\Log;
 
 class DashboardController extends Controller
 {
-    private const CACHE_KEY = 'dashboard:stats:v2';
+    private const CACHE_KEY = 'dashboard:stats:v3';
 
     private const FALLBACK_CACHE_KEY = 'dashboard:stats:last-success';
 
@@ -26,21 +29,29 @@ class DashboardController extends Controller
         ['label' => '90–100', 'min' => 90.0, 'max' => 100.01],
     ];
 
-    public function __invoke(RedcapDestinationService $destination): View|RedirectResponse
+    public function __invoke(RedcapDestinationService $destination, RedcapSourceService $source): View|RedirectResponse
     {
         $user = Auth::user();
 
         if ($user && $user->isStudent()) {
-            return redirect()->route('scholar');
+            return redirect()->route('student');
         }
 
-        abort_unless($user && $user->canViewAllScholars(), 403);
+        abort_unless($user && $user->canViewDashboard(), 403);
+
+        if ($user->isFaculty()) {
+            return view('dashboard', [
+                'stats' => $this->buildStats(
+                    $this->destinationShapedRecordsForFaculty($source, $user)
+                ),
+            ]);
+        }
 
         $stats = Cache::get(self::CACHE_KEY);
 
         if ($stats === null) {
             try {
-                $records = $destination->getAllScholarRecords();
+                $records = $destination->getAllStudentRecords();
                 $stats = $this->buildStats($records);
 
                 Cache::put(self::CACHE_KEY, $stats, now()->addMinutes(10));
@@ -63,6 +74,47 @@ class DashboardController extends Controller
     }
 
     /**
+     * @return array<int,array<string,mixed>>
+     */
+    private function destinationShapedRecordsForFaculty(RedcapSourceService $source, User $user): array
+    {
+        $sourceToken = ProjectMapping::latestSourceProject()?->redcap_token;
+        $records = collect($source->getCompletedEvaluationRecords(token: $sourceToken))
+            ->filter(fn (array $record): bool => $this->recordBelongsToFaculty($record, $user));
+
+        $studentRecords = [];
+
+        foreach ($records->groupBy(fn (array $record): string => trim((string) ($record['student'] ?? '')).'|'.trim((string) ($record['semester'] ?? ''))) as $key => $group) {
+            [$studentId, $semesterCode] = explode('|', $key);
+            $semester = EvalAggregator::SEMESTER_MAP[$semesterCode] ?? null;
+
+            if ($studentId === '' || $semester === null) {
+                continue;
+            }
+
+            $studentRecords[$studentId] ??= ['record_id' => $studentId];
+            $studentRecords[$studentId] = array_merge(
+                $studentRecords[$studentId],
+                EvalAggregator::aggregate($group->values()->all(), $semester)['fields'],
+            );
+        }
+
+        return array_values($studentRecords);
+    }
+
+    /**
+     * @param  array<string,mixed>  $record
+     */
+    private function recordBelongsToFaculty(array $record, User $user): bool
+    {
+        $facultyEmail = strtolower(trim((string) ($record['faculty_email'] ?? '')));
+        $facultyName = strtolower(trim((string) ($record['faculty'] ?? '')));
+
+        return ($facultyEmail !== '' && $facultyEmail === strtolower($user->email))
+            || ($facultyName !== '' && $facultyName === strtolower($user->name));
+    }
+
+    /**
      * @param  array<int,array<string,mixed>>  $records
      * @return array<string,mixed>
      */
@@ -71,11 +123,11 @@ class DashboardController extends Controller
         $categories = RedcapSourceService::DEST_CATEGORY;
         $labels = RedcapSourceService::CATEGORY_LABELS;
 
-        $totalScholars = count($records);
+        $totalStudents = count($records);
         $totalEvals = 0;
         $scoreSum = 0.0;
         $scoreWeight = 0;
-        $scholarsWithAnyEval = 0;
+        $studentsWithAnyEval = 0;
 
         // Per-category, per-semester totals.
         $countByCatSem = [];
@@ -95,10 +147,10 @@ class DashboardController extends Controller
         }
 
         foreach ($records as $record) {
-            $scholarHasAnyEval = false;
+            $studentHasAnyEval = false;
 
             foreach ($categories as $catKey) {
-                $scholarHasCategory = false;
+                $studentHasCategory = false;
 
                 foreach (self::SEMESTERS as $sem) {
                     $nu = (int) ($record["{$sem}_nu_{$catKey}"] ?? 0);
@@ -107,8 +159,8 @@ class DashboardController extends Controller
                     if ($nu > 0) {
                         $countByCatSem[$catKey][$sem] += $nu;
                         $totalEvals += $nu;
-                        $scholarHasAnyEval = true;
-                        $scholarHasCategory = true;
+                        $studentHasAnyEval = true;
+                        $studentHasCategory = true;
 
                         if ($avgRaw !== '' && is_numeric($avgRaw)) {
                             $avg = (float) $avgRaw;
@@ -122,13 +174,13 @@ class DashboardController extends Controller
                     }
                 }
 
-                if ($scholarHasCategory) {
+                if ($studentHasCategory) {
                     $coverageByCat[$catKey]++;
                 }
             }
 
-            if ($scholarHasAnyEval) {
-                $scholarsWithAnyEval++;
+            if ($studentHasAnyEval) {
+                $studentsWithAnyEval++;
             }
         }
 
@@ -158,8 +210,8 @@ class DashboardController extends Controller
 
         $coveragePct = [];
         foreach ($categoryKeys as $catKey) {
-            $coveragePct[] = $totalScholars > 0
-                ? round($coverageByCat[$catKey] / $totalScholars * 100, 1)
+            $coveragePct[] = $totalStudents > 0
+                ? round($coverageByCat[$catKey] / $totalStudents * 100, 1)
                 : 0;
         }
 
@@ -173,14 +225,14 @@ class DashboardController extends Controller
         }
 
         return [
-            'has_scholars' => $totalScholars > 0,
+            'has_students' => $totalStudents > 0,
             'has_evals' => $totalEvals > 0,
             'kpis' => [
-                'total_scholars' => $totalScholars,
+                'total_students' => $totalStudents,
                 'total_evals' => $totalEvals,
                 'overall_avg' => $scoreWeight > 0 ? round($scoreSum / $scoreWeight, 2) : null,
-                'scholars_evaluated' => $scholarsWithAnyEval,
-                'scholars_without_evals' => max(0, $totalScholars - $scholarsWithAnyEval),
+                'students_evaluated' => $studentsWithAnyEval,
+                'students_without_evals' => max(0, $totalStudents - $studentsWithAnyEval),
             ],
             'category_labels' => array_values($categoryLabels),
             'avg_by_category' => $avgByCategory,

@@ -26,6 +26,7 @@
                     <span class="ml-auto inline-flex rounded-full px-2.5 py-1 text-xs font-bold
                         @if ($user->isService()) bg-violet-100 text-violet-800
                         @elseif ($user->isAdmin()) bg-sky-100 text-sky-800
+                        @elseif ($user->isFaculty()) bg-teal-100 text-teal-800
                         @else bg-emerald-100 text-emerald-800
                         @endif">
                         {{ $user->role?->label() }}

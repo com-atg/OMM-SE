@@ -78,7 +78,17 @@ new class extends Component
 ?>
 
 <flux:modal name="edit-weights" class="w-full max-w-md">
-    <div class="space-y-6">
+    <div
+        class="space-y-6"
+        x-data="{
+            total: {{ collect($weights)->sum(fn($v) => is_numeric($v) ? (float) $v : 0) }},
+            updateTotal() {
+                this.total = Array.from(this.$el.querySelectorAll('input[type=number]'))
+                    .reduce((sum, el) => sum + (parseFloat(el.value) || 0), 0);
+            }
+        }"
+        x-on:input.capture="updateTotal()"
+    >
         <div>
             <flux:heading size="lg">Edit Category Weights</flux:heading>
             <flux:subheading>Configure score weights for {{ $academicYear }}. Values must sum to 100%.</flux:subheading>
@@ -86,7 +96,7 @@ new class extends Component
 
         <div class="space-y-4">
             @foreach (\App\Enums\WeightCategory::cases() as $category)
-                <div>
+                <div @if ($loop->last) x-on:keydown.tab.prevent="$refs.saveBtn.focus()" @endif>
                     <flux:input
                         wire:model="weights.{{ $category->value }}"
                         label="{{ $category->label() }}"
@@ -109,15 +119,13 @@ new class extends Component
                 </flux:callout>
             @enderror
 
-            @php
-                $total = collect($weights)->sum(fn($v) => is_numeric($v) ? (float) $v : 0);
-            @endphp
-
             <div class="flex items-center justify-between rounded-lg bg-slate-50 px-4 py-2.5 text-sm">
                 <span class="font-medium text-slate-600">Total</span>
-                <span class="font-bold {{ abs($total - 100) < 0.01 ? 'text-emerald-600' : 'text-amber-600' }}">
-                    {{ number_format($total, 1) }}%
-                </span>
+                <span
+                    class="font-bold"
+                    :class="Math.abs(total - 100) < 0.01 ? 'text-emerald-600' : 'text-amber-600'"
+                    x-text="total.toFixed(1) + '%'"
+                ></span>
             </div>
         </div>
 
@@ -125,7 +133,7 @@ new class extends Component
             <flux:modal.close>
                 <flux:button variant="ghost">Cancel</flux:button>
             </flux:modal.close>
-            <flux:button wire:click="save" variant="primary" icon="check">Save weights</flux:button>
+            <flux:button x-ref="saveBtn" wire:click="save" variant="primary" icon="check">Save weights</flux:button>
         </div>
     </div>
 </flux:modal>

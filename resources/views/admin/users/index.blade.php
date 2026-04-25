@@ -3,11 +3,11 @@
     active="users"
     eyebrow="System Access"
     heading="User Management"
-    subheading="Manage service accounts, admin access, student mappings, and REDCap roster imports."
+    subheading="Manage service accounts, admin access, faculty accounts, student mappings, and REDCap roster imports."
     width="wide"
 >
     <x-slot:headerActions>
-        <form method="POST" action="{{ route('admin.users.import') }}" onsubmit="return confirm('Import all scholar records from REDCap as Student users? Existing users will be skipped.')">
+        <form method="POST" action="{{ route('admin.users.import') }}" onsubmit="return confirm('Import all student records from REDCap as Student users? Existing users will be skipped.')">
             @csrf
             <flux:button type="submit" variant="ghost" icon="arrow-down-tray">Import from REDCap</flux:button>
         </form>
@@ -15,7 +15,7 @@
         <flux:button href="{{ route('admin.users.create') }}" variant="primary" icon="plus">Add User</flux:button>
     </x-slot:headerActions>
 
-    <section class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+    <section class="grid grid-cols-2 gap-4 lg:grid-cols-5">
         <div class="rounded-lg border border-white/80 bg-white/84 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.07)] backdrop-blur">
             <div class="text-[0.72rem] font-bold uppercase tracking-[0.3em] text-slate-500">Service</div>
             <div class="mt-3 text-3xl font-bold text-violet-700 tabular-nums">{{ $counts['service'] }}</div>
@@ -27,6 +27,10 @@
         <div class="rounded-lg border border-white/80 bg-white/84 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.07)] backdrop-blur">
             <div class="text-[0.72rem] font-bold uppercase tracking-[0.3em] text-slate-500">Student</div>
             <div class="mt-3 text-3xl font-bold text-emerald-700 tabular-nums">{{ $counts['student'] }}</div>
+        </div>
+        <div class="rounded-lg border border-white/80 bg-white/84 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.07)] backdrop-blur">
+            <div class="text-[0.72rem] font-bold uppercase tracking-[0.3em] text-slate-500">Faculty</div>
+            <div class="mt-3 text-3xl font-bold text-teal-700 tabular-nums">{{ $counts['faculty'] }}</div>
         </div>
         <div class="rounded-lg border border-white/80 bg-white/84 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.07)] backdrop-blur">
             <div class="text-[0.72rem] font-bold uppercase tracking-[0.3em] text-slate-500">Deleted</div>
@@ -51,6 +55,9 @@
                 </button>
                 <button data-filter="admin" class="filter-btn rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-600 ring-1 ring-slate-200 transition hover:bg-slate-50">
                     Admin ({{ $counts['admin'] }})
+                </button>
+                <button data-filter="faculty" class="filter-btn rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-600 ring-1 ring-slate-200 transition hover:bg-slate-50">
+                    Faculty ({{ $counts['faculty'] }})
                 </button>
                 <button data-filter="student" class="filter-btn rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-600 ring-1 ring-slate-200 transition hover:bg-slate-50">
                     Student ({{ $counts['student'] }})
@@ -88,6 +95,7 @@
                                     <div class="grid size-10 shrink-0 place-items-center rounded-lg text-sm font-bold
                                         @if ($u->isService()) bg-violet-100 text-violet-700
                                         @elseif ($u->isAdmin()) bg-sky-100 text-sky-700
+                                        @elseif ($u->isFaculty()) bg-teal-100 text-teal-700
                                         @else bg-emerald-100 text-emerald-700
                                         @endif">
                                         {{ strtoupper(substr($u->name, 0, 1)) }}
@@ -102,6 +110,7 @@
                                 <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-bold
                                     @if ($u->isService()) bg-violet-100 text-violet-800
                                     @elseif ($u->isAdmin()) bg-sky-100 text-sky-800
+                                    @elseif ($u->isFaculty()) bg-teal-100 text-teal-800
                                     @else bg-emerald-100 text-emerald-800
                                     @endif">
                                     {{ $u->role?->label() }}

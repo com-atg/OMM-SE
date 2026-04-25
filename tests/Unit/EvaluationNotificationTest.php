@@ -42,7 +42,7 @@ function makeEvalRecord(string $category = 'A', array $overrides = []): array
     return array_merge($base, $overrides);
 }
 
-function makeScholarRecord(array $overrides = []): array
+function makeStudentRecord(array $overrides = []): array
 {
     return array_merge([
         'record_id' => '1',
@@ -72,13 +72,13 @@ function makeAggregates(string $semester = 'spring'): array
 test('subject includes category label for each eval_category', function (string $category, string $label) {
     $mailable = new EvaluationNotification(
         evalRecord: makeEvalRecord($category),
-        scholarRecord: makeScholarRecord(),
+        studentRecord: makeStudentRecord(),
         semester: 'spring',
         aggregates: makeAggregates(),
         evalCategory: $category,
     );
 
-    expect($mailable->envelope()->subject)->toBe("[OMM Scholar Eval] {$label} Evaluation");
+    expect($mailable->envelope()->subject)->toBe("[OMM Student Eval] {$label} Evaluation");
 })->with([
     'Teaching' => ['A', 'Teaching'],
     'Clinic' => ['B', 'Clinic'],
@@ -124,7 +124,7 @@ test('Clinic score scale references 1 to 4', function () {
 test('content uses the evaluation markdown view', function () {
     $mailable = new EvaluationNotification(
         evalRecord: makeEvalRecord(),
-        scholarRecord: makeScholarRecord(),
+        studentRecord: makeStudentRecord(),
         semester: 'spring',
         aggregates: makeAggregates(),
         evalCategory: 'A',
@@ -136,7 +136,7 @@ test('content uses the evaluation markdown view', function () {
 test('content passes criteria scoreScale categoryLabel and scoreField to view', function () {
     $mailable = new EvaluationNotification(
         evalRecord: makeEvalRecord('A'),
-        scholarRecord: makeScholarRecord(),
+        studentRecord: makeStudentRecord(),
         semester: 'spring',
         aggregates: makeAggregates(),
         evalCategory: 'A',
@@ -157,7 +157,7 @@ test('content passes criteria scoreScale categoryLabel and scoreField to view', 
 test('goes_by is used as greeting when set', function () {
     $mailable = new EvaluationNotification(
         evalRecord: makeEvalRecord(),
-        scholarRecord: makeScholarRecord(['goes_by' => 'Cat']),
+        studentRecord: makeStudentRecord(['goes_by' => 'Cat']),
         semester: 'spring',
         aggregates: makeAggregates(),
         evalCategory: 'A',
@@ -171,7 +171,7 @@ test('goes_by is used as greeting when set', function () {
 test('first_name is used as greeting when goes_by is empty', function () {
     $mailable = new EvaluationNotification(
         evalRecord: makeEvalRecord(),
-        scholarRecord: makeScholarRecord(['goes_by' => '', 'first_name' => 'Catherine']),
+        studentRecord: makeStudentRecord(['goes_by' => '', 'first_name' => 'Catherine']),
         semester: 'spring',
         aggregates: makeAggregates(),
         evalCategory: 'A',
@@ -185,7 +185,7 @@ test('first_name is used as greeting when goes_by is empty', function () {
 test('faculty feedback panel is shown when comments are present', function () {
     $mailable = new EvaluationNotification(
         evalRecord: makeEvalRecord('A', ['comments' => 'Outstanding performance!']),
-        scholarRecord: makeScholarRecord(),
+        studentRecord: makeStudentRecord(),
         semester: 'spring',
         aggregates: makeAggregates(),
         evalCategory: 'A',
@@ -199,7 +199,7 @@ test('faculty feedback panel is shown when comments are present', function () {
 test('faculty feedback panel is absent when comments are empty', function () {
     $mailable = new EvaluationNotification(
         evalRecord: makeEvalRecord('A', ['comments' => '']),
-        scholarRecord: makeScholarRecord(),
+        studentRecord: makeStudentRecord(),
         semester: 'spring',
         aggregates: makeAggregates(),
         evalCategory: 'A',
@@ -213,7 +213,7 @@ test('faculty feedback panel is absent when comments are empty', function () {
 test('renders evaluation date when redcap sends iso date format', function () {
     $mailable = new EvaluationNotification(
         evalRecord: makeEvalRecord('A', ['date_lab' => '2026-04-22']),
-        scholarRecord: makeScholarRecord(),
+        studentRecord: makeStudentRecord(),
         semester: 'spring',
         aggregates: makeAggregates(),
         evalCategory: 'A',
@@ -236,7 +236,7 @@ test('semester summary table shows correct category averages', function () {
 
     $rendered = (new EvaluationNotification(
         evalRecord: makeEvalRecord(),
-        scholarRecord: makeScholarRecord(),
+        studentRecord: makeStudentRecord(),
         semester: 'spring',
         aggregates: $aggregates,
         evalCategory: 'A',
@@ -252,7 +252,7 @@ test('semester summary table shows correct category averages', function () {
 test('returns no attachments', function () {
     $mailable = new EvaluationNotification(
         evalRecord: makeEvalRecord(),
-        scholarRecord: makeScholarRecord(),
+        studentRecord: makeStudentRecord(),
         semester: 'spring',
         aggregates: makeAggregates(),
         evalCategory: 'A',

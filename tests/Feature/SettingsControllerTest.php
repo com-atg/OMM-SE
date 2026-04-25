@@ -28,7 +28,7 @@ it('shows settings in the dashboard nav for service and admin users', function (
     asStudent();
 
     get(route('dashboard'))
-        ->assertRedirect(route('scholar'));
+        ->assertRedirect(route('student'));
 });
 
 it('allows admins to view settings', function () {

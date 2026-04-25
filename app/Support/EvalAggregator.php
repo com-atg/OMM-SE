@@ -11,7 +11,7 @@ class EvalAggregator
     public const SEMESTER_MAP = ['1' => 'spring', '2' => 'fall'];
 
     /**
-     * Aggregate a flat list of source eval records (for one scholar+semester)
+     * Aggregate a flat list of source eval records (for one student+semester)
      * into destination-shaped fields plus a per-category summary.
      *
      * Dates field format  : "Faculty Name, M/D/YYYY; Faculty Name, M/D/YYYY"

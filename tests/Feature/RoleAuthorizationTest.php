@@ -1,7 +1,9 @@
 <?php
 
+use App\Models\ProjectMapping;
 use App\Models\User;
 use App\Services\RedcapDestinationService;
+use App\Services\RedcapSourceService;
 use Illuminate\Support\Facades\Cache;
 
 use function Pest\Laravel\delete;
@@ -13,29 +15,29 @@ beforeEach(function () {
 });
 
 it('stores a compact relative intended URL before SAML login', function () {
-    get('/scholar?id=10')
+    get('/student?id=10')
         ->assertRedirect(route('saml.login'))
-        ->assertSessionHas('url.intended', '/scholar?id=10');
+        ->assertSessionHas('url.intended', '/student?id=10');
 });
 
 it('falls back to dashboard when the intended URL is too large', function () {
-    get('/scholar?'.http_build_query(['payload' => str_repeat('x', 2100)]))
+    get('/student?'.http_build_query(['payload' => str_repeat('x', 2100)]))
         ->assertRedirect(route('saml.login'))
         ->assertSessionHas('url.intended', route('dashboard', absolute: false));
 });
 
 // ─── Dashboard ───────────────────────────────────────────────────────────────
 
-it('redirects students from dashboard to their scholar page', function () {
+it('redirects students from dashboard to their student page', function () {
     asStudent('10');
 
-    get('/')->assertRedirect(route('scholar'));
+    get('/')->assertRedirect(route('student'));
 });
 
 it('lets service users view the dashboard', function () {
     asService();
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('getAllScholarRecords')->andReturn([]);
+    $destination->shouldReceive('getAllStudentRecords')->andReturn([]);
 
     get('/')->assertOk();
 });
@@ -43,24 +45,61 @@ it('lets service users view the dashboard', function () {
 it('lets admin users view the dashboard', function () {
     asAdmin();
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('getAllScholarRecords')->andReturn([]);
+    $destination->shouldReceive('getAllStudentRecords')->andReturn([]);
 
     get('/')->assertOk();
 });
 
-// ─── Scholar page — student scoping ──────────────────────────────────────────
+it('lets faculty users view a scoped dashboard', function () {
+    asFaculty('smith@example.com', 'Dr. Smith');
+    ProjectMapping::factory()->create(['redcap_pid' => 1846, 'redcap_token' => 'SOURCE_TOKEN']);
+
+    $source = mock(RedcapSourceService::class);
+    $source->shouldReceive('getCompletedEvaluationRecords')
+        ->with(5, 'SOURCE_TOKEN')
+        ->andReturn([
+            [
+                'record_id' => '101',
+                'student' => '100',
+                'semester' => '1',
+                'eval_category' => 'A',
+                'faculty' => 'Dr. Smith',
+                'faculty_email' => 'smith@example.com',
+                'teaching_score' => '90',
+                'date_lab' => '2026-04-01',
+            ],
+            [
+                'record_id' => '102',
+                'student' => '200',
+                'semester' => '1',
+                'eval_category' => 'A',
+                'faculty' => 'Dr. Jones',
+                'faculty_email' => 'jones@example.com',
+                'teaching_score' => '70',
+                'date_lab' => '2026-04-01',
+            ],
+        ]);
+
+    $response = get('/');
+
+    $response->assertOk();
+    expect($response->viewData('stats')['kpis']['total_evals'])->toBe(1)
+        ->and($response->viewData('stats')['kpis']['total_students'])->toBe(1);
+});
+
+// ─── Student page — student scoping ──────────────────────────────────────────
 
 it('shows a student only their own record and locks the picker', function () {
     asStudent('10');
 
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('getAllScholarRecords')->andReturn([
+    $destination->shouldReceive('getAllStudentRecords')->andReturn([
         ['record_id' => '10', 'first_name' => 'Cat', 'last_name' => 'Chin'],
         ['record_id' => '11', 'first_name' => 'Ava', 'last_name' => 'Adams'],
     ]);
     $destination->shouldReceive('finalScoreFormulas')->andReturn([]);
 
-    $response = get('/scholar');
+    $response = get('/student');
 
     $response->assertOk();
     expect($response->viewData('lock_selection'))->toBeTrue()
@@ -72,68 +111,68 @@ it('returns 404 when a student has no matching record', function () {
     asStudent('999');
 
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('getAllScholarRecords')->andReturn([
+    $destination->shouldReceive('getAllStudentRecords')->andReturn([
         ['record_id' => '10', 'first_name' => 'Cat', 'last_name' => 'Chin'],
     ]);
 
-    get('/scholar')->assertNotFound();
+    get('/student')->assertNotFound();
 });
 
 it('ignores ?id query string for students and forces their own record', function () {
     asStudent('10');
 
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('getAllScholarRecords')->andReturn([
+    $destination->shouldReceive('getAllStudentRecords')->andReturn([
         ['record_id' => '10', 'first_name' => 'Cat', 'last_name' => 'Chin'],
         ['record_id' => '11', 'first_name' => 'Ava', 'last_name' => 'Adams'],
     ]);
     $destination->shouldReceive('finalScoreFormulas')->andReturn([]);
 
-    $response = get('/scholar?id=11');
+    $response = get('/student?id=11');
 
     expect($response->viewData('selected')['record_id'])->toBe('10');
 });
 
 // ─── Token URL ───────────────────────────────────────────────────────────────
 
-it('service user can access any scholar via token URL', function () {
+it('service user can access any student via token URL', function () {
     asService();
 
     $target = User::factory()->student()->create(['redcap_record_id' => '10']);
 
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('getAllScholarRecords')->andReturn([
+    $destination->shouldReceive('getAllStudentRecords')->andReturn([
         ['record_id' => '10', 'first_name' => 'Cat', 'last_name' => 'Chin'],
     ]);
     $destination->shouldReceive('finalScoreFormulas')->andReturn([]);
 
-    get(route('scholar.token', $target->public_token))->assertOk();
+    get(route('student.token', $target->public_token))->assertOk();
 });
 
-it('admin user can access any scholar via token URL', function () {
+it('admin user can access any student via token URL', function () {
     asAdmin();
 
     $target = User::factory()->student()->create(['redcap_record_id' => '10']);
 
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('getAllScholarRecords')->andReturn([
+    $destination->shouldReceive('getAllStudentRecords')->andReturn([
         ['record_id' => '10', 'first_name' => 'Cat', 'last_name' => 'Chin'],
     ]);
     $destination->shouldReceive('finalScoreFormulas')->andReturn([]);
 
-    get(route('scholar.token', $target->public_token))->assertOk();
+    get(route('student.token', $target->public_token))->assertOk();
 });
 
 it('student can access their own token URL', function () {
     $student = asStudent('10');
 
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('getAllScholarRecords')->andReturn([
+    $destination->shouldReceive('getAllStudentRecords')->andReturn([
         ['record_id' => '10', 'first_name' => 'Cat', 'last_name' => 'Chin'],
     ]);
     $destination->shouldReceive('finalScoreFormulas')->andReturn([]);
 
-    get(route('scholar.token', $student->public_token))->assertOk();
+    get(route('student.token', $student->public_token))->assertOk();
 });
 
 it('student cannot access another student token URL', function () {
@@ -141,25 +180,25 @@ it('student cannot access another student token URL', function () {
 
     $other = User::factory()->student()->create(['redcap_record_id' => '11']);
 
-    get(route('scholar.token', $other->public_token))->assertForbidden();
+    get(route('student.token', $other->public_token))->assertForbidden();
 });
 
 it('token URL returns 404 for an unknown token', function () {
     asService();
 
-    get(route('scholar.token', '00000000-0000-0000-0000-000000000000'))->assertNotFound();
+    get(route('student.token', '00000000-0000-0000-0000-000000000000'))->assertNotFound();
 });
 
-it('scholar page hides the shareable URL for students', function () {
+it('student page hides the shareable URL for students', function () {
     $student = asStudent('10');
 
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('getAllScholarRecords')->andReturn([
+    $destination->shouldReceive('getAllStudentRecords')->andReturn([
         ['record_id' => '10', 'first_name' => 'Cat', 'last_name' => 'Chin'],
     ]);
     $destination->shouldReceive('finalScoreFormulas')->andReturn([]);
 
-    get('/scholar')->assertOk()->assertDontSee($student->public_token);
+    get('/student')->assertOk()->assertDontSee($student->public_token);
 });
 
 // ─── Process — Service-only ──────────────────────────────────────────────────
@@ -174,6 +213,14 @@ it('forbids students from the process endpoint', function () {
     asStudent('10');
 
     get('/process/1846')->assertForbidden();
+});
+
+it('forbids faculty from the student page process endpoint and user management', function () {
+    asFaculty('smith@example.com', 'Dr. Smith');
+
+    get('/student')->assertForbidden();
+    get('/process/1846')->assertForbidden();
+    get('/admin/users')->assertForbidden();
 });
 
 // ─── Admin users — Service-only ──────────────────────────────────────────────

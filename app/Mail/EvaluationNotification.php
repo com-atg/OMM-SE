@@ -69,7 +69,7 @@ class EvaluationNotification extends Mailable
 
     public function __construct(
         public readonly array $evalRecord,
-        public readonly array $scholarRecord,
+        public readonly array $studentRecord,
         public readonly string $semester,
         public readonly array $aggregates,
         public readonly string $evalCategory,
@@ -77,10 +77,10 @@ class EvaluationNotification extends Mailable
 
     public function envelope(): Envelope
     {
-        $label = RedcapSourceService::CATEGORY_LABELS[$this->evalCategory] ?? 'Scholar';
+        $label = RedcapSourceService::CATEGORY_LABELS[$this->evalCategory] ?? 'Student';
 
         return new Envelope(
-            subject: "[OMM Scholar Eval] {$label} Evaluation",
+            subject: "[OMM Student Eval] {$label} Evaluation",
         );
     }
 

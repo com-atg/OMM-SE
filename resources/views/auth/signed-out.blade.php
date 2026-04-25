@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Signed out — {{ config('app.name', 'OMM Scholar Evaluations') }}</title>
+    <title>Signed out — {{ config('app.name', 'OMM Student Evaluations') }}</title>
 
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=instrument-sans:400,500,600,700" rel="stylesheet">
@@ -26,7 +26,7 @@
                 You've been signed out
             </h1>
             <p class="mt-3 text-sm text-slate-600">
-                You have successfully signed out of OMM Scholar Evaluations.
+                You have successfully signed out of OMM Student Evaluations.
             </p>
             <div class="mt-8">
                 <a href="{{ route('saml.login') }}" class="inline-flex items-center rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800">

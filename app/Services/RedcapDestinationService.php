@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Wraps Redcap_lib for the destination scholar list project (REDCAP_TOKEN).
+ * Wraps Redcap_lib for the destination student list project (REDCAP_TOKEN).
  */
 class RedcapDestinationService
 {
@@ -25,12 +25,12 @@ class RedcapDestinationService
     }
 
     /**
-     * Find a scholar record by datatelid (the value stored in the source 'student' SQL field).
-     * Caches for 1 hour since the scholar roster changes infrequently.
+     * Find a student record by datatelid (the value stored in the source 'student' SQL field).
+     * Caches for 1 hour since the student roster changes infrequently.
      */
-    public function findScholarByDatatelId(string $datatelId): ?array
+    public function findStudentByDatatelId(string $datatelId): ?array
     {
-        $cacheKey = 'scholar:datatelid:'.$datatelId;
+        $cacheKey = 'student:datatelid:'.$datatelId;
 
         return Cache::remember($cacheKey, now()->addHour(), function () use ($datatelId) {
             $records = Redcap_lib::exportRecords(
@@ -55,10 +55,10 @@ class RedcapDestinationService
     }
 
     /**
-     * Find a scholar record by email address. Case-insensitive.
-     * Returns null if no scholar in the destination project has this email.
+     * Find a student record by email address. Case-insensitive.
+     * Returns null if no student in the destination project has this email.
      */
-    public function findScholarByEmail(string $email): ?array
+    public function findStudentByEmail(string $email): ?array
     {
         $email = strtolower(trim($email));
 
@@ -66,7 +66,7 @@ class RedcapDestinationService
             return null;
         }
 
-        foreach ($this->getAllScholarRecords() as $record) {
+        foreach ($this->getAllStudentRecords() as $record) {
             if (strtolower(trim((string) ($record['email'] ?? ''))) === $email) {
                 return $record;
             }
@@ -76,9 +76,9 @@ class RedcapDestinationService
     }
 
     /**
-     * Fetch a single scholar record by record_id (full record).
+     * Fetch a single student record by record_id (full record).
      */
-    public function getScholarRecord(string $recordId): array
+    public function getStudentRecord(string $recordId): array
     {
         $result = Redcap_lib::exportRecords(
             format: 'json',
@@ -94,10 +94,10 @@ class RedcapDestinationService
     }
 
     /**
-     * Import (upsert) a scholar aggregate record back into the destination project.
+     * Import (upsert) a student aggregate record back into the destination project.
      * $data must contain 'record_id' plus the fields to update.
      */
-    public function updateScholarRecord(array $data): string
+    public function updateStudentRecord(array $data): string
     {
         return Redcap_lib::importRecords(
             data: json_encode([$data]),
@@ -110,14 +110,14 @@ class RedcapDestinationService
     }
 
     /**
-     * Fetch all scholar records from the destination project.
+     * Fetch all student records from the destination project.
      * Cached for 10 minutes to balance freshness with REDCap API load.
      *
      * @return array<int,array<string,mixed>>
      */
-    public function getAllScholarRecords(int $cacheMinutes = 10): array
+    public function getAllStudentRecords(int $cacheMinutes = 10): array
     {
-        return Cache::remember('destination:all_scholars', now()->addMinutes($cacheMinutes), function () {
+        return Cache::remember('destination:all_students', now()->addMinutes($cacheMinutes), function () {
             $records = Redcap_lib::exportRecords(
                 format: 'json',
                 type: 'flat',
@@ -173,14 +173,14 @@ class RedcapDestinationService
     }
 
     /**
-     * Build a datatelid → scholar record map from the cached roster.
+     * Build a datatelid → student record map from the cached roster.
      *
      * @return array<string,array<string,mixed>>
      */
-    public function scholarMapByDatatelId(): array
+    public function studentMapByDatatelId(): array
     {
         $map = [];
-        foreach ($this->getAllScholarRecords() as $record) {
+        foreach ($this->getAllStudentRecords() as $record) {
             $datatelId = (string) ($record['datatelid'] ?? '');
             if ($datatelId !== '') {
                 $map[$datatelId] = $record;
