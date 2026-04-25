@@ -18,6 +18,7 @@ class AppServiceProvider extends ServiceProvider
             URL::forceRootUrl(config('app.url'));
         }
 
+        Gate::define('view-student-page', fn (User $user) => $user->isStudent() || $user->canViewAllStudents());
         Gate::define('view-dashboard', fn (User $user) => $user->canViewDashboard());
         Gate::define('view-all-students', fn (User $user) => $user->canViewAllStudents());
         Gate::define('view-faculty-detail', fn (User $user) => $user->canViewFacultyDetail());

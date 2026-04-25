@@ -66,11 +66,13 @@ Route::get('/saml/metadata', [SamlController::class, 'metadata'])
 
 Route::middleware(RequireSamlAuth::class)->group(function () {
     Route::get('/', DashboardController::class)->name('dashboard');
-    Route::get('/student', StudentController::class)->name('student');
+    Route::middleware('can:view-student-page')->group(function () {
+        Route::get('/student', StudentController::class)->name('student');
+        Route::get('/student/{token}', [StudentController::class, 'show'])
+            ->where('token', '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
+            ->name('student.token');
+    });
     Route::get('/faculty', FacultyController::class)->name('faculty');
-    Route::get('/student/{token}', [StudentController::class, 'show'])
-        ->where('token', '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
-        ->name('student.token');
 
     // Bulk aggregation for a source REDCap project identified by PID.
     // Token resolved from .env as REDCAP_TOKEN_PID_{pid}.
