@@ -99,9 +99,22 @@ it('uses a path-safe Livewire config for the Vite runtime', function () {
         ->toContain('window.livewireScriptConfig')
         ->toContain('@livewireScriptConfig')
         ->toContain('parse_url(config(\'app.url\'), PHP_URL_PATH)')
+        ->toContain('app()->isProduction()')
         ->toContain('runtime.livewire')
         ->not->toContain('@livewireScripts')
         ->not->toContain('@fluxScripts');
+});
+
+it('ignores configured app url paths for local livewire endpoints', function () {
+    config(['app.url' => 'http://localhost:8000/omm_ace']);
+
+    $destination = mock(RedcapDestinationService::class);
+    $destination->shouldReceive('getAllStudentRecords')->twice()->andReturn(studentRoster());
+
+    get('/student')
+        ->assertOk()
+        ->assertSee('/livewire-', false)
+        ->assertDontSee('/omm_ace/livewire-', false);
 });
 
 it('centers evaluation summary table columns', function () {

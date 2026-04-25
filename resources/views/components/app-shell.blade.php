@@ -25,7 +25,9 @@
     };
 
     $hasViteBuild = file_exists(public_path('build/manifest.json')) || file_exists(public_path('hot'));
-    $configuredAppPath = trim((string) parse_url(config('app.url'), PHP_URL_PATH), '/');
+    $configuredAppPath = app()->isProduction()
+        ? trim((string) parse_url(config('app.url'), PHP_URL_PATH), '/')
+        : '';
     $requestBasePath = trim(request()->getBaseUrl(), '/');
     $appPath = $requestBasePath !== '' ? $requestBasePath : $configuredAppPath;
     $livewireEndpoint = trim(app('livewire')->getUriPrefix(), '/');

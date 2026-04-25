@@ -15,7 +15,7 @@ class AppServiceProvider extends ServiceProvider
     {
         if ($this->app->isProduction()) {
             URL::forceScheme('https');
-            URL::forceRootUrl(config('app.url'));
+            URL::forceRootUrl($this->productionRootUrl());
         }
 
         Gate::define('view-student-page', fn (User $user) => $user->isStudent() || $user->canViewAllStudents());
@@ -26,5 +26,28 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('manage-users', fn (User $user) => $user->canManageUsers());
         Gate::define('manage-settings', fn (User $user) => $user->canViewSettings());
         Gate::define('manage-settings-records', fn (User $user) => $user->canManageSettingsRecords());
+    }
+
+    private function productionRootUrl(): string
+    {
+        $configuredUrl = rtrim((string) config('app.url'), '/');
+
+        if (! $this->app->bound('request')) {
+            return $configuredUrl;
+        }
+
+        $request = $this->app['request'];
+        $requestBasePath = trim($request->getBaseUrl(), '/');
+        $configuredPath = trim((string) parse_url($configuredUrl, PHP_URL_PATH), '/');
+
+        if ($this->app->runningInConsole() && $requestBasePath === '') {
+            return $configuredUrl;
+        }
+
+        if ($requestBasePath !== '' && $requestBasePath !== $configuredPath) {
+            return rtrim($request->root(), '/');
+        }
+
+        return $configuredUrl;
     }
 }
