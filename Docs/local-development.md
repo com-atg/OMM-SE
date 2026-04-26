@@ -4,7 +4,7 @@
 
 | Tool | Version | Purpose |
 |------|---------|---------|
-| PHP | 8.4 | Running Artisan commands and tests locally |
+| PHP | 8.4+ | Running Artisan commands and tests locally |
 | Composer | 2.x | PHP dependency management |
 | Docker + Compose | v2 | Full local stack |
 | Node / npm | 22 | Asset compilation (via Docker, or locally) |
@@ -28,8 +28,8 @@ The local compose file starts three services:
 
 | Service | Image | Ports exposed |
 |---------|-------|--------------|
-| `app` | Built from `Dockerfile` (runtime stage) | None — routed via Traefik |
-| `mysql` | `mysql:8.0` | None — reachable on Docker network only; data in named volume `mysql-data` |
+| `app` | Built from `Dockerfile` (runtime stage) | None — routed via Traefik to container port 8080 |
+| `mysql` | `mysql:8.0` | `3306`; data in named volume `mysql-data` |
 | `mailhog` | `mailhog/mailhog:latest` | `1025` (SMTP), `8025` (Web UI) |
 
 Traefik is **not** in the compose file — it's expected to be running externally on the host.
@@ -49,10 +49,10 @@ cp .env.example .env
 php artisan key:generate
 
 # 4. Configure .env — required values:
-#    REDCAP_URL, REDCAP_TOKEN, REDCAP_SOURCE_TOKEN
+#    REDCAP_URL, REDCAP_TOKEN
 #    DB_* (defaults in .env.example work with the mysql compose service)
 #    SAML_IDP_* values if testing the real SAML flow (see "Simulating SSO")
-#    SERVICE_USERS / ADMIN_USERS for role enrollment
+#    SERVICE_USERS / ADMIN_USERS for bootstrap role enrollment
 #    Mail settings (or leave as Mailhog defaults)
 
 # 5. Start the stack (brings up app + mysql + mailhog)
@@ -91,8 +91,8 @@ All variables live in `.env` (copied from `.env.example`).
 | `DB_HOST` | `mysql` | Docker service name |
 | `DB_DATABASE` / `DB_USERNAME` / `DB_PASSWORD` | `omm_se` / `omm_se` / `secret` | Defaults match the compose service |
 | `SESSION_DRIVER` | `database` | Sessions table populated by migrations |
-| `CACHE_STORE` | `database` | Scholar lookup cache in `cache` table |
-| `QUEUE_CONNECTION` | `database` | Jobs table; process with `php artisan queue:work` if you want async |
+| `CACHE_STORE` | `database` | Student lookup and dashboard caches in `cache` table |
+| `QUEUE_CONNECTION` | `database` | Jobs table; `composer run dev` starts `queue:listen` |
 
 ### REDCap
 
@@ -100,9 +100,8 @@ All variables live in `.env` (copied from `.env.example`).
 |----------|-------------|
 | `REDCAP_URL` | REDCap API base URL (`https://comresearchdata.nyit.edu/redcap/api/`) |
 | `REDCAP_TOKEN` | Destination project token (OMMScholarEvalList) |
-| `REDCAP_SOURCE_TOKEN` | Source project token — update each academic year when a new evaluation project is created |
 | `WEBHOOK_SECRET` | Shared secret for webhook token verification. Leave empty locally to skip the check. |
-| `REDCAP_TOKEN_PID_<pid>` | Source project API token keyed by REDCap PID, e.g. `REDCAP_TOKEN_PID_1846`. |
+| Source project tokens | Stored in `/admin/settings` project mappings, encrypted in the `project_mappings` table. |
 
 ### Okta SAML SSO
 
@@ -128,7 +127,7 @@ All variables live in `.env` (copied from `.env.example`).
 
 ## Simulating a Webhook
 
-With the stack running, simulate a REDCap Data Entry Trigger:
+With the stack running and a matching project mapping in `/admin/settings`, simulate a REDCap Data Entry Trigger:
 
 ```bash
 # Without token auth (WEBHOOK_SECRET empty locally)
@@ -155,7 +154,13 @@ The app uses Okta SAML. For day-to-day local development you don't need a real S
 php artisan tinker --execute 'use App\Models\User; Auth::login(User::where("email","mihir.matalia@nyit.edu")->firstOrFail());'
 ```
 
-Or create a one-off Service user in Tinker:
+Or use the development-only local login page:
+
+```
+GET /local/login
+```
+
+You can also create a one-off Service user in Tinker:
 
 ```bash
 php artisan tinker --execute '
@@ -182,7 +187,7 @@ Copy the IdP Entity ID, SSO URL, SLO URL, and certificate into the `SAML_IDP_*` 
 
 ### Role Management
 
-Roles are resolved at login time from `.env` allowlists. Add your email to test elevated roles without touching the database:
+Service/Admin roles are resolved at login time from `.env` allowlists. Add your email to test elevated roles without touching the database:
 
 ```bash
 SERVICE_USERS=you@example.com
@@ -190,7 +195,6 @@ ADMIN_USERS=colleague@example.com
 ```
 
 Restart the dev server after changing `.env` so the new config is picked up.
-- REDCap API outage during authkey validation → `503`
 
 ---
 
@@ -215,7 +219,7 @@ php artisan test --compact
 # Run a specific test
 php artisan test --compact --filter="aggregates scores"
 
-# Clear file cache (e.g. after changing scholar lookup)
+# Clear cache (e.g. after changing student lookup data)
 php artisan cache:clear
 
 # Tail application logs

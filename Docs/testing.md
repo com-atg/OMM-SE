@@ -2,23 +2,25 @@
 
 ## Overview
 
-The test suite uses [Pest 4](https://pestphp.com/) and covers unit and feature layers. `RefreshDatabase` is enabled globally — each test runs in a transaction that is rolled back. REDCap API calls are mocked via Mockery. Total: **94 tests**.
+The test suite uses [Pest 4](https://pestphp.com/) and covers unit and feature layers. `RefreshDatabase` is enabled globally — each test runs in a transaction that is rolled back. REDCap API calls are mocked via Mockery.
 
 ```mermaid
 graph TD
     subgraph Unit Tests
-        U1[RedcapSourceServiceTest\n7 tests]
-        U2[EvaluationNotificationTest\n15 tests]
+        U1[RedcapSourceServiceTest]
+        U2[EvaluationNotificationTest]
     end
     subgraph Feature Tests
-        F1[NotifierControllerTest\n32 tests]
-        F2[DashboardControllerTest\n4 tests]
-        F3[ScholarControllerTest\n3 tests]
-        F4[ProcessControllerTest\n7 tests]
-        F5[SamlServiceTest\n6 tests]
-        F6[RoleAuthorizationTest\n12 tests]
-        F7[AdminUserControllerTest\n5 tests]
-        F8[ExampleTest\n1 test]
+        F1[NotifierControllerTest]
+        F2[DashboardControllerTest]
+        F3[StudentControllerTest]
+        F4[ProcessControllerTest]
+        F5[SamlServiceTest]
+        F6[RoleAuthorizationTest]
+        F7[AdminUserControllerTest]
+        F8[SettingsControllerTest]
+        F9[FacultyControllerTest]
+        F10[Console command tests]
     end
 
     U1 -->|tests| SRC[RedcapSourceService]
@@ -76,9 +78,9 @@ Tests `app/Services/RedcapSourceService.php` in isolation — no HTTP calls.
 | `CATEGORY_LABELS` constant | Maps A/B/C/D to human-readable labels |
 | `DEST_CATEGORY` constant | Maps A/B/C/D to destination field suffixes |
 | All constants share the same keys | A/B/C/D present in all three constants |
-| Rejects non-numeric datatelid | `getScholarEvals("1' OR '1'='1", '1')` → `[]` |
-| Rejects invalid semester code | `getScholarEvals('1', '9')` → `[]` |
-| Rejects injection in semester | `getScholarEvals('1', "1' OR '1'='1")` → `[]` |
+| Rejects non-numeric datatelid | `getStudentEvals("1' OR '1'='1", '1', $token)` → `[]` |
+| Rejects invalid semester code | `getStudentEvals('1', '9', $token)` → `[]` |
+| Rejects injection in semester | `getStudentEvals('1', "1' OR '1'='1", $token)` → `[]` |
 
 ### Unit: `EvaluationNotificationTest`
 
@@ -121,12 +123,12 @@ Tests gate enforcement across all protected routes.
 
 | Test | What it verifies |
 |------|-----------------|
-| Student → dashboard redirect | `GET /` redirects to `/scholar` for students |
+| Student → dashboard redirect | `GET /` redirects to `/student` for students |
 | Service/Admin → dashboard | `GET /` returns 200 for elevated roles |
-| Student own record | `GET /scholar` returns only their record; `lock_selection` is true |
+| Student own record | `GET /student` returns only their record; `lock_selection` is true |
 | Student 404 | No matching REDCap record → 404 |
 | Student `?id` override blocked | Query string is ignored; own record always shown |
-| Admin/Student → process 403 | `GET /process/{pid}` returns 403 |
+| Non-Service → process 403 | `GET /process/{pid}` returns 403 |
 | Admin/Student → admin UI 403 | `GET /admin/users` returns 403 |
 | Service → admin UI 200 | `GET /admin/users` returns 200 |
 | Self-delete blocked | Service user cannot delete their own account |
@@ -164,18 +166,18 @@ Tests the full webhook flow via HTTP. REDCap services are mocked; mail is faked.
 | Record not found in source | 200, no email |
 | Eval missing `student` field | 200, no email |
 | Unknown semester code | 200, no email |
-| No destination scholar record | 200, no email |
+| No destination student record | 200, no email |
 
 #### Email Delivery
 
 | Test | Expected |
 |------|---------|
 | Happy path | `EvaluationNotification` sent |
-| `To:` address | Scholar's email |
+| `To:` address | Student's email |
 | `CC:` address | Faculty email |
 | `BCC:` address | `MAIL_FROM_ADDRESS` (admin) |
-| Scholar email empty | No email sent |
-| Scholar email malformed | No email sent |
+| Student email empty | No email sent |
+| Student email malformed | No email sent |
 | Faculty email malformed | Email sent, CC omitted |
 
 #### Score Aggregation
@@ -212,11 +214,11 @@ use function Pest\Laravel\mock;
 
 $source = mock(RedcapSourceService::class);
 $source->shouldReceive('getRecord')->andReturn(sourceEvalRecord());
-$source->shouldReceive('getScholarEvals')->andReturn([sourceEvalRecord()]);
+$source->shouldReceive('getStudentEvals')->andReturn([sourceEvalRecord()]);
 
 $destination = mock(RedcapDestinationService::class);
-$destination->shouldReceive('findScholarByDatatelId')->with('1')->andReturn(destScholarRecord());
-$destination->shouldReceive('updateScholarRecord')->andReturn('1');
+$destination->shouldReceive('findStudentByDatatelId')->with('1')->andReturn(destStudentRecord());
+$destination->shouldReceive('updateStudentRecord')->andReturn('1');
 ```
 
 `Mail::fake()` is used to assert mail was (or was not) sent without actually delivering anything:
@@ -224,7 +226,7 @@ $destination->shouldReceive('updateScholarRecord')->andReturn('1');
 ```php
 Mail::fake();
 // ... trigger webhook ...
-Mail::assertSent(EvaluationNotification::class, fn($mail) => $mail->hasTo('scholar@example.com'));
+Mail::assertSent(EvaluationNotification::class, fn($mail) => $mail->hasTo('student@example.com'));
 Mail::assertNothingSent();
 ```
 
@@ -238,8 +240,8 @@ Shared fixtures defined at the top of `NotifierControllerTest.php`:
 // Builds a source eval record with sensible defaults
 function sourceEvalRecord(string $category = 'A', array $overrides = []): array
 
-// Builds a destination scholar record
-function destScholarRecord(array $overrides = []): array
+// Builds a destination student record
+function destStudentRecord(array $overrides = []): array
 
 // Wires up both service mocks with a single call
 function mockServices(array $evalRecord, array $allEvals, ?array $destRecord): void

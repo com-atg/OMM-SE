@@ -1,6 +1,6 @@
 # OMM Scholar Eval
 
-A Laravel 13 app that receives scholar evaluation submissions from REDCap, computes per-category grade aggregates, writes them back to a destination REDCap project, delivers email notifications to scholars and faculty, and exposes a dashboard protected by Okta SAML SSO.
+A Laravel 13 app that receives student evaluation submissions from REDCap, computes per-category semester aggregates, writes them back to a permanent destination REDCap project, delivers email notifications to students and faculty, and exposes role-based dashboards protected by Okta SAML SSO.
 
 ---
 
@@ -12,19 +12,20 @@ sequenceDiagram
     participant App as OMM Scholar Eval
     participant Dest as REDCap OMMScholarEvalList
     participant Mail as Mail Server
-    participant Scholar as Scholar (browser)
+    participant Student as Student (browser)
 
     RC->>App: POST /notify?token=<secret> (Data Entry Trigger)
-    App->>RC: exportRecords (single eval)
-    App->>RC: exportRecords (all evals, scholar + semester)
+    App->>App: Resolve source token from project_mappings by project_id
+    App->>RC: exportRecords (single evaluation)
+    App->>RC: exportRecords (all evaluations, student + semester)
     App->>App: Aggregate scores & comments
-    App->>Dest: importRecords (nu/avg/comments fields)
-    App->>Mail: EvaluationNotification (To: scholar, CC: faculty)
+    App->>Dest: importRecords (nu/avg/dates/comments fields)
+    App->>Mail: EvaluationNotification (To: student, CC: faculty)
 
-    Scholar->>App: GET / (unauthenticated)
-    App-->>Scholar: 302 → Okta login
-    Scholar->>App: POST /saml/acs (Okta assertion)
-    App-->>Scholar: dashboard / scholar detail
+    Student->>App: GET / (unauthenticated)
+    App-->>Student: 302 → Okta login
+    Student->>App: POST /saml/acs (Okta assertion)
+    App-->>Student: dashboard, student detail, or faculty view by role
 ```
 
 ---
@@ -33,15 +34,16 @@ sequenceDiagram
 
 | Layer | Technology |
 |-------|-----------|
-| Framework | Laravel 13 / PHP 8.4 |
-| Runtime | PHP-FPM + Nginx (Alpine) |
+| Framework | Laravel 13 / PHP 8.4 runtime |
+| UI | Livewire 4, Flux 2, Tailwind CSS 4, Vite |
+| Runtime | PHP-FPM + Nginx (Alpine, non-root, port 8080) |
 | Process manager | Supervisor |
 | Reverse proxy | Traefik (external) |
 | Database | MySQL 8 |
 | Sessions / Cache / Queue | Database driver |
 | Authentication | Okta SAML 2.0 via `onelogin/php-saml` |
-| Authorization | App-level role enum (Service / Admin / Student) |
-| Testing | Pest 4 — 94 tests |
+| Authorization | App-level role enum (Service / Admin / Faculty / Student) |
+| Testing | Pest 4 |
 | CI/CD | GitHub Actions |
 | Containerisation | Docker (multi-stage) |
 | Versioning | CalVer — `YYYY.HX.N` |
@@ -52,14 +54,14 @@ sequenceDiagram
 
 | Role | Access |
 |------|--------|
-| **Service** | Everything — dashboard, all scholar records, faculty view, `/process/*` bulk aggregation, `/admin/users` user management, `/admin/settings` project-mapping management, impersonation |
-| **Admin** | Dashboard, all scholar records (read-only), faculty view. No user/settings management. |
-| **Faculty** | Faculty roster view scoped to evaluations they authored. |
-| **Student** | Own scholar record only. Redirected from dashboard to their detail page. |
+| **Service** | Everything: dashboard, all student records, faculty view, current or per-PID bulk aggregation, `/admin/users`, `/admin/settings`, CSV import, REDCap roster import, impersonation |
+| **Admin** | Dashboard, all student records, and faculty view. No user/settings management and no bulk processing. |
+| **Faculty** | Dashboard and faculty view scoped to evaluations they authored, matched by faculty email or faculty name. |
+| **Student** | Own student record only. Redirected from the dashboard to `/student`. |
 
-Service and Admin users are seeded via the user-management UI or imported from REDCap; legacy `.env` allowlists (`SERVICE_USERS=`, `ADMIN_USERS=`) remain supported as a bootstrap fallback. Students auto-provision on first SAML login if their email matches a record in the REDCap destination project. Unmatched users see a 404.
+Service and Admin users can be managed in the UI; `.env` allowlists (`SERVICE_USERS=`, `ADMIN_USERS=`) remain supported and are recomputed at login. Faculty and Student users can be created manually or imported. Students auto-provision on first SAML login if their email matches a record in the REDCap destination project. Unmatched users see a 404.
 
-Roles are persisted on the `users` table via the `Role` enum (`Service`, `Admin`, `Faculty`, `Student`) and enforced through Gates: `manage-users`, `manage-settings`, `run-process`, `view-student-page`.
+Roles are persisted on the `users` table via the `Role` enum (`Service`, `Admin`, `Faculty`, `Student`) and enforced through Gates: `view-dashboard`, `view-all-students`, `view-faculty-detail`, `manage-users`, `manage-settings`, `manage-settings-records`, `run-process`, and `view-student-page`.
 
 ---
 
@@ -87,7 +89,8 @@ composer install && npm install
 # 2. Configure environment
 cp .env.example .env
 php artisan key:generate
-# Edit .env: set DB_*, REDCAP_*, SAML_IDP_*, SERVICE_USERS
+# Edit .env: set DB_*, REDCAP_URL, REDCAP_TOKEN, SAML_IDP_*, SERVICE_USERS
+# Source project tokens are usually managed in /admin/settings project mappings.
 
 # 3. Start the local stack (app + MySQL + Mailhog)
 docker compose up -d
@@ -99,7 +102,7 @@ php artisan migrate --seed
 php artisan test --compact
 ```
 
-See [Local Development](Docs/local-development.md) for the full setup guide including how to bypass SAML for local development.
+See [Local Development](Docs/local-development.md) for the full setup guide, including the local login bypass and email preview route.
 
 ---
 
@@ -116,16 +119,17 @@ app/
 │   │   ├── Admin/UserController.php     # User management + REDCap import + CSV import dispatch + impersonation
 │   │   ├── Auth/LocalLoginController.php# DEV-only SAML bypass (APP_ENV=local)
 │   │   ├── Auth/SamlController.php      # SAML SSO (login / ACS / logout / metadata)
-│   │   ├── DashboardController.php      # Cohort overview (Service + Admin)
+│   │   ├── DashboardController.php      # Cohort overview (Service/Admin/Faculty; students redirect)
 │   │   ├── FacultyController.php        # Faculty-scoped roster view
 │   │   ├── NotifierController.php       # REDCap webhook orchestrator
 │   │   ├── ProcessController.php        # Bulk aggregation by PID (Service only)
-│   │   └── StudentController.php        # Scholar roster + token-keyed detail (scoped by role)
+│   │   └── StudentController.php        # Student roster + token-keyed detail (scoped by role)
 │   └── Middleware/
 │       ├── RequireSamlAuth.php          # SAML session guard
 │       └── VerifyWebhookToken.php       # Shared-secret webhook auth
 ├── Livewire/
 │   ├── Admin/CsvUserImport.php          # Drag-drop CSV → editable preview → bulk create
+│   ├── Dashboard.php                    # Dashboard stats and academic-year filter
 │   └── FacultyDetail.php                # Faculty-scoped evaluation detail
 ├── Models/
 │   ├── User.php                         # Role enum + soft deletes + UUID public_token
@@ -134,8 +138,15 @@ app/
 ├── Providers/AppServiceProvider.php     # Gate definitions
 └── Services/
     ├── SamlService.php                  # Role resolution + user provisioning
-    ├── RedcapSourceService.php          # Current-year source project API
+    ├── RedcapSourceService.php          # Per-project source REDCap API
     └── RedcapDestinationService.php     # OMMScholarEvalList API
+
+app/Jobs/
+└── ProcessSourceProjectJob.php          # Queued bulk aggregation with cache-backed status
+
+app/Support/
+├── EvalAggregator.php                   # Shared aggregation logic for webhook, job, and command
+└── FinalScoreFormulaParser.php          # Parses destination REDCap calculated-score formulas
 
 config/
 ├── redcap.php

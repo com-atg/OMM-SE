@@ -2,7 +2,7 @@
 
 ## Threat Model
 
-The application exposes a REDCap-facing webhook endpoint (`/notify`), a set of SAML endpoints (`/saml/login`, `/saml/acs`, `/saml/logout`, `/saml/metadata`), and interactive app pages protected by an authenticated session. It makes outbound API calls to REDCap and an SMTP server. User identity comes from Okta via SAML SSO; authorization is resolved inside the app against env-managed allowlists plus the REDCap destination project (scholar roster).
+The application exposes a REDCap-facing webhook endpoint (`/notify`), a set of SAML endpoints (`/saml/login`, `/saml/acs`, `/saml/logout`, `/saml/metadata`), and interactive app pages protected by an authenticated session. It makes outbound API calls to REDCap and an SMTP server. User identity comes from Okta via SAML SSO; authorization is resolved inside the app against env-managed allowlists, persisted roles, and the REDCap destination project (student roster).
 
 ```mermaid
 graph TD
@@ -97,7 +97,7 @@ if ($secret && ! hash_equals($secret, (string) $request->query('token', ''))) {
 
 ## 2. Authentication — Okta SAML SSO
 
-Interactive pages (`/`, `/scholar`, `/process/*`, `/admin/*`) are protected by `RequireSamlAuth`. Unauthenticated requests are redirected to `/saml/login`, which hands off to Okta. Okta posts the SAML assertion back to `/saml/acs`; the app validates it via `onelogin/php-saml`, extracts the user's email, and establishes a Laravel session.
+Interactive pages (`/`, `/student`, `/faculty`, `/process/*`, `/admin/*`) are protected by `RequireSamlAuth`. Unauthenticated requests are redirected to `/saml/login`, which hands off to Okta. Okta posts the SAML assertion back to `/saml/acs`; the app validates it via `onelogin/php-saml`, extracts the user's email, and establishes a Laravel session.
 
 ```mermaid
 sequenceDiagram
@@ -152,25 +152,29 @@ Once authenticated, each user is assigned a role from `App\Enums\Role`:
 
 | Role | Source | Access |
 |------|--------|--------|
-| `Service` | Email in `SERVICE_USERS=` | Everything — dashboard, all scholars, run process, user management (`/admin/users`) |
-| `Admin` | Email in `ADMIN_USERS=` | Dashboard + all scholar records; **no** user management |
-| `Student` | Email matches a scholar in the destination project (OMMScholarEvalList) | Own scholar record only |
+| `Service` | Email in `SERVICE_USERS=` or stored user role | Everything — dashboard, all students, faculty view, run process, user/settings management |
+| `Admin` | Email in `ADMIN_USERS=` or stored user role | Dashboard, all student records, faculty view; no user/settings management and no bulk processing |
+| `Faculty` | Stored user role | Dashboard and faculty view scoped to evaluations authored by matching faculty email/name |
+| `Student` | Email matches a student in the destination project (OMMScholarEvalList) or stored user role | Own student record only |
 
 Rules:
 
 - `SERVICE_USERS` / `ADMIN_USERS` are comma-separated emails, case-insensitive.
 - On every SAML login, the app recomputes the role from the current env allowlists — demotions/promotions take effect on the next sign-in.
-- Students auto-provision via `RedcapDestinationService::findScholarByEmail()`; the matched REDCap `record_id` is cached on the `users` row (`redcap_record_id`).
-- If an email is not on any allowlist **and** does not match a scholar record, the app returns `HTTP 404` rendering `resources/views/auth/records-not-found.blade.php`. This intentionally does not expose whether the user authenticated successfully against Okta.
+- Students auto-provision via `RedcapDestinationService::findStudentByEmail()`; the matched REDCap `record_id` is cached on the `users` row (`redcap_record_id`).
+- If an email is not on any allowlist **and** does not match a student record, the app returns `HTTP 404` rendering `resources/views/auth/records-not-found.blade.php`. This intentionally does not expose whether the user authenticated successfully against Okta.
 
 Authorization is enforced in controllers and views through four gates registered in `AppServiceProvider`:
 
-| Gate | Service | Admin | Student |
-|------|:--:|:--:|:--:|
-| `view-dashboard` | ✅ | ✅ | ❌ |
-| `view-all-scholars` | ✅ | ✅ | ❌ (own record only) |
-| `run-process` | ✅ | ✅ | ❌ |
-| `manage-users` | ✅ | ❌ | ❌ |
+| Gate | Service | Admin | Faculty | Student |
+|------|:--:|:--:|:--:|:--:|
+| `view-dashboard` | Yes | Yes | Yes | No |
+| `view-all-students` | Yes | Yes | No | No |
+| `view-faculty-detail` | Yes | Yes | Yes | No |
+| `view-student-page` | Yes | Yes | No | Own record |
+| `run-process` | Yes | No | No | No |
+| `manage-users` | Yes | No | No | No |
+| `manage-settings` | Yes | No | No | No |
 
 ---
 
@@ -222,7 +226,7 @@ flowchart TD
 `student` and `semester` are interpolated into REDCap's `filterLogic` string. Both are validated against strict allowlists before use:
 
 ```php
-// RedcapSourceService::getScholarEvals()
+// RedcapSourceService::getStudentEvals()
 if (! preg_match('/^\d+$/', $datatelId) || ! preg_match('/^[12]$/', $semester)) {
     return [];  // Reject — no API call made
 }
@@ -248,14 +252,14 @@ if ($score < 0.0 || $score > 100.0) {
 
 ## 5. Email Header Injection Prevention
 
-Faculty and scholar email addresses arrive from REDCap (untrusted). Both are validated with PHP's `FILTER_VALIDATE_EMAIL` before being passed to the mailer:
+Faculty and student email addresses arrive from REDCap (untrusted). Both are validated with PHP's `FILTER_VALIDATE_EMAIL` before being passed to the mailer:
 
 ```php
-$scholarEmail = filter_var($fullScholarRecord['email'] ?? '', FILTER_VALIDATE_EMAIL) ?: null;
+$studentEmail = filter_var($studentRecord['email'] ?? '', FILTER_VALIDATE_EMAIL) ?: null;
 $facultyEmail = filter_var($evalRecord['faculty_email'] ?? '', FILTER_VALIDATE_EMAIL) ?: null;
 ```
 
-A malformed address (including one with embedded newlines) is silently discarded — the email is sent without CC, or not sent at all if the scholar address is invalid.
+A malformed address (including one with embedded newlines) is silently discarded — the email is sent without CC, or not sent at all if the student address is invalid.
 
 ---
 
@@ -280,8 +284,7 @@ $middleware->validateCsrfTokens(except: ['/notify', '/saml/acs']);
 |--------|---------------|-------|
 | `APP_KEY` | `.env` | Never commit — generate with `php artisan key:generate` |
 | `REDCAP_TOKEN` | `.env` | Destination project API token |
-| `REDCAP_SOURCE_TOKEN` | `.env` | Source project API token — update each academic year |
-| `REDCAP_TOKEN_PID_<pid>` | `.env` | Source project token keyed by REDCap PID |
+| Source project API tokens | `project_mappings.redcap_token` | Encrypted in MySQL; created/updated from `/admin/settings` |
 | `WEBHOOK_SECRET` | `.env` | Shared with REDCap DET URL only |
 | `SAML_IDP_X509_CERT` | `.env` | Okta signing certificate — validates SAML assertions |
 | `SAML_SP_PRIVATE_KEY` | `.env` | Optional — only if signed AuthnRequests/encrypted assertions are enabled |
@@ -329,7 +332,7 @@ Static assets are served with `Cache-Control: public, max-age=31536000, immutabl
 ## Security Checklist for New Deployments
 
 - [ ] `WEBHOOK_SECRET` set to a 32-byte random hex value
-- [ ] `REDCAP_TOKEN_PID_<pid>` set for each source project
+- [ ] Project mapping created for each active source project, with its REDCap PID and source API token
 - [ ] Okta SAML app created; `SAML_IDP_ENTITY_ID`, `SAML_IDP_SSO_URL`, `SAML_IDP_SLO_URL`, `SAML_IDP_X509_CERT` populated from Okta
 - [ ] `SAML_SP_ENTITY_ID`, `SAML_SP_ACS_URL`, `SAML_SP_SLO_URL` match the Okta app configuration
 - [ ] `SAML_STRICT=true` and `SAML_DEBUG=false` in production
@@ -342,13 +345,13 @@ Static assets are served with `Cache-Control: public, max-age=31536000, immutabl
 - [ ] GitHub Secrets configured: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `SSH_HOST`, `SSH_USER`, `SSH_KEY`
 - [ ] SSH deploy key has minimal permissions (deploy user, no sudo)
 - [ ] `.env` file on server is `chmod 600`
-- [ ] `GET /test/email` route guarded behind `app()->environment('local')` or removed before deploy (currently public — see security note below)
+- [ ] `GET /test/email` remains guarded behind `app()->environment('local')`
 
 ---
 
 ## Admin Surface Threats
 
-The Service-only `/admin/*` routes introduce additional attack surface beyond the webhook + scholar views.
+The Service-only `/admin/*` routes introduce additional attack surface beyond the webhook and student/faculty views.
 
 | Surface | Risk | Mitigation |
 |---------|------|------------|
@@ -356,7 +359,7 @@ The Service-only `/admin/*` routes introduce additional attack surface beyond th
 | `POST /admin/users/import-csv` (Livewire) | Untrusted CSV upload; malformed rows or oversize files | 1 MB file size cap, MIME `csv,txt` validation, per-cell validation, transaction-wrapped insert. Consider a server-side `Storage::mimeType()` re-check |
 | `POST /admin/users/{user}/impersonate` | Privilege escalation if Service account compromised | Cannot impersonate Service users; cannot self-impersonate; persistent banner shown; session-only — closing the browser ends impersonation. The `/impersonate/stop` route sits **outside** the `manage-users` gate so an impersonated user can always exit |
 | `POST /admin/settings/project-mappings/*` | Settings tampering could redirect aggregation to wrong destination | Gated by `manage-settings` and CRUD operations sub-gated by `manage-settings-records` |
-| `GET /test/email` (current) | **Open route** that renders an evaluation email with stubbed-but-realistic faculty/scholar PII patterns; usable for phishing template harvesting | **Action required**: wrap in `if (app()->environment('local'))` block in `routes/web.php`, mirroring `/local/login` |
+| `GET /test/email` | Stubbed email preview route | Guarded by `app()->environment('local')`, matching `/local/login` |
 
 ### Impersonation audit logging
 

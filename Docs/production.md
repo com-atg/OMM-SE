@@ -173,8 +173,6 @@ MAIL_FROM_NAME="OMM Scholar Eval"
 
 REDCAP_URL=https://comresearchdata.nyit.edu/redcap/api/
 REDCAP_TOKEN=               # Destination project token
-REDCAP_SOURCE_TOKEN=        # Source project token — update each academic year
-REDCAP_TOKEN_PID_1846=      # Source project token keyed by PID
 WEBHOOK_SECRET=             # openssl rand -hex 32
 
 # ── Okta SAML SSO ─────────────────────────────────────────────────────────────
@@ -202,9 +200,9 @@ DOCKERHUB_USERNAME=your-dockerhub-username
 
 **Database:** On first boot the `omm-ace-mysql` container initializes a volume at `./data` (bind mount). The app's `entrypoint.sh` runs `php artisan migrate --force` against it. Sessions, cache, and queue all live in MySQL.
 
-**Annual rotation:** For each new academic-year source project, add a matching `REDCAP_TOKEN_PID_<pid>` entry and update `REDCAP_SOURCE_TOKEN`.
+**Annual rotation:** For each new academic-year source project, add a project mapping in `/admin/settings` with the academic year, graduation year, REDCap PID, and source API token. The token is encrypted in MySQL.
 
-**Enrolling Service / Admin users:** Add their emails to `SERVICE_USERS=` or `ADMIN_USERS=`. After editing `.env`, run `docker compose -f docker-compose.prod.yml up -d --force-recreate app` to pick up the new values. The role is re-evaluated on each SAML login. Students require no enrollment — they auto-provision on first login as long as their email matches a record in the destination REDCap project.
+**Enrolling Service / Admin users:** Add their emails to `SERVICE_USERS=` or `ADMIN_USERS=`. After editing `.env`, run `docker compose -f docker-compose.prod.yml up -d --force-recreate app` to pick up the new values. The role is re-evaluated on each SAML login. Faculty and Student accounts can also be managed from `/admin/users`; students auto-provision on first login as long as their email matches a record in the destination REDCap project.
 
 **Okta application:** In the Okta admin console create a new SAML 2.0 app.
 - Single sign-on URL / ACS: `https://your-domain.com/saml/acs`
@@ -250,7 +248,7 @@ flowchart LR
     STRIP --> APP[app container :80]
 ```
 
-- Path prefix `/omm_ace` is stripped before the request reaches Laravel, so routes are defined as `/notify`, `/saml/login`, `/saml/acs`, `/test/email`, etc.
+- Path prefix `/omm_ace` is stripped before the request reaches Laravel, so routes are defined as `/notify`, `/saml/login`, `/saml/acs`, `/student`, `/faculty`, etc.
 - TLS is terminated by Traefik using whatever certificate resolver it is already configured with.
 
 ---

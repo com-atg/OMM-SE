@@ -9,6 +9,7 @@ This guide covers the Service-only administrative surface that lives under `/adm
 | REDCap roster import | `POST /admin/users/import` | `manage-users` | `Admin\UserController@import` |
 | Impersonation | `POST /admin/users/{user}/impersonate` | `manage-users` | `Admin\UserController@impersonate` |
 | Project-mapping settings | `/admin/settings` | `manage-settings` | `Admin\SettingsController` |
+| New academic year setup | `/admin/settings/new-academic-year` | `manage-settings-records` | `Admin\SettingsController@newAcademicYear` |
 
 ---
 
@@ -101,17 +102,39 @@ Service accounts cannot be impersonated, and a user cannot impersonate themselve
 
 ## Project-Mapping Settings
 
-`/admin/settings` — Service-only management of `project_mappings` rows. Each mapping pairs a source REDCap project (the per-academic-year evaluation form) with the destination project (`OMMScholarEvalList`).
+`/admin/settings` — Service-only management of `project_mappings` rows. Each mapping pairs a source REDCap project (the per-academic-year evaluation form) with the destination project (`OMMScholarEvalList`). Source API tokens are stored encrypted on the mapping row.
 
 | Action | Route |
 |--------|-------|
 | List | `GET /admin/settings` |
+| New academic year form | `GET /admin/settings/new-academic-year` *(gate: `manage-settings-records`)* |
+| Import students for a mapping | `GET /admin/settings/project-mappings/{projectMapping}/import-students` *(gate: `manage-settings-records`)* |
 | Process a single mapping | `POST /admin/settings/project-mappings/{projectMapping}/process` |
 | Create | `POST /admin/settings/project-mappings` *(gate: `manage-settings-records`)* |
 | Edit / Update | `GET|PATCH /admin/settings/project-mappings/{projectMapping}` *(gate: `manage-settings-records`)* |
 | Soft delete / Restore | `DELETE` / `POST .../restore` *(gate: `manage-settings-records`)* |
 
 The `manage-settings-records` sub-gate exists so a Service user can trigger processing on existing mappings without granting CRUD on the underlying records.
+
+### New Academic Year Workflow
+
+```mermaid
+sequenceDiagram
+    participant S as Service User
+    participant UI as Settings UI
+    participant DB as project_mappings/users
+    participant RC as REDCap Destination
+
+    S->>UI: Open new academic year form
+    UI-->>S: Suggest next graduation year
+    S->>UI: Submit AY, graduation year, PID, source token
+    UI->>DB: Create project mapping with encrypted token
+    UI->>RC: Fetch destination students for graduation year
+    UI->>DB: Create missing Student users
+    UI-->>S: Created / skipped / missing-email summary
+```
+
+Student import for a mapping filters destination REDCap records by `year` or `graduation_year`, creates missing `Student` users, caches each matched `record_id`, and reports skipped existing users plus destination records missing email addresses.
 
 ---
 
@@ -132,7 +155,9 @@ The `manage-settings-records` sub-gate exists so a Service user can trigger proc
 /impersonate/stop                             POST    stop impersonation
 
 /admin/settings                               GET     mappings index
+/admin/settings/new-academic-year             GET     new academic year setup
 /admin/settings/project-mappings              POST    create mapping
+/admin/settings/project-mappings/{m}/import-students GET import students for mapping
 /admin/settings/project-mappings/{m}/process  POST    process mapping
 /admin/settings/project-mappings/{m}/edit     GET     edit mapping
 /admin/settings/project-mappings/{m}          PATCH   update mapping

@@ -2,26 +2,26 @@
 
 ## System Context
 
-The app sits between two REDCap projects, an Okta tenant, and a mail server. State is persisted in MySQL (users, sessions, cache, queue) and in REDCap (scholar records, aggregates).
+The app sits between annual REDCap source projects, a permanent REDCap destination project, an Okta tenant, and a mail server. State is persisted in MySQL (users, project mappings, sessions, cache, queue) and in REDCap (student records, aggregates).
 
 ```mermaid
 C4Context
     title OMM Scholar Eval — System Context
 
-    Person(faculty, "Faculty", "Submits scholar evaluations in REDCap; views own evaluation roster in app")
-    Person(scholar, "Scholar (Student)", "Logs in via Okta; views own eval records")
-    Person(admin, "Administrator", "Logs in via Okta; views all scholar records")
+    Person(faculty, "Faculty", "Submits student evaluations in REDCap; views own evaluation roster in app")
+    Person(student, "Student", "Logs in via Okta; views own eval records")
+    Person(admin, "Administrator", "Logs in via Okta; views all student records")
     Person(service, "Service User", "Logs in via Okta; full access + user management + project-mapping settings + impersonation")
 
     System(app, "OMM Scholar Eval", "Laravel 13 web app + webhook processor")
     System_Ext(okta, "Okta", "SAML 2.0 Identity Provider")
     System_Ext(src, "REDCap Source Project", "OMMACEvaluations AY20XX-20XX\nRotates each academic year")
-    System_Ext(dest, "REDCap OMMScholarEvalList", "Aggregated grade records\nper scholar per semester")
+    System_Ext(dest, "REDCap OMMScholarEvalList", "Aggregated grade records\nper student per semester")
     System_Ext(mail, "SMTP Mail Server", "Delivers email notifications")
     System_Ext(traefik, "Traefik", "Reverse proxy — TLS termination,\nHTTP→HTTPS redirect")
 
     Rel(faculty, src, "Submits evaluation")
-    Rel(scholar, okta, "Authenticates via SSO")
+    Rel(student, okta, "Authenticates via SSO")
     Rel(admin, okta, "Authenticates via SSO")
     Rel(service, okta, "Authenticates via SSO")
     Rel(okta, app, "SAML assertion", "HTTPS POST /saml/acs")
@@ -29,7 +29,7 @@ C4Context
     Rel(app, src, "Exports eval records", "REDCap API")
     Rel(app, dest, "Imports aggregated grades", "REDCap API")
     Rel(app, mail, "Sends notification email", "SMTP")
-    Rel(mail, scholar, "Delivers email")
+    Rel(mail, student, "Delivers email")
     Rel(traefik, app, "Forwards requests", "HTTP")
 ```
 
@@ -42,14 +42,14 @@ graph TD
     subgraph Docker Container
         direction TB
         SV[Supervisor]
-        SV --> NGINX[Nginx :80]
+        SV --> NGINX[Nginx :8080]
         SV --> FPM[PHP-FPM :9000]
         NGINX -->|FastCGI| FPM
         FPM --> APP[Laravel App]
     end
 
-    TR[Traefik\nexternal] -->|HTTP :80| NGINX
-    APP -->|REDCap API\nREDCAP_SOURCE_TOKEN| RC1[(REDCap Source Project\nrotates each academic year)]
+    TR[Traefik\nexternal] -->|HTTP :8080| NGINX
+    APP -->|REDCap API\nproject_mappings.redcap_token| RC1[(REDCap Source Project\nrotates each academic year)]
     APP -->|REDCap API\nREDCAP_TOKEN| RC2[(REDCap OMMScholarEvalList\npermanent destination)]
     APP -->|SMTP| SMTP[Mail Server]
     APP -->|Read/Write| FS[(File System\ncache / views / logs)]
@@ -62,7 +62,7 @@ graph TD
 | php-fpm | `php-fpm -F` | 5 (starts first) |
 | nginx | `nginx -g "daemon off;"` | 10 |
 
-No queue worker is needed — `QUEUE_CONNECTION=sync` processes jobs inline during the request.
+Bulk processing is dispatched with `dispatchAfterResponse()` and stores progress in the cache. In development, `composer run dev` starts `queue:listen`; production should run a queue worker when `QUEUE_CONNECTION=database`.
 
 ---
 
@@ -77,17 +77,20 @@ classDiagram
     }
 
     class RedcapSourceService {
-        +getRecord(recordId) array
-        +getScholarEvals(datatelId, semester) array
+        +getRecord(recordId, token) array
+        +getStudentEvals(datatelId, semester, token) array
+        +fetchAllRecords(token) array
+        +getCompletedEvaluationRecords(token) array
         +SCORE_FIELDS: array
         +CATEGORY_LABELS: array
         +DEST_CATEGORY: array
     }
 
     class RedcapDestinationService {
-        +findScholarByDatatelId(datatelId) array|null
-        +getScholarRecord(recordId) array
-        +updateScholarRecord(data) string
+        +findStudentByDatatelId(datatelId) array|null
+        +findStudentByEmail(email) array|null
+        +getStudentRecord(recordId) array
+        +updateStudentRecord(data) string
     }
 
     class RedcapAdvancedLinkService {
@@ -105,7 +108,7 @@ classDiagram
 
     class EvaluationNotification {
         +evalRecord: array
-        +scholarRecord: array
+        +studentRecord: array
         +semester: string
         +aggregates: array
         +evalCategory: string
@@ -117,7 +120,6 @@ classDiagram
 
     NotifierController --> RedcapSourceService : injects
     NotifierController --> RedcapDestinationService : injects
-    NotifierController --> EvaluationNotification : creates
     RequireSamlAuth --> SamlService : delegates
     VerifyWebhookToken --> NotifierController : guards
 ```
@@ -156,7 +158,7 @@ sequenceDiagram
     DB-->>SS: User
 
     alt role = Student
-        SC->>RC: findScholarByEmail(email)
+        SC->>RC: findStudentByEmail(email)
         alt no match
             SC-->>U: 404 records-not-found view
         else matched
@@ -190,26 +192,27 @@ sequenceDiagram
     MW->>NC: __invoke(request)
     NC->>NC: validate record ID present
 
-    NC->>SRC: getRecord(recordId)
+    NC->>NC: resolve project mapping by project_id
+    NC->>SRC: getRecord(recordId, token)
     SRC-->>NC: evalRecord[]
 
     NC->>NC: validate student, semester, eval_category
 
-    NC->>SRC: getScholarEvals(scholarCode, semesterCode)
+    NC->>SRC: getStudentEvals(studentCode, semesterCode, token)
     SRC-->>NC: allEvals[]
 
     NC->>NC: aggregate(allEvals, semester)
     Note over NC: Sum scores per category<br/>Count evals, skip out-of-range<br/>Concatenate comments
 
-    NC->>DST: findScholarByDatatelId(scholarCode)
+    NC->>DST: findStudentByDatatelId(studentCode)
     Note over DST: filterLogic [datatelid]='...' + 1h cache
-    DST-->>NC: scholarRecord[]
+    DST-->>NC: studentRecord[]
 
-    NC->>DST: updateScholarRecord(payload)
+    NC->>DST: updateStudentRecord(payload)
     DST-->>NC: "1"
 
     NC->>MAIL: EvaluationNotification
-    Note over MAIL: To: scholar<br/>CC: faculty<br/>BCC: admin
+    Note over MAIL: To: student<br/>CC: faculty<br/>BCC: admin
 
     NC-->>TR: 200 OK
 ```
@@ -222,7 +225,7 @@ For each webhook trigger the app re-computes the full semester aggregate from sc
 
 ```mermaid
 flowchart TD
-    A[Fetch all evals\nfor scholar + semester] --> B{For each eval}
+    A[Fetch all evals\nfor student + semester] --> B{For each eval}
     B --> C{Score field\npresent & non-empty?}
     C -- No --> G
     C -- Yes --> D{0 ≤ score ≤ 100?}
@@ -232,7 +235,7 @@ flowchart TD
     F --> G{More evals?}
     G -- Yes --> B
     G -- No --> H[Compute avg = sum / count per category]
-    H --> I[Build REDCap payload\nsem_nu_cat, sem_avg_cat\nsem_nu_comments, sem_comments]
+    H --> I[Build REDCap payload\nsem_nu_cat, sem_avg_cat,\nsem_dates_cat, sem_nu_comments, sem_comments]
     I --> J[importRecords to destination]
 ```
 
@@ -249,25 +252,25 @@ flowchart TD
 
 ---
 
-## Stateless Design
+## Persistence Design
 
-The application intentionally has no database. This simplifies operations significantly:
+The application keeps operational state in MySQL and aggregate evaluation data in REDCap:
 
 | Concern | Solution |
 |---------|---------|
 | Sessions | `SESSION_DRIVER=database` — `sessions` table in MySQL |
-| Cache | `CACHE_STORE=database` — `cache` table; scholar roster cached 10 min, per-scholar 1 h |
+| Cache | `CACHE_STORE=database` — `cache` table; destination roster cached 10 min, per-student lookup 1 h, process status 60 min |
 | Queue | `QUEUE_CONNECTION=database` — `jobs` table; bulk-aggregation job dispatched after response |
 | Migrations | `users`, `project_mappings`, `category_weights`, `sessions`, `cache`, `jobs`, `password_reset_tokens` |
 | Persistence | User records (with roles + REDCap record IDs), project mappings, and category weights in MySQL; aggregated grades in REDCap |
 
-User authentication state is stored in the database-backed session. The `users` table caches each scholar's `redcap_record_id` after their first SAML login, avoiding a REDCap API call on every request.
+User authentication state is stored in the database-backed session. The `users` table caches each student's `redcap_record_id` after their first SAML login, avoiding a REDCap API call on every request.
 
 ---
 
 ## Admin Surface
 
-In addition to the webhook + scholar/faculty views, the app exposes a Service-only admin surface:
+In addition to the webhook and student/faculty views, the app exposes a Service-only admin surface:
 
 ```mermaid
 flowchart LR
@@ -292,3 +295,6 @@ See [Admin Features](admin-features.md) for routes, gates, validation rules, and
 | `manage-settings-records` | Service (sub-gate for project-mapping CRUD vs. process-only) |
 | `run-process` | Service |
 | `view-student-page` | Service, Admin, Student (own record only) |
+| `view-dashboard` | Service, Admin, Faculty |
+| `view-all-students` | Service, Admin |
+| `view-faculty-detail` | Service, Admin, Faculty |

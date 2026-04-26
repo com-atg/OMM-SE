@@ -11,7 +11,7 @@ graph LR
     end
 
     subgraph App["OMM Scholar Eval"]
-        A1[RedcapSourceService\nREDCAP_SOURCE_TOKEN]
+        A1[RedcapSourceService\nproject_mappings.redcap_token]
         A2[RedcapDestinationService\nREDCAP_TOKEN]
     end
 
@@ -28,14 +28,14 @@ graph LR
 |---|---|---|
 | Project name | OMMACEvaluations AY20XX-20XX | OMMScholarEvalList |
 | PID | **Changes each academic year** | Fixed (permanent) |
-| Env token | `REDCAP_SOURCE_TOKEN`, `REDCAP_TOKEN_PID_<pid>` | `REDCAP_TOKEN` |
+| Token source | `project_mappings.redcap_token` (encrypted in MySQL) | `REDCAP_TOKEN` |
 | Service class | `RedcapSourceService` | `RedcapDestinationService` |
 | App role | Read only | Read + Write |
 | Lifecycle | New project per academic year | Never recreated |
 
-> **Annual rotation:** At the start of each academic year, a new source project is created in REDCap. Update `REDCAP_SOURCE_TOKEN` for webhook aggregation and add/update `REDCAP_TOKEN_PID_<new pid>` for any per-PID API operations. The destination project and its token never change.
+> **Annual rotation:** At the start of each academic year, a new source project is created in REDCap. Add a project mapping in `/admin/settings` with the academic year, graduation year, REDCap PID, and source API token. The destination project and its token never change.
 
-> **Note on user identity:** App authentication is via Okta SAML SSO (see [Security](security.md)). REDCap identity/role lookups are **not** part of the sign-in flow. Student users are mapped to their scholar record via `RedcapDestinationService::findScholarByEmail()` at login time; the matched `record_id` is cached on the `users` row.
+> **Note on user identity:** App authentication is via Okta SAML SSO (see [Security](security.md)). REDCap identity/role lookups are **not** part of the sign-in flow. Student users are mapped to their student record via `RedcapDestinationService::findStudentByEmail()` at login time; the matched `record_id` is cached on the `users` row.
 
 ---
 
@@ -45,7 +45,8 @@ graph LR
 flowchart TD
     A[New academic year begins] --> B[Admin creates new\nREDCap evaluation project]
     B --> C[Configure Data Entry Trigger\nURL in the new project]
-    C --> E[Update REDCAP_SOURCE_TOKEN\nand REDCAP_TOKEN_PID for PID\nin production .env]
+    C --> D[Create project mapping\nin /admin/settings]
+    D --> E[Import students for the graduating year]
     E --> F[Verify with a test webhook]
     F --> G[Ready for new year]
 
@@ -55,8 +56,7 @@ flowchart TD
 ```
 
 **What changes year-to-year:**
-- `REDCAP_SOURCE_TOKEN` in `.env` — new API token for the new source project
-- `REDCAP_TOKEN_PID_<pid>` in `.env` — source project token keyed by the new REDCap PID
+- Project mapping row — academic year, graduation year, source REDCap PID, encrypted source API token
 - REDCap DET URL in the new source project — same URL, same `WEBHOOK_SECRET`
 
 **What never changes:**
@@ -74,7 +74,7 @@ The source project field structure is expected to remain consistent year-to-year
 | Field | Type | Notes |
 |-------|------|-------|
 | `record_id` | Auto-ID | Used to fetch the triggering record |
-| `student` | Text / Numeric | Scholar's datatelid — used to look up the destination record |
+| `student` | Text / Numeric | Student's datatelid — used to look up the destination record |
 | `semester` | Dropdown | 1=Spring, 2=Fall |
 | `eval_category` | Dropdown | A=Teaching, B=Clinic, C=Research, D=Didactics |
 | `teaching_score` | Calc (0–100%) | Used when `eval_category = A` |
@@ -99,7 +99,7 @@ graph LR
 
 ## Destination Schema — OMMScholarEvalList
 
-The destination project is **permanent** — it stores aggregated scores for all scholars across all academic years. The app writes the following fields per scholar record. Fields not listed (e.g. `{sem}_leadership`, `{sem}_final_score`) are never touched.
+The destination project is **permanent** — it stores aggregated scores for all students across all academic years. The app writes the following fields per student record. Fields not listed (e.g. `{sem}_leadership`, `{sem}_final_score`) are never touched.
 
 **Pattern:** `{sem}` ∈ `{spring, fall}`, `{cat}` ∈ `{teaching, clinic, research, didactics}`
 
@@ -107,13 +107,14 @@ The destination project is **permanent** — it stores aggregated scores for all
 |---|---|---|
 | `{sem}_nu_{cat}` | Integer | Yes — count of valid evals for that category |
 | `{sem}_avg_{cat}` | Number (0–100) | Yes — average score; omitted if count = 0 |
+| `{sem}_dates_{cat}` | Notes/Text | Yes — faculty/date entries for evaluated category |
 | `{sem}_nu_comments` | Integer | Yes — count of evals that have a comment |
-| `{sem}_comments` | Notes | Yes — all comments concatenated with `\n\n` |
+| `{sem}_comments` | Notes | Yes — comments stored one per line as `Faculty; Date; Category; Comment` |
 | `{sem}_leadership` | Text | **No** — set manually in REDCap |
 | `{sem}_final_score` | Calc | **No** — calculated by REDCap formula |
-| `datatelid` | Text | No — used for scholar lookup by datatelid |
-| `first_name` | Text | No — used to build scholar display name |
-| `last_name` | Text | No — used to build scholar display name |
+| `datatelid` | Text | No — used for student lookup by datatelid |
+| `first_name` | Text | No — used to build student display name |
+| `last_name` | Text | No — used to build student display name |
 | `goes_by` | Text | No — used for email greeting |
 | `email` | Email | No — used as notification `To:` address |
 
@@ -129,7 +130,8 @@ The destination project is **permanent** — it stores aggregated scores for all
   "spring_nu_research": 0,
   "spring_nu_didactics": 0,
   "spring_nu_comments": 1,
-  "spring_comments": "[Dr. Smith]: Excellent small group facilitation."
+  "spring_dates_teaching": "Dr. Smith, 4/16/2026",
+  "spring_comments": "Dr. Smith; 4/16/2026; Teaching; Excellent small group facilitation."
 }
 ```
 
@@ -162,16 +164,16 @@ redcap_url=https://comresearchdata.nyit.edu/redcap/
 
 ---
 
-## Scholar Lookup Strategy
+## Student Lookup Strategy
 
-The source project stores the scholar identifier in the `student` field as a **datatelid** (numeric institution ID). On each webhook, the app passes this value directly to `RedcapDestinationService::findScholarByDatatelId()`, which queries the destination project using REDCap's `filterLogic` parameter and caches the result for 1 hour.
+The source project stores the student identifier in the `student` field as a **datatelid** (numeric institution ID). On each webhook, the app passes this value directly to `RedcapDestinationService::findStudentByDatatelId()`, which queries the destination project using REDCap's `filterLogic` parameter and caches the result for 1 hour.
 
 ```mermaid
 flowchart LR
-    A["student = '67890'\nfrom source eval record\n(datatelid)"] -->|findScholarByDatatelId\nfilterLogic + 1h cache| B["destination record_id = 7\npermanent record"]
+    A["student = '67890'\nfrom source eval record\n(datatelid)"] -->|findStudentByDatatelId\nfilterLogic + 1h cache| B["destination record_id = 7\npermanent record"]
 ```
 
-The lookup queries `[datatelid]='67890'` against the destination project. Results are cached per datatelid for 1 hour since the scholar roster changes infrequently. No code-to-name mapping is needed — no code changes are required when the scholar cohort changes.
+The lookup queries `[datatelid]='67890'` against the destination project. Results are cached per datatelid for 1 hour since the student roster changes infrequently. No code-to-name mapping is needed — no code changes are required when the student cohort changes.
 
 ---
 
@@ -181,7 +183,7 @@ Each webhook triggers one email:
 
 | Header | Value |
 |--------|-------|
-| To | Scholar's `email` field from destination record |
+| To | Student's `email` field from destination record |
 | CC | `faculty_email` from source eval record |
 | BCC | `MAIL_FROM_ADDRESS` (admin) |
 | Subject | `[OMM Scholar Eval] {Category} Evaluation` |
@@ -192,4 +194,4 @@ The email body includes:
 - Faculty free-text feedback (if present)
 - Semester summary table showing nu / avg for all 4 categories with 25% weighting noted
 
-Email is **not sent** if the scholar's email address is missing or fails `FILTER_VALIDATE_EMAIL`. Faculty CC is silently omitted if their address is malformed.
+Email is **not sent** if the student's email address is missing or fails `FILTER_VALIDATE_EMAIL`. Faculty CC is silently omitted if their address is malformed.
