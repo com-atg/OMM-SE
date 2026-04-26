@@ -56,7 +56,7 @@ it('renders the picker with a sorted roster and no selection', function () {
     $response->assertOk()
         ->assertViewIs('student')
         ->assertSee('Select a student')
-        ->assertSee('NYITCOM', false)
+        ->assertSee('OMM ACE', false)
         ->assertSee('data-flux-select-native', false)
         ->assertDontSee('scriptModule', false)
         ->assertDontSee('student-detail.js', false)
