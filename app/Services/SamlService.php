@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\Role;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\URL;
 use OneLogin\Saml2\Auth as OneLoginAuth;
 use RuntimeException;
 
@@ -92,6 +93,36 @@ class SamlService
         ];
     }
 
+    public function safeRedirectTarget(?string $target): string
+    {
+        $fallback = route('dashboard', absolute: false);
+        $target = trim((string) $target);
+
+        if ($target === '' || preg_match('/[\x00-\x1F\x7F]/', $target)) {
+            return $fallback;
+        }
+
+        if (str_starts_with($target, '/') && ! str_starts_with($target, '//')) {
+            return $target;
+        }
+
+        $targetParts = parse_url($target);
+        $appParts = parse_url(URL::to('/'));
+
+        if (
+            is_array($targetParts)
+            && is_array($appParts)
+            && isset($targetParts['scheme'], $targetParts['host'], $appParts['scheme'], $appParts['host'])
+            && strtolower($targetParts['scheme']) === strtolower($appParts['scheme'])
+            && strtolower($targetParts['host']) === strtolower($appParts['host'])
+            && (int) ($targetParts['port'] ?? $this->defaultPort($targetParts['scheme'])) === (int) ($appParts['port'] ?? $this->defaultPort($appParts['scheme']))
+        ) {
+            return $target;
+        }
+
+        return $fallback;
+    }
+
     /**
      * Build the OneLogin settings array from config/saml.php.
      *
@@ -121,5 +152,10 @@ class SamlService
         $value = $attributes[$name][0] ?? null;
 
         return is_string($value) && trim($value) !== '' ? trim($value) : null;
+    }
+
+    private function defaultPort(string $scheme): int
+    {
+        return strtolower($scheme) === 'https' ? 443 : 80;
     }
 }

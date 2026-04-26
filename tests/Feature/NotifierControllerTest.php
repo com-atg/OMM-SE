@@ -5,8 +5,16 @@ use App\Models\ProjectMapping;
 use App\Services\RedcapDestinationService;
 use App\Services\RedcapSourceService;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Route;
 
 use function Pest\Laravel\mock;
+
+beforeEach(function () {
+    ProjectMapping::factory()->create([
+        'redcap_pid' => 1846,
+        'redcap_token' => 'PID_TOKEN_1846',
+    ]);
+});
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -58,14 +66,14 @@ function mockServices(array $evalRecord, array $allEvals, ?array $destRecord): v
 test('returns 403 when webhook token is invalid', function () {
     config(['redcap.webhook_secret' => 'correct-secret']);
 
-    $this->postJson('/notify?token=wrong-token', ['record' => '1'])
+    $this->postJson('/notify?token=wrong-token', ['record' => '1', 'project_id' => '1846'])
         ->assertForbidden();
 });
 
 test('returns 403 when webhook token is missing', function () {
     config(['redcap.webhook_secret' => 'correct-secret']);
 
-    $this->postJson('/notify', ['record' => '1'])
+    $this->postJson('/notify', ['record' => '1', 'project_id' => '1846'])
         ->assertForbidden();
 });
 
@@ -76,7 +84,7 @@ test('accepts webhook when token matches secret', function () {
     $source = mock(RedcapSourceService::class);
     $source->shouldReceive('getRecord')->andReturn([]);
 
-    $this->postJson('/notify?token=correct-secret', ['record' => '1'])
+    $this->postJson('/notify?token=correct-secret', ['record' => '1', 'project_id' => '1846'])
         ->assertSuccessful();
 });
 
@@ -87,7 +95,17 @@ test('bypasses token check when webhook_secret is not configured', function () {
     $source = mock(RedcapSourceService::class);
     $source->shouldReceive('getRecord')->andReturn([]);
 
-    $this->postJson('/notify', ['record' => '1'])->assertSuccessful();
+    $this->postJson('/notify', ['record' => '1', 'project_id' => '1846'])->assertSuccessful();
+});
+
+test('rejects webhook requests in production when webhook_secret is not configured', function () {
+    $this->app->detectEnvironment(fn (): string => 'production');
+    config(['redcap.webhook_secret' => '']);
+
+    $this->postJson('/notify', ['record' => '1', 'project_id' => '1846'])
+        ->assertForbidden();
+
+    $this->app->detectEnvironment(fn (): string => 'testing');
 });
 
 // ─── Edge cases ──────────────────────────────────────────────────────────────
@@ -106,7 +124,7 @@ test('returns 200 when source record is not found', function () {
     $source = mock(RedcapSourceService::class);
     $source->shouldReceive('getRecord')->andReturn([]);
 
-    $this->postJson('/notify', ['record' => '999'])->assertSuccessful();
+    $this->postJson('/notify', ['record' => '999', 'project_id' => '1846'])->assertSuccessful();
 
     Mail::assertNothingSent();
 });
@@ -119,7 +137,7 @@ test('returns 200 when eval record is missing student', function () {
         sourceEvalRecord('A', ['student' => ''])
     );
 
-    $this->postJson('/notify', ['record' => '1'])->assertSuccessful();
+    $this->postJson('/notify', ['record' => '1', 'project_id' => '1846'])->assertSuccessful();
 
     Mail::assertNothingSent();
 });
@@ -132,7 +150,7 @@ test('returns 200 when eval record has unknown semester code', function () {
         sourceEvalRecord('A', ['semester' => '9'])
     );
 
-    $this->postJson('/notify', ['record' => '1'])->assertSuccessful();
+    $this->postJson('/notify', ['record' => '1', 'project_id' => '1846'])->assertSuccessful();
 
     Mail::assertNothingSent();
 });
@@ -147,7 +165,7 @@ test('returns 200 when no matching destination student record exists', function 
     $destination = mock(RedcapDestinationService::class);
     $destination->shouldReceive('findStudentByDatatelId')->andReturn(null);
 
-    $this->postJson('/notify', ['record' => '1'])->assertSuccessful();
+    $this->postJson('/notify', ['record' => '1', 'project_id' => '1846'])->assertSuccessful();
 
     Mail::assertNothingSent();
 });
@@ -159,18 +177,13 @@ test('sends EvaluationNotification email on successful webhook', function () {
 
     mockServices(sourceEvalRecord(), [sourceEvalRecord()], destStudentRecord());
 
-    $this->postJson('/notify', ['record' => '1'])->assertSuccessful();
+    $this->postJson('/notify', ['record' => '1', 'project_id' => '1846'])->assertSuccessful();
 
     Mail::assertSent(EvaluationNotification::class);
 });
 
 test('uses mapped source project token when webhook includes project id', function () {
     Mail::fake();
-
-    ProjectMapping::factory()->create([
-        'redcap_pid' => 1846,
-        'redcap_token' => 'PID_TOKEN_1846',
-    ]);
 
     $source = mock(RedcapSourceService::class);
     $source->shouldReceive('getRecord')
@@ -199,7 +212,7 @@ test('sends email to student address', function () {
 
     mockServices(sourceEvalRecord(), [sourceEvalRecord()], destStudentRecord());
 
-    $this->postJson('/notify', ['record' => '1']);
+    $this->postJson('/notify', ['record' => '1', 'project_id' => '1846']);
 
     Mail::assertSent(EvaluationNotification::class, function (EvaluationNotification $mail) {
         return $mail->hasTo('catherine@example.com');
@@ -215,7 +228,7 @@ test('CCs faculty email address on notification', function () {
         destStudentRecord(),
     );
 
-    $this->postJson('/notify', ['record' => '1']);
+    $this->postJson('/notify', ['record' => '1', 'project_id' => '1846']);
 
     Mail::assertSent(EvaluationNotification::class, function (EvaluationNotification $mail) {
         return $mail->hasCc('faculty@example.com');
@@ -229,7 +242,7 @@ test('BCCs admin address on notification', function () {
 
     mockServices(sourceEvalRecord(), [sourceEvalRecord()], destStudentRecord());
 
-    $this->postJson('/notify', ['record' => '1']);
+    $this->postJson('/notify', ['record' => '1', 'project_id' => '1846']);
 
     Mail::assertSent(EvaluationNotification::class, function (EvaluationNotification $mail) {
         return $mail->hasBcc('admin@example.com');
@@ -241,7 +254,7 @@ test('does not send email when student has no email address', function () {
 
     mockServices(sourceEvalRecord(), [sourceEvalRecord()], destStudentRecord(['email' => '']));
 
-    $this->postJson('/notify', ['record' => '1'])->assertSuccessful();
+    $this->postJson('/notify', ['record' => '1', 'project_id' => '1846'])->assertSuccessful();
 
     Mail::assertNothingSent();
 });
@@ -251,7 +264,7 @@ test('does not send email when student email address is malformed', function () 
 
     mockServices(sourceEvalRecord(), [sourceEvalRecord()], destStudentRecord(['email' => 'not-an-email']));
 
-    $this->postJson('/notify', ['record' => '1'])->assertSuccessful();
+    $this->postJson('/notify', ['record' => '1', 'project_id' => '1846'])->assertSuccessful();
 
     Mail::assertNothingSent();
 });
@@ -265,7 +278,7 @@ test('does not CC when faculty email is malformed', function () {
         destStudentRecord(),
     );
 
-    $this->postJson('/notify', ['record' => '1']);
+    $this->postJson('/notify', ['record' => '1', 'project_id' => '1846']);
 
     Mail::assertSent(EvaluationNotification::class, function (EvaluationNotification $mail) {
         return ! $mail->hasCc('bad-email');
@@ -299,7 +312,7 @@ test('aggregates scores from multiple evals of the same category', function () {
         })
         ->andReturn('1');
 
-    $this->postJson('/notify', ['record' => '1']);
+    $this->postJson('/notify', ['record' => '1', 'project_id' => '1846']);
 
     expect($capturedPayload)
         ->toHaveKey('spring_nu_teaching', 2)
@@ -332,7 +345,7 @@ test('skips scores outside 0–100 range in aggregation', function () {
         })
         ->andReturn('1');
 
-    $this->postJson('/notify', ['record' => '1']);
+    $this->postJson('/notify', ['record' => '1', 'project_id' => '1846']);
 
     // Only the valid 80.00 score should be counted.
     expect($capturedPayload)
@@ -366,7 +379,7 @@ test('aggregates comments count and concatenated text', function () {
         })
         ->andReturn('1');
 
-    $this->postJson('/notify', ['record' => '1']);
+    $this->postJson('/notify', ['record' => '1', 'project_id' => '1846']);
 
     expect($capturedPayload)
         ->toHaveKey('spring_nu_comments', 2)
@@ -403,7 +416,7 @@ test('sets count to zero and omits avg when no evals exist for a category', func
         })
         ->andReturn('1');
 
-    $this->postJson('/notify', ['record' => '1']);
+    $this->postJson('/notify', ['record' => '1', 'project_id' => '1846']);
 
     expect($capturedPayload)
         ->toHaveKey('spring_nu_clinic', 0)
@@ -434,7 +447,7 @@ test('uses fall semester fields when semester code is 2', function () {
         })
         ->andReturn('1');
 
-    $this->postJson('/notify', ['record' => '1']);
+    $this->postJson('/notify', ['record' => '1', 'project_id' => '1846']);
 
     expect($capturedPayload)
         ->toHaveKey('fall_nu_teaching', 1)
@@ -444,6 +457,7 @@ test('uses fall semester fields when semester code is 2', function () {
 
 // ─── Email preview route ──────────────────────────────────────────────────────
 
-test('email preview route returns a successful response', function () {
-    $this->get('/test/email')->assertSuccessful();
+test('email preview route is only registered in the local environment', function () {
+    expect(Route::has('test.email'))->toBeFalse();
+    $this->get('/test/email')->assertNotFound();
 });

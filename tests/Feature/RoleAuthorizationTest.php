@@ -1,10 +1,12 @@
 <?php
 
+use App\Livewire\Dashboard;
 use App\Models\ProjectMapping;
 use App\Models\User;
 use App\Services\RedcapDestinationService;
 use App\Services\RedcapSourceService;
 use Illuminate\Support\Facades\Cache;
+use Livewire\Livewire;
 
 use function Pest\Laravel\delete;
 use function Pest\Laravel\get;
@@ -56,7 +58,7 @@ it('lets faculty users view a scoped dashboard', function () {
 
     $source = mock(RedcapSourceService::class);
     $source->shouldReceive('getCompletedEvaluationRecords')
-        ->with(5, 'SOURCE_TOKEN')
+        ->with('SOURCE_TOKEN')
         ->andReturn([
             [
                 'record_id' => '101',
@@ -80,11 +82,11 @@ it('lets faculty users view a scoped dashboard', function () {
             ],
         ]);
 
-    $response = get('/');
+    get('/')->assertOk();
 
-    $response->assertOk();
-    expect($response->viewData('stats')['kpis']['total_evals'])->toBe(1)
-        ->and($response->viewData('stats')['kpis']['total_students'])->toBe(1);
+    $stats = Livewire::test(Dashboard::class)->viewData('stats');
+    expect($stats['kpis']['total_evals'])->toBe(1)
+        ->and($stats['kpis']['total_students'])->toBe(1);
 });
 
 // ─── Student page — student scoping ──────────────────────────────────────────

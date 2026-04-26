@@ -26,8 +26,9 @@ class SamlController
      */
     public function login(Request $request): RedirectResponse
     {
-        $intended = $request->query('intended', session('url.intended'));
-        $relay = $intended ?: url(config('saml.default_redirect', '/'));
+        $relay = $this->saml->safeRedirectTarget(
+            $request->query('intended', session('url.intended', config('saml.default_redirect', '/')))
+        );
 
         $url = $this->saml->auth()->login($relay, [], false, false, true);
 
@@ -89,7 +90,9 @@ class SamlController
 
         $request->session()->regenerate();
 
-        $target = $request->input('RelayState') ?: url(config('saml.default_redirect', '/'));
+        $target = $this->saml->safeRedirectTarget(
+            $request->input('RelayState', config('saml.default_redirect', '/'))
+        );
 
         return redirect()->to($target);
     }

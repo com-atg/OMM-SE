@@ -30,6 +30,10 @@ class RedcapDestinationService
      */
     public function findStudentByDatatelId(string $datatelId): ?array
     {
+        if (! preg_match('/^\d+$/', $datatelId)) {
+            return null;
+        }
+
         $cacheKey = 'student:datatelid:'.$datatelId;
 
         return Cache::remember($cacheKey, now()->addHour(), function () use ($datatelId) {
@@ -170,6 +174,27 @@ class RedcapDestinationService
         }
 
         return is_array($metadata) ? FinalScoreFormulaParser::fromMetadata($metadata) : [];
+    }
+
+    /**
+     * Fetch destination student records filtered by graduating year.
+     * Filters client-side from the cached full roster so no extra REDCap call is made,
+     * and tolerates either a `year` or `graduation_year` field name on the record.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    public function getStudentsByGraduationYear(int $graduationYear): array
+    {
+        $needle = (string) $graduationYear;
+
+        return collect($this->getAllStudentRecords())
+            ->filter(function (array $record) use ($needle): bool {
+                $year = trim((string) ($record['year'] ?? $record['graduation_year'] ?? ''));
+
+                return $year !== '' && $year === $needle;
+            })
+            ->values()
+            ->all();
     }
 
     /**

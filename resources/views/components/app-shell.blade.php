@@ -86,9 +86,8 @@
                         <flux:icon.academic-cap variant="mini" />
                     </span>
                     <span class="min-w-0">
-                        <span class="block text-sm font-extrabold tracking-tight">
-                            <span class="text-amber-600">NYITCOM</span>
-                            <span class="text-slate-950">OMM ACE</span>
+                        <span class="block text-sm font-extrabold tracking-tight text-slate-950">
+                            OMM ACE
                         </span>
                         <span class="block truncate text-xs font-medium text-slate-500">Student Evaluations</span>
                     </span>

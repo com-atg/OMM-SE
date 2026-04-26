@@ -19,6 +19,10 @@ new class extends Component
 
     public ?string $shareableUrl = null;
 
+    public ?int $selectedGraduationYear = null;
+
+    public const SESSION_KEY = 'academic_year_filter';
+
     private const SEMESTERS = ['spring' => 'Spring', 'fall' => 'Fall'];
 
     public function mount(?string $initialSelectedId = null, bool $lockSelection = false, ?string $shareableUrl = null): void
@@ -26,32 +30,80 @@ new class extends Component
         $this->selectedId = (string) ($initialSelectedId ?? $this->selectedId);
         $this->lockSelection = $lockSelection;
         $this->shareableUrl = $shareableUrl;
+        $this->selectedGraduationYear = $this->resolveInitialGraduationYear();
+    }
+
+    public function updatedSelectedGraduationYear(): void
+    {
+        session([self::SESSION_KEY => $this->selectedGraduationYear]);
+        $this->selectedId = '';
     }
 
     public function render(): View
     {
         $destination = app(RedcapDestinationService::class);
-        $records = $destination->getAllStudentRecords();
+
+        $availableMappings = ProjectMapping::query()
+            ->orderByDesc('graduation_year')
+            ->get(['id', 'academic_year', 'graduation_year']);
+
+        $year = $this->selectedGraduationYear;
+
+        if ($this->lockSelection || $availableMappings->count() < 2) {
+            $records = $destination->getAllStudentRecords();
+        } else {
+            $records = $year !== null
+                ? $destination->getStudentsByGraduationYear($year)
+                : $destination->getAllStudentRecords();
+        }
+
         $selectedRecord = $this->resolveRecord($records, $this->selectedId);
         $selected = $selectedRecord ? $this->selectedStudent($selectedRecord) : null;
-        $scoreFormulas = $selectedRecord ? $this->scoreFormulasFromDb() : [];
+        $scoreFormulas = $selectedRecord ? $this->scoreFormulasFromDb($year) : [];
         $semesters = $selectedRecord ? $this->buildSemesters($selectedRecord, $scoreFormulas) : [];
+
+        $mapping = $year !== null
+            ? ProjectMapping::byGraduationYear($year)
+            : ProjectMapping::current();
 
         return view('components.⚡student-detail', [
             'roster' => $this->lockSelection ? [] : $this->roster($records),
             'selected' => $selected,
             'semesters' => $semesters,
             'finalGrade' => $this->finalGrade($semesters),
-            'academicYear' => ProjectMapping::current()?->academic_year,
+            'academicYear' => $mapping?->academic_year,
+            'availableMappings' => $availableMappings,
         ]);
+    }
+
+    private function resolveInitialGraduationYear(): ?int
+    {
+        $available = ProjectMapping::query()
+            ->orderByDesc('graduation_year')
+            ->pluck('graduation_year')
+            ->map(fn ($y) => (int) $y)
+            ->all();
+
+        if ($available === []) {
+            return null;
+        }
+
+        $stored = (int) session(self::SESSION_KEY, 0);
+        if ($stored > 0 && in_array($stored, $available, true)) {
+            return $stored;
+        }
+
+        return $available[0];
     }
 
     /**
      * @return array<string,array{field:string,components:array<int,array{field:string,label:string,coefficient:float,max_value:float,max_points:float,weight_percent:float}>}>
      */
-    private function scoreFormulasFromDb(): array
+    private function scoreFormulasFromDb(?int $graduationYear = null): array
     {
-        $mapping = ProjectMapping::current();
+        $mapping = $graduationYear !== null
+            ? ProjectMapping::byGraduationYear($graduationYear)
+            : ProjectMapping::current();
 
         if (! $mapping) {
             return [];
@@ -343,18 +395,34 @@ $chartPayload = [
 <div class="flex flex-col gap-7">
     @unless ($lockSelection)
         <section class="rounded-lg border border-[#d8e3fa] bg-white/90 p-5 shadow-[0_14px_38px_rgba(26,54,93,0.06)] backdrop-blur">
-            <flux:select
-                class="max-w-sm"
-                wire:model.live="selectedId"
-                label="Choose a student"
-            >
-                <flux:select.option value="">Select a student...</flux:select.option>
-                @foreach ($roster as $student)
-                    <flux:select.option value="{{ $student['record_id'] }}" wire:key="student-option-{{ $student['record_id'] }}">
-                        {{ $student['name'] }}
-                    </flux:select.option>
-                @endforeach
-            </flux:select>
+            <div class="flex flex-col gap-4 sm:flex-row sm:items-end">
+                @if ($availableMappings->count() >= 2)
+                    <flux:select
+                        class="max-w-[14rem]"
+                        wire:model.live="selectedGraduationYear"
+                        label="Academic Year"
+                    >
+                        @foreach ($availableMappings as $am)
+                            <flux:select.option value="{{ $am->graduation_year }}" wire:key="student-ay-option-{{ $am->id }}">
+                                {{ $am->academic_year }} (Class of {{ $am->graduation_year }})
+                            </flux:select.option>
+                        @endforeach
+                    </flux:select>
+                @endif
+
+                <flux:select
+                    class="max-w-sm"
+                    wire:model.live="selectedId"
+                    label="Choose a student"
+                >
+                    <flux:select.option value="">Select a student...</flux:select.option>
+                    @foreach ($roster as $student)
+                        <flux:select.option value="{{ $student['record_id'] }}" wire:key="student-option-{{ $student['record_id'] }}">
+                            {{ $student['name'] }}
+                        </flux:select.option>
+                    @endforeach
+                </flux:select>
+            </div>
         </section>
     @endunless
 

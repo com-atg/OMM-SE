@@ -70,3 +70,25 @@ it('uses the allowlist role for first-time logins', function () {
 it('rejects empty emails', function () {
     app(SamlService::class)->loginFromAssertion('', null, null);
 })->throws(RuntimeException::class, 'SAML assertion did not include an email address.');
+
+it('allows relative SAML redirect targets', function () {
+    expect(app(SamlService::class)->safeRedirectTarget('/student?id=10'))->toBe('/student?id=10');
+});
+
+it('allows same-origin SAML redirect targets', function () {
+    $target = url('/student?id=10');
+
+    expect(app(SamlService::class)->safeRedirectTarget($target))->toBe($target);
+});
+
+it('rejects off-site SAML redirect targets', function () {
+    config(['app.url' => 'https://example.test']);
+
+    expect(app(SamlService::class)->safeRedirectTarget('https://evil.example/phish'))
+        ->toBe(route('dashboard', absolute: false));
+});
+
+it('rejects protocol-relative SAML redirect targets', function () {
+    expect(app(SamlService::class)->safeRedirectTarget('//evil.example/phish'))
+        ->toBe(route('dashboard', absolute: false));
+});

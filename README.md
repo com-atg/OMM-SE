@@ -52,11 +52,14 @@ sequenceDiagram
 
 | Role | Access |
 |------|--------|
-| **Service** | Everything — dashboard, all scholar records, `/process/*` bulk aggregation, `/admin/users` user management |
-| **Admin** | Dashboard + all scholar records (read-only). No user management. |
+| **Service** | Everything — dashboard, all scholar records, faculty view, `/process/*` bulk aggregation, `/admin/users` user management, `/admin/settings` project-mapping management, impersonation |
+| **Admin** | Dashboard, all scholar records (read-only), faculty view. No user/settings management. |
+| **Faculty** | Faculty roster view scoped to evaluations they authored. |
 | **Student** | Own scholar record only. Redirected from dashboard to their detail page. |
 
-Service and Admin users are allowlisted by email in `.env` (`SERVICE_USERS=`, `ADMIN_USERS=`). Students auto-provision on first SAML login if their email matches a record in the REDCap destination project. Unmatched users see a 404.
+Service and Admin users are seeded via the user-management UI or imported from REDCap; legacy `.env` allowlists (`SERVICE_USERS=`, `ADMIN_USERS=`) remain supported as a bootstrap fallback. Students auto-provision on first SAML login if their email matches a record in the REDCap destination project. Unmatched users see a 404.
+
+Roles are persisted on the `users` table via the `Role` enum (`Service`, `Admin`, `Faculty`, `Student`) and enforced through Gates: `manage-users`, `manage-settings`, `run-process`, `view-student-page`.
 
 ---
 
@@ -66,6 +69,7 @@ Service and Admin users are allowlisted by email in `.env` (`SERVICE_USERS=`, `A
 |-------|-------------|
 | [Architecture](Docs/architecture.md) | System design, component breakdown, SAML + webhook data flows |
 | [REDCap Integration](Docs/redcap-integration.md) | Source/destination schemas, webhook setup, field mappings |
+| [Admin Features](Docs/admin-features.md) | User management, CSV import, project-mapping settings, impersonation |
 | [Local Development](Docs/local-development.md) | Docker setup, environment variables, simulating SSO login |
 | [Testing](Docs/testing.md) | Pest test suite, auth helpers, test structure |
 | [Production Deployment](Docs/production.md) | CI/CD pipeline, CalVer tagging, Docker Hub, SSH deploy, Okta setup |
@@ -104,19 +108,29 @@ See [Local Development](Docs/local-development.md) for the full setup guide incl
 ```
 app/
 ├── Enums/
-│   └── Role.php                         # Service / Admin / Student
+│   ├── Role.php                         # Service / Admin / Faculty / Student
+│   └── WeightCategory.php               # Final-score weighting categories
 ├── Http/
 │   ├── Controllers/
-│   │   ├── Admin/UserController.php     # Service-only user management UI
+│   │   ├── Admin/SettingsController.php # Project-mapping CRUD (Service only)
+│   │   ├── Admin/UserController.php     # User management + REDCap import + CSV import dispatch + impersonation
+│   │   ├── Auth/LocalLoginController.php# DEV-only SAML bypass (APP_ENV=local)
 │   │   ├── Auth/SamlController.php      # SAML SSO (login / ACS / logout / metadata)
 │   │   ├── DashboardController.php      # Cohort overview (Service + Admin)
+│   │   ├── FacultyController.php        # Faculty-scoped roster view
 │   │   ├── NotifierController.php       # REDCap webhook orchestrator
 │   │   ├── ProcessController.php        # Bulk aggregation by PID (Service only)
-│   │   └── ScholarController.php        # Scholar detail (scoped by role)
+│   │   └── StudentController.php        # Scholar roster + token-keyed detail (scoped by role)
 │   └── Middleware/
 │       ├── RequireSamlAuth.php          # SAML session guard
 │       └── VerifyWebhookToken.php       # Shared-secret webhook auth
-├── Models/User.php
+├── Livewire/
+│   ├── Admin/CsvUserImport.php          # Drag-drop CSV → editable preview → bulk create
+│   └── FacultyDetail.php                # Faculty-scoped evaluation detail
+├── Models/
+│   ├── User.php                         # Role enum + soft deletes + UUID public_token
+│   ├── ProjectMapping.php               # Source/destination REDCap PID mapping
+│   └── CategoryWeight.php               # Final-score formula weights
 ├── Providers/AppServiceProvider.php     # Gate definitions
 └── Services/
     ├── SamlService.php                  # Role resolution + user provisioning
@@ -126,6 +140,13 @@ app/
 config/
 ├── redcap.php
 └── saml.php
+
+resources/views/
+├── admin/
+│   ├── users/                           # Index, create, edit, import-csv pages
+│   └── settings/                        # Project-mapping index + edit
+├── livewire/admin/csv-user-import.blade.php
+└── components/app-shell.blade.php       # Layout wrapper
 
 packages/redcap-advanced-link/          # Reusable REDCap Advanced Link template
                                         # (not wired into this app — copy-paste for other projects)

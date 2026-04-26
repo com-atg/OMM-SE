@@ -48,20 +48,20 @@
 
     <section class="rounded-lg border border-white/80 bg-white/86 shadow-[0_18px_50px_rgba(15,23,42,0.07)] backdrop-blur">
         <div class="flex flex-col gap-3 border-b border-slate-200/80 p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div class="flex flex-wrap items-center gap-2" id="filterTabs">
-                <button data-filter="all" class="filter-btn rounded-lg bg-slate-950 px-3 py-2 text-xs font-bold text-white transition">
+            <div class="flex flex-wrap items-center gap-2" id="filterTabs" role="tablist" aria-label="Filter users by role">
+                <button type="button" role="tab" aria-selected="true" tabindex="0" data-filter="all" class="filter-btn rounded-lg bg-slate-950 px-3 py-2 text-xs font-bold text-white transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2">
                     All ({{ $users->count() }})
                 </button>
-                <button data-filter="service" class="filter-btn rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-600 ring-1 ring-slate-200 transition hover:bg-slate-50">
+                <button type="button" role="tab" aria-selected="false" tabindex="-1" data-filter="service" class="filter-btn rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-600 ring-1 ring-slate-200 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2">
                     Service ({{ $counts['service'] }})
                 </button>
-                <button data-filter="admin" class="filter-btn rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-600 ring-1 ring-slate-200 transition hover:bg-slate-50">
+                <button type="button" role="tab" aria-selected="false" tabindex="-1" data-filter="admin" class="filter-btn rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-600 ring-1 ring-slate-200 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2">
                     Admin ({{ $counts['admin'] }})
                 </button>
-                <button data-filter="faculty" class="filter-btn rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-600 ring-1 ring-slate-200 transition hover:bg-slate-50">
+                <button type="button" role="tab" aria-selected="false" tabindex="-1" data-filter="faculty" class="filter-btn rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-600 ring-1 ring-slate-200 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2">
                     Faculty ({{ $counts['faculty'] }})
                 </button>
-                <button data-filter="student" class="filter-btn rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-600 ring-1 ring-slate-200 transition hover:bg-slate-50">
+                <button type="button" role="tab" aria-selected="false" tabindex="-1" data-filter="student" class="filter-btn rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-600 ring-1 ring-slate-200 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2">
                     Student ({{ $counts['student'] }})
                 </button>
             </div>
@@ -244,17 +244,47 @@
 
             searchInput.addEventListener('input', applyFilters);
 
-            filterBtns.forEach(btn => {
-                btn.addEventListener('click', () => {
-                    filterBtns.forEach(tab => {
-                        tab.classList.remove('bg-slate-950', 'text-white');
-                        tab.classList.add('bg-white', 'ring-1', 'ring-slate-200', 'text-slate-600');
-                    });
+            function activateTab(btn, { focus = false } = {}) {
+                filterBtns.forEach(tab => {
+                    tab.classList.remove('bg-slate-950', 'text-white');
+                    tab.classList.add('bg-white', 'ring-1', 'ring-slate-200', 'text-slate-600');
+                    tab.setAttribute('aria-selected', 'false');
+                    tab.setAttribute('tabindex', '-1');
+                });
 
-                    btn.classList.add('bg-slate-950', 'text-white');
-                    btn.classList.remove('bg-white', 'ring-1', 'ring-slate-200', 'text-slate-600');
-                    activeFilter = btn.dataset.filter;
-                    applyFilters();
+                btn.classList.add('bg-slate-950', 'text-white');
+                btn.classList.remove('bg-white', 'ring-1', 'ring-slate-200', 'text-slate-600');
+                btn.setAttribute('aria-selected', 'true');
+                btn.setAttribute('tabindex', '0');
+
+                if (focus) {
+                    btn.focus();
+                }
+
+                activeFilter = btn.dataset.filter;
+                applyFilters();
+            }
+
+            filterBtns.forEach((btn, index) => {
+                btn.addEventListener('click', () => activateTab(btn));
+
+                btn.addEventListener('keydown', (event) => {
+                    let nextIndex = null;
+
+                    if (event.key === 'ArrowRight') {
+                        nextIndex = (index + 1) % filterBtns.length;
+                    } else if (event.key === 'ArrowLeft') {
+                        nextIndex = (index - 1 + filterBtns.length) % filterBtns.length;
+                    } else if (event.key === 'Home') {
+                        nextIndex = 0;
+                    } else if (event.key === 'End') {
+                        nextIndex = filterBtns.length - 1;
+                    }
+
+                    if (nextIndex !== null) {
+                        event.preventDefault();
+                        activateTab(filterBtns[nextIndex], { focus: true });
+                    }
                 });
             });
         </script>

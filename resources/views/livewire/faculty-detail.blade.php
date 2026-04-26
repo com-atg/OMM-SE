@@ -13,22 +13,40 @@
 @endphp
 
 <div class="flex flex-col gap-7">
-    @unless ($lockSelection)
+    @if ($availableMappings->count() >= 2 || ! $lockSelection)
         <section class="rounded-lg border border-[#d8e3fa] bg-white/90 p-5 shadow-[0_14px_38px_rgba(26,54,93,0.06)] backdrop-blur">
-            <flux:select
-                class="max-w-sm"
-                wire:model.live="selectedFaculty"
-                label="Choose a faculty member"
-            >
-                <flux:select.option value="">Select faculty...</flux:select.option>
-                @foreach ($facultyRoster as $faculty)
-                    <flux:select.option value="{{ $faculty }}" wire:key="faculty-option-{{ md5($faculty) }}">
-                        {{ $faculty }}
-                    </flux:select.option>
-                @endforeach
-            </flux:select>
+            <div class="flex flex-col gap-4 sm:flex-row sm:items-end">
+                @if ($availableMappings->count() >= 2)
+                    <flux:select
+                        class="max-w-[14rem]"
+                        wire:model.live="selectedGraduationYear"
+                        label="Academic Year"
+                    >
+                        @foreach ($availableMappings as $am)
+                            <flux:select.option value="{{ $am->graduation_year }}" wire:key="ay-option-{{ $am->id }}">
+                                {{ $am->academic_year }} (Class of {{ $am->graduation_year }})
+                            </flux:select.option>
+                        @endforeach
+                    </flux:select>
+                @endif
+
+                @unless ($lockSelection)
+                    <flux:select
+                        class="max-w-sm"
+                        wire:model.live="selectedFaculty"
+                        label="Choose a faculty member"
+                    >
+                        <flux:select.option value="">Select faculty...</flux:select.option>
+                        @foreach ($facultyRoster as $faculty)
+                            <flux:select.option value="{{ $faculty }}" wire:key="faculty-option-{{ md5($faculty) }}">
+                                {{ $faculty }}
+                            </flux:select.option>
+                        @endforeach
+                    </flux:select>
+                @endunless
+            </div>
         </section>
-    @endunless
+    @endif
 
     @if ($displayFaculty === '')
         <section class="rounded-lg border border-[#d8e3fa] bg-white/90 p-10 text-center shadow-[0_14px_38px_rgba(26,54,93,0.05)]">

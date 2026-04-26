@@ -7,14 +7,12 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
 /**
- * Wraps Redcap_lib for the current academic year's source evaluation project.
- * The source project is recreated each year. Webhooks may provide a PID-specific
- * token resolved from project mappings; otherwise REDCAP_SOURCE_TOKEN is used.
+ * Wraps Redcap_lib for source evaluation projects. Source projects are recreated
+ * each academic year; callers must resolve the per-AY token from project_mappings
+ * and pass it explicitly to every method.
  */
 class RedcapSourceService
 {
-    private string $token;
-
     private string $url;
 
     /** Score field name keyed by eval_category code. */
@@ -43,7 +41,6 @@ class RedcapSourceService
 
     public function __construct()
     {
-        $this->token = config('redcap.source_token');
         $this->url = config('redcap.url');
     }
 
@@ -51,7 +48,7 @@ class RedcapSourceService
      * Fetch a single evaluation record by record_id.
      * Returns the first record as an array (raw values + calculated fields).
      */
-    public function getRecord(string $recordId, ?string $token = null): array
+    public function getRecord(string $recordId, string $token): array
     {
         $result = Redcap_lib::exportRecords(
             format: 'json',
@@ -60,7 +57,7 @@ class RedcapSourceService
             rawOrLabel: 'raw',
             returnAs: 'array',
             url: $this->url,
-            token: $token ?? $this->token,
+            token: $token,
         );
 
         return $result[0] ?? [];
@@ -72,7 +69,7 @@ class RedcapSourceService
      * semester is the raw coded value ('1' = Spring, '2' = Fall).
      * Returns empty array if either value fails validation.
      */
-    public function getStudentEvals(string $datatelId, string $semester, ?string $token = null): array
+    public function getStudentEvals(string $datatelId, string $semester, string $token): array
     {
         if (! preg_match('/^\d+$/', $datatelId) || ! preg_match('/^[12]$/', $semester)) {
             return [];
@@ -85,13 +82,13 @@ class RedcapSourceService
             filterLogic: "[student]='{$datatelId}' and [semester]='{$semester}'",
             returnAs: 'array',
             url: $this->url,
-            token: $token ?? $this->token,
+            token: $token,
         );
     }
 
     /**
-     * Fetch all records from an arbitrary source project by token.
-     * Used by bulk processing where the token is resolved per-PID from env.
+     * Fetch all records from a source project by token.
+     * Token is resolved per-PID from project_mappings.
      *
      * @return array<int,array<string,mixed>>
      */
@@ -114,18 +111,16 @@ class RedcapSourceService
      *
      * @return array<int,array<string,mixed>>
      */
-    public function getCompletedEvaluationRecords(int $cacheMinutes = 5, ?string $token = null): array
+    public function getCompletedEvaluationRecords(string $token, int $cacheMinutes = 5): array
     {
-        $sourceToken = $token ?? $this->token;
-
-        if ($sourceToken === '') {
+        if ($token === '') {
             return [];
         }
 
-        $cacheKey = 'source:completed_evaluations:'.Str::substr(hash('sha256', $sourceToken), 0, 16);
+        $cacheKey = 'source:completed_evaluations:'.Str::substr(hash('sha256', $token), 0, 16);
 
-        return Cache::remember($cacheKey, now()->addMinutes($cacheMinutes), function () use ($sourceToken): array {
-            return collect($this->fetchAllRecords($sourceToken))
+        return Cache::remember($cacheKey, now()->addMinutes($cacheMinutes), function () use ($token): array {
+            return collect($this->fetchAllRecords($token))
                 ->filter(fn (array $record): bool => $this->isCompletedEvaluationRecord($record))
                 ->values()
                 ->all();

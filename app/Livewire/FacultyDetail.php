@@ -22,10 +22,47 @@ class FacultyDetail extends Component
 
     public bool $detailModalOpen = false;
 
+    public ?int $selectedGraduationYear = null;
+
+    public const SESSION_KEY = 'academic_year_filter';
+
+    public function mount(): void
+    {
+        $this->selectedGraduationYear = $this->resolveInitialGraduationYear();
+    }
+
+    public function updatedSelectedGraduationYear(): void
+    {
+        session([self::SESSION_KEY => $this->selectedGraduationYear]);
+        $this->selectedFaculty = '';
+        $this->selectedRecordId = null;
+        $this->detailModalOpen = false;
+    }
+
     public function updatedSelectedFaculty(): void
     {
         $this->selectedRecordId = null;
         $this->detailModalOpen = false;
+    }
+
+    private function resolveInitialGraduationYear(): ?int
+    {
+        $available = ProjectMapping::query()
+            ->orderByDesc('graduation_year')
+            ->pluck('graduation_year')
+            ->map(fn ($year) => (int) $year)
+            ->all();
+
+        if ($available === []) {
+            return null;
+        }
+
+        $stored = (int) session(self::SESSION_KEY, 0);
+        if ($stored > 0 && in_array($stored, $available, true)) {
+            return $stored;
+        }
+
+        return $available[0];
     }
 
     public function openEvaluation(string $recordId): void
@@ -39,9 +76,17 @@ class FacultyDetail extends Component
         $user = Auth::user();
         abort_unless($user instanceof User && $user->canViewFacultyDetail(), 403);
 
-        $mapping = ProjectMapping::latestSourceProject();
-        $sourceToken = $mapping?->redcap_token;
-        $sourceRecords = app(RedcapSourceService::class)->getCompletedEvaluationRecords(token: $sourceToken);
+        $availableMappings = ProjectMapping::query()
+            ->orderByDesc('graduation_year')
+            ->get(['id', 'academic_year', 'graduation_year']);
+
+        $mapping = $this->selectedGraduationYear !== null
+            ? ProjectMapping::byGraduationYear($this->selectedGraduationYear)
+            : ProjectMapping::latestSourceProject();
+        $sourceToken = (string) ($mapping?->redcap_token ?? '');
+        $sourceRecords = $sourceToken === ''
+            ? []
+            : app(RedcapSourceService::class)->getCompletedEvaluationRecords($sourceToken);
 
         if ($user->isFaculty()) {
             $sourceRecords = collect($sourceRecords)
@@ -65,6 +110,7 @@ class FacultyDetail extends Component
             'categoryCounts' => collect($evaluations)->countBy('category_label')->sortKeys(),
             'displayFaculty' => $displayFaculty,
             'lockSelection' => $user->isFaculty(),
+            'availableMappings' => $availableMappings,
         ]);
     }
 

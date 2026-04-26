@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Jobs\ProcessSourceProjectJob;
+use App\Models\ProjectMapping;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Cache;
@@ -13,7 +14,7 @@ class ProcessController extends Controller
 {
     /**
      * Kick off bulk aggregation for a source REDCap project identified by PID.
-     * Token is resolved from env var REDCAP_TOKEN_PID_{pid}.
+     * Token is resolved from the project_mappings table.
      */
     public function show(string $pid): View|Response
     {
@@ -21,11 +22,15 @@ class ProcessController extends Controller
             abort(404, 'Invalid PID.');
         }
 
-        $token = env("REDCAP_TOKEN_PID_{$pid}");
+        $mapping = ProjectMapping::query()
+            ->where('redcap_pid', $pid)
+            ->first();
 
-        if (! $token) {
-            abort(404, "No REDCap token configured for PID {$pid}. Add REDCAP_TOKEN_PID_{$pid} to .env.");
+        if (! $mapping) {
+            abort(404, "No project mapping found for PID {$pid}.");
         }
+
+        $token = (string) $mapping->redcap_token;
 
         $jobId = (string) Str::uuid();
 
@@ -55,24 +60,28 @@ class ProcessController extends Controller
     }
 
     /**
-     * Kick off bulk aggregation for the configured source project (REDCAP_SOURCE_TOKEN).
+     * Kick off bulk aggregation for the current academic year's source project,
+     * resolved from project_mappings (latest by graduation/academic year).
      * This is the one-click "process all evaluations" action available from the dashboard.
      */
     public function run(): View|Response
     {
-        $token = config('redcap.source_token');
+        $mapping = ProjectMapping::latestSourceProject();
 
         abort_if(
-            empty($token),
+            $mapping === null,
             503,
-            'REDCAP_SOURCE_TOKEN is not configured. Add it to .env before running.'
+            'No project mapping configured. Add one in Settings before running.'
         );
+
+        $token = (string) $mapping->redcap_token;
+        $pid = (string) $mapping->redcap_pid;
 
         $jobId = (string) Str::uuid();
 
         Cache::put(ProcessSourceProjectJob::cacheKey($jobId), [
             'job_id' => $jobId,
-            'pid' => 'source',
+            'pid' => $pid,
             'status' => 'pending',
             'started_at' => now()->toIso8601String(),
             'finished_at' => null,
@@ -86,10 +95,10 @@ class ProcessController extends Controller
             'error' => null,
         ], now()->addMinutes(ProcessSourceProjectJob::TTL_MINUTES));
 
-        ProcessSourceProjectJob::dispatchAfterResponse($jobId, 'source', $token);
+        ProcessSourceProjectJob::dispatchAfterResponse($jobId, $pid, $token);
 
         return view('process', [
-            'pid' => 'Source Project',
+            'pid' => $mapping->displayName().' / PID '.$pid,
             'jobId' => $jobId,
             'active' => 'dashboard',
         ]);

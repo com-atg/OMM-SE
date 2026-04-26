@@ -88,7 +88,7 @@ function facultyStudentMap(): array
 it('renders the faculty page for users who can view all students', function () {
     $source = mock(RedcapSourceService::class);
     $source->shouldReceive('getCompletedEvaluationRecords')
-        ->with(5, 'CURRENT_PROJECT_TOKEN')
+        ->with('CURRENT_PROJECT_TOKEN')
         ->andReturn(facultySourceRecords());
 
     $destination = mock(RedcapDestinationService::class);
@@ -103,17 +103,17 @@ it('renders the faculty page for users who can view all students', function () {
         ->assertSee('Dr. Smith', false);
 });
 
-it('uses the token from the mapped project with the highest pid', function () {
+it('defaults to the mapping with the highest graduation year and shows the academic year switcher when multiple exist', function () {
     ProjectMapping::factory()->create([
         'academic_year' => '2026-2027',
         'graduation_year' => 2027,
         'redcap_pid' => 1847,
-        'redcap_token' => 'HIGHEST_PID_TOKEN',
+        'redcap_token' => 'OLDER_TOKEN',
     ]);
 
     $source = mock(RedcapSourceService::class);
     $source->shouldReceive('getCompletedEvaluationRecords')
-        ->with(5, 'HIGHEST_PID_TOKEN')
+        ->with('CURRENT_PROJECT_TOKEN')
         ->andReturn(facultySourceRecords());
 
     $destination = mock(RedcapDestinationService::class);
@@ -121,6 +121,9 @@ it('uses the token from the mapped project with the highest pid', function () {
 
     get('/faculty')
         ->assertOk()
+        ->assertSee('Academic Year', false)
+        ->assertSee('2025-2026 (Class of 2028)', false)
+        ->assertSee('2026-2027 (Class of 2027)', false)
         ->assertSee('Dr. Smith', false);
 });
 
@@ -201,6 +204,31 @@ it('opens a modal with specific evaluation details', function () {
         ->assertSee('Individual / Small Group Teaching')
         ->assertSee('Strong teaching session.')
         ->assertSee('#101');
+});
+
+it('switches the source token when the academic year dropdown changes', function () {
+    ProjectMapping::factory()->create([
+        'academic_year' => '2026-2027',
+        'graduation_year' => 2027,
+        'redcap_pid' => 1847,
+        'redcap_token' => 'OLDER_TOKEN',
+    ]);
+
+    $source = mock(RedcapSourceService::class);
+    $source->shouldReceive('getCompletedEvaluationRecords')->with('CURRENT_PROJECT_TOKEN')->andReturn(facultySourceRecords());
+    $source->shouldReceive('getCompletedEvaluationRecords')->with('OLDER_TOKEN')->andReturn([]);
+
+    $destination = mock(RedcapDestinationService::class);
+    $destination->shouldReceive('studentMapByDatatelId')->andReturn(facultyStudentMap());
+
+    Livewire::test('faculty-detail')
+        ->assertSet('selectedGraduationYear', 2028)
+        ->assertSee('Dr. Smith')
+        ->set('selectedGraduationYear', 2027)
+        ->assertSet('selectedFaculty', '')
+        ->assertDontSee('Dr. Smith');
+
+    expect(session('academic_year_filter'))->toBe(2027);
 });
 
 it('centers the faculty and modal table columns', function () {

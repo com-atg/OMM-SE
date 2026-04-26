@@ -1,6 +1,7 @@
 <?php
 
 use App\Jobs\ProcessSourceProjectJob;
+use App\Models\ProjectMapping;
 use App\Services\RedcapDestinationService;
 use App\Services\RedcapSourceService;
 use Illuminate\Support\Facades\Cache;
@@ -12,20 +13,16 @@ use function Pest\Laravel\post;
 
 beforeEach(function () {
     Cache::flush();
-    $_ENV['REDCAP_TOKEN_PID_1846'] = 'TEST_TOKEN_ABC';
-    putenv('REDCAP_TOKEN_PID_1846=TEST_TOKEN_ABC');
     asService();
 });
 
-afterEach(function () {
-    unset($_ENV['REDCAP_TOKEN_PID_1846']);
-    putenv('REDCAP_TOKEN_PID_1846');
-});
-
-// ─── One-click run (REDCAP_SOURCE_TOKEN) ─────────────────────────────────────
+// ─── One-click run (current AY mapping) ──────────────────────────────────────
 
 it('triggers the source project job and renders the process view', function () {
-    config(['redcap.source_token' => 'SOURCE_TOKEN_TEST']);
+    ProjectMapping::factory()->create([
+        'redcap_pid' => 1846,
+        'redcap_token' => 'TEST_TOKEN_ABC',
+    ]);
 
     $source = mock(RedcapSourceService::class);
     $source->shouldReceive('fetchAllRecords')->andReturn([]);
@@ -34,18 +31,16 @@ it('triggers the source project job and renders the process view', function () {
 
     $response = post(route('process.run'));
 
-    $response->assertOk()->assertViewIs('process')->assertSee('Source Project');
+    $response->assertOk()->assertViewIs('process')->assertSee('PID 1846');
 
     $jobId = $response->viewData('jobId');
     $state = Cache::get(ProcessSourceProjectJob::cacheKey($jobId));
 
-    expect($state['pid'])->toBe('source')
+    expect($state['pid'])->toBe('1846')
         ->and($state['status'])->toBeIn(['pending', 'running', 'complete']);
 });
 
-it('returns 503 when REDCAP_SOURCE_TOKEN is not configured', function () {
-    config(['redcap.source_token' => '']);
-
+it('returns 503 when no project mapping is configured', function () {
     post(route('process.run'))->assertStatus(503);
 });
 
@@ -61,13 +56,18 @@ it('returns 404 for a non-numeric PID', function () {
     get('/process/abc')->assertNotFound();
 });
 
-it('returns 404 when no token is configured for the PID', function () {
+it('returns 404 when no project mapping exists for the PID', function () {
     get('/process/9999')->assertNotFound();
 });
 
 // ─── Kickoff ─────────────────────────────────────────────────────────────────
 
 it('seeds cache state and schedules the job when kicked off', function () {
+    ProjectMapping::factory()->create([
+        'redcap_pid' => 1846,
+        'redcap_token' => 'TEST_TOKEN_ABC',
+    ]);
+
     // Swap the source service so the after-response job can't actually call REDCap.
     $source = mock(RedcapSourceService::class);
     $source->shouldReceive('fetchAllRecords')->andReturn([]);

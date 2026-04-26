@@ -342,3 +342,22 @@ Static assets are served with `Cache-Control: public, max-age=31536000, immutabl
 - [ ] GitHub Secrets configured: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `SSH_HOST`, `SSH_USER`, `SSH_KEY`
 - [ ] SSH deploy key has minimal permissions (deploy user, no sudo)
 - [ ] `.env` file on server is `chmod 600`
+- [ ] `GET /test/email` route guarded behind `app()->environment('local')` or removed before deploy (currently public — see security note below)
+
+---
+
+## Admin Surface Threats
+
+The Service-only `/admin/*` routes introduce additional attack surface beyond the webhook + scholar views.
+
+| Surface | Risk | Mitigation |
+|---------|------|------------|
+| `POST /admin/users/import` | Long-running synchronous REDCap roster fetch; can hang the request thread | Service-only via `can:manage-users`; consider migrating to a queued job |
+| `POST /admin/users/import-csv` (Livewire) | Untrusted CSV upload; malformed rows or oversize files | 1 MB file size cap, MIME `csv,txt` validation, per-cell validation, transaction-wrapped insert. Consider a server-side `Storage::mimeType()` re-check |
+| `POST /admin/users/{user}/impersonate` | Privilege escalation if Service account compromised | Cannot impersonate Service users; cannot self-impersonate; persistent banner shown; session-only — closing the browser ends impersonation. The `/impersonate/stop` route sits **outside** the `manage-users` gate so an impersonated user can always exit |
+| `POST /admin/settings/project-mappings/*` | Settings tampering could redirect aggregation to wrong destination | Gated by `manage-settings` and CRUD operations sub-gated by `manage-settings-records` |
+| `GET /test/email` (current) | **Open route** that renders an evaluation email with stubbed-but-realistic faculty/scholar PII patterns; usable for phishing template harvesting | **Action required**: wrap in `if (app()->environment('local'))` block in `routes/web.php`, mirroring `/local/login` |
+
+### Impersonation audit logging
+
+Impersonation start/stop events update the standard Laravel `last_login_at` flow but are **not** persisted to a dedicated audit log. If compliance requires a tamper-evident trail, add a `user_audit_events` table or stream events to the application log via a `LoginImpersonated` event listener.

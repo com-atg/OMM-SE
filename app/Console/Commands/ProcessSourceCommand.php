@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Models\ProjectMapping;
 use App\Services\RedcapDestinationService;
 use App\Services\RedcapSourceService;
 use App\Support\EvalAggregator;
@@ -12,7 +13,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 #[Signature('omm:process-source
-    {--pid= : Process a specific PID using REDCAP_TOKEN_PID_<pid> instead of REDCAP_SOURCE_TOKEN}
+    {--pid= : Process a specific PID (resolved from project_mappings) instead of the current academic year}
     {--dry-run : Aggregate without writing back to the destination project}')]
 #[Description('Aggregate all source evaluation records and push results to the destination REDCap project.')]
 class ProcessSourceCommand extends Command
@@ -24,24 +25,26 @@ class ProcessSourceCommand extends Command
         $dryRun = (bool) $this->option('dry-run');
         $pid = $this->option('pid');
 
-        // Resolve token.
+        // Resolve token from project_mappings.
         if ($pid !== null) {
-            $token = env("REDCAP_TOKEN_PID_{$pid}");
-            if (! $token) {
-                $this->error("No token configured for PID {$pid}. Add REDCAP_TOKEN_PID_{$pid} to .env.");
+            $mapping = ProjectMapping::query()->where('redcap_pid', $pid)->first();
+            if (! $mapping) {
+                $this->error("No project mapping found for PID {$pid}.");
 
                 return self::FAILURE;
             }
             $label = "PID {$pid}";
         } else {
-            $token = config('redcap.source_token');
-            if (empty($token)) {
-                $this->error('REDCAP_SOURCE_TOKEN is not configured. Add it to .env before running.');
+            $mapping = ProjectMapping::latestSourceProject();
+            if (! $mapping) {
+                $this->error('No project mapping configured. Add one in Settings before running.');
 
                 return self::FAILURE;
             }
-            $label = 'source project (REDCAP_SOURCE_TOKEN)';
+            $label = $mapping->displayName().' / PID '.$mapping->redcap_pid;
         }
+
+        $token = (string) $mapping->redcap_token;
 
         $this->info("Processing {$label}".($dryRun ? ' <comment>[dry-run — no writes]</comment>' : '').'…');
 

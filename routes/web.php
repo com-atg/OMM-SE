@@ -75,7 +75,7 @@ Route::middleware(RequireSamlAuth::class)->group(function () {
     Route::get('/faculty', FacultyController::class)->name('faculty');
 
     // Bulk aggregation for a source REDCap project identified by PID.
-    // Token resolved from .env as REDCAP_TOKEN_PID_{pid}.
+    // Token resolved from the project_mappings table.
     Route::middleware('can:run-process')->group(function () {
         Route::post('/process/run', [ProcessController::class, 'run'])->name('process.run');
         Route::get('/process/{pid}', [ProcessController::class, 'show'])
@@ -110,7 +110,9 @@ Route::middleware(RequireSamlAuth::class)->group(function () {
         Route::post('/settings/project-mappings/{projectMapping}/process', [SettingsController::class, 'process'])->name('settings.project-mappings.process');
 
         Route::middleware('can:manage-settings-records')->group(function () {
+            Route::get('/settings/new-academic-year', [SettingsController::class, 'newAcademicYear'])->name('settings.new-academic-year');
             Route::post('/settings/project-mappings', [SettingsController::class, 'store'])->name('settings.project-mappings.store');
+            Route::get('/settings/project-mappings/{projectMapping}/import-students', [SettingsController::class, 'importStudents'])->name('settings.project-mappings.import-students');
             Route::get('/settings/project-mappings/{projectMapping}/edit', [SettingsController::class, 'edit'])->name('settings.project-mappings.edit');
             Route::patch('/settings/project-mappings/{projectMapping}', [SettingsController::class, 'update'])->name('settings.project-mappings.update');
             Route::delete('/settings/project-mappings/{projectMapping}', [SettingsController::class, 'destroy'])->name('settings.project-mappings.destroy');
@@ -126,46 +128,48 @@ Route::any('/notify', NotifierController::class)
     ->name('notify');
 
 // Email preview for local development — shows a Teaching (A) evaluation stub.
-Route::get('/test/email', function () {
-    $evalRecord = array_merge(
-        array_fill_keys(['small', 'large', 'knowledge', 'studevals', 'profess'], '4'),
-        [
+if (app()->environment('local')) {
+    Route::get('/test/email', function () {
+        $evalRecord = array_merge(
+            array_fill_keys(['small', 'large', 'knowledge', 'studevals', 'profess'], '4'),
+            [
+                'record_id' => '1',
+                'date_lab' => '04-16-2026',
+                'semester' => '1',
+                'student' => '1',
+                'eval_category' => 'A',
+                'teaching_score' => '83.33',
+                'comments' => 'Great enthusiasm during the small group session. Keep up the excellent work!',
+                'faculty' => 'Dr. Smith',
+                'faculty_email' => 'faculty@example.com',
+            ]
+        );
+
+        $studentRecord = [
             'record_id' => '1',
-            'date_lab' => '04-16-2026',
-            'semester' => '1',
-            'student' => '1',
-            'eval_category' => 'A',
-            'teaching_score' => '83.33',
-            'comments' => 'Great enthusiasm during the small group session. Keep up the excellent work!',
-            'faculty' => 'Dr. Smith',
-            'faculty_email' => 'faculty@example.com',
-        ]
-    );
+            'first_name' => 'Catherine',
+            'last_name' => 'Chin',
+            'goes_by' => 'Cat',
+            'email' => 'catherine@example.com',
+        ];
 
-    $studentRecord = [
-        'record_id' => '1',
-        'first_name' => 'Catherine',
-        'last_name' => 'Chin',
-        'goes_by' => 'Cat',
-        'email' => 'catherine@example.com',
-    ];
+        $aggregates = [
+            'semester' => 'spring',
+            'by_category' => [
+                'teaching' => ['nu' => 1, 'avg' => 83.33],
+                'clinic' => ['nu' => 0, 'avg' => null],
+                'research' => ['nu' => 0, 'avg' => null],
+                'didactics' => ['nu' => 0, 'avg' => null],
+            ],
+            'fields' => [],
+        ];
 
-    $aggregates = [
-        'semester' => 'spring',
-        'by_category' => [
-            'teaching' => ['nu' => 1, 'avg' => 83.33],
-            'clinic' => ['nu' => 0, 'avg' => null],
-            'research' => ['nu' => 0, 'avg' => null],
-            'didactics' => ['nu' => 0, 'avg' => null],
-        ],
-        'fields' => [],
-    ];
-
-    return new EvaluationNotification(
-        evalRecord: $evalRecord,
-        studentRecord: $studentRecord,
-        semester: 'spring',
-        aggregates: $aggregates,
-        evalCategory: 'A',
-    );
-})->name('test.email');
+        return new EvaluationNotification(
+            evalRecord: $evalRecord,
+            studentRecord: $studentRecord,
+            semester: 'spring',
+            aggregates: $aggregates,
+            evalCategory: 'A',
+        );
+    })->name('test.email');
+}

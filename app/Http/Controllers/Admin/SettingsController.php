@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\Role;
 use App\Http\Controllers\Controller;
 use App\Jobs\ProcessSourceProjectJob;
 use App\Models\ProjectMapping;
+use App\Models\User;
+use App\Services\RedcapDestinationService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -32,13 +35,76 @@ class SettingsController extends Controller
         ]);
     }
 
+    public function newAcademicYear(): View
+    {
+        $latestGraduationYear = (int) ProjectMapping::query()->max('graduation_year');
+        $nextGraduationYear = $latestGraduationYear > 0
+            ? $latestGraduationYear + 1
+            : 2028;
+
+        return view('admin.settings.new-academic-year', [
+            'nextGraduationYear' => $nextGraduationYear,
+        ]);
+    }
+
     public function store(Request $request): RedirectResponse
     {
-        ProjectMapping::create($this->validatedProjectMapping($request));
+        $projectMapping = ProjectMapping::create($this->validatedProjectMapping($request));
 
         return redirect()
-            ->route('admin.settings.index')
-            ->with('status', 'Project mapping created.');
+            ->route('admin.settings.project-mappings.import-students', $projectMapping)
+            ->with('status', 'Project mapping created. Importing scholars from REDCap...');
+    }
+
+    public function importStudents(ProjectMapping $projectMapping, RedcapDestinationService $destination): View
+    {
+        Cache::forget('destination:all_students');
+        $records = $destination->getStudentsByGraduationYear($projectMapping->graduation_year);
+
+        $created = [];
+        $skipped = [];
+        $missingEmail = [];
+
+        foreach ($records as $record) {
+            $email = strtolower(trim((string) ($record['email'] ?? '')));
+            $firstName = trim((string) ($record['goes_by'] ?? '')) !== ''
+                ? trim((string) $record['goes_by'])
+                : trim((string) ($record['first_name'] ?? ''));
+            $lastName = trim((string) ($record['last_name'] ?? ''));
+            $name = trim("{$firstName} {$lastName}");
+
+            if ($email === '') {
+                $missingEmail[] = [
+                    'record_id' => (string) ($record['record_id'] ?? ''),
+                    'name' => $name !== '' ? $name : '(unknown)',
+                ];
+
+                continue;
+            }
+
+            if (User::withTrashed()->where('email', $email)->exists()) {
+                $skipped[] = ['email' => $email, 'name' => $name ?: $email];
+
+                continue;
+            }
+
+            User::create([
+                'email' => $email,
+                'name' => $name !== '' ? $name : $email,
+                'role' => Role::Student,
+                'redcap_record_id' => (string) ($record['record_id'] ?? '') ?: null,
+            ]);
+
+            $created[] = ['email' => $email, 'name' => $name ?: $email];
+        }
+
+        return view('admin.settings.import-students-result', [
+            'projectMapping' => $projectMapping,
+            'totalFetched' => count($records),
+            'created' => $created,
+            'skipped' => $skipped,
+            'missingEmail' => $missingEmail,
+        ]);
     }
 
     public function edit(ProjectMapping $projectMapping): View

@@ -8,10 +8,10 @@ The app sits between two REDCap projects, an Okta tenant, and a mail server. Sta
 C4Context
     title OMM Scholar Eval — System Context
 
-    Person(faculty, "Faculty", "Submits scholar evaluations in REDCap")
-    Person(scholar, "Scholar", "Logs in via Okta; views own eval records")
+    Person(faculty, "Faculty", "Submits scholar evaluations in REDCap; views own evaluation roster in app")
+    Person(scholar, "Scholar (Student)", "Logs in via Okta; views own eval records")
     Person(admin, "Administrator", "Logs in via Okta; views all scholar records")
-    Person(service, "Service User", "Logs in via Okta; full access + user management")
+    Person(service, "Service User", "Logs in via Okta; full access + user management + project-mapping settings + impersonation")
 
     System(app, "OMM Scholar Eval", "Laravel 13 web app + webhook processor")
     System_Ext(okta, "Okta", "SAML 2.0 Identity Provider")
@@ -258,7 +258,37 @@ The application intentionally has no database. This simplifies operations signif
 | Sessions | `SESSION_DRIVER=database` — `sessions` table in MySQL |
 | Cache | `CACHE_STORE=database` — `cache` table; scholar roster cached 10 min, per-scholar 1 h |
 | Queue | `QUEUE_CONNECTION=database` — `jobs` table; bulk-aggregation job dispatched after response |
-| Migrations | `users`, `sessions`, `cache`, `jobs`, `password_reset_tokens` |
-| Persistence | User records (with roles + REDCap record IDs) in MySQL; aggregated grades in REDCap |
+| Migrations | `users`, `project_mappings`, `category_weights`, `sessions`, `cache`, `jobs`, `password_reset_tokens` |
+| Persistence | User records (with roles + REDCap record IDs), project mappings, and category weights in MySQL; aggregated grades in REDCap |
 
 User authentication state is stored in the database-backed session. The `users` table caches each scholar's `redcap_record_id` after their first SAML login, avoiding a REDCap API call on every request.
+
+---
+
+## Admin Surface
+
+In addition to the webhook + scholar/faculty views, the app exposes a Service-only admin surface:
+
+```mermaid
+flowchart LR
+    SVC[Service user] --> UI[/admin/users/]
+    SVC --> SET[/admin/settings/]
+    UI --> CRUD[Create / edit / delete users]
+    UI --> CSV[CSV import - Livewire]
+    UI --> RC[Import full REDCap roster]
+    UI --> IMP[Impersonate non-Service user]
+    SET --> PM[Project-mapping CRUD]
+    SET --> RUN[Trigger per-mapping processing]
+```
+
+See [Admin Features](admin-features.md) for routes, gates, validation rules, and the CSV import workflow.
+
+**Gates** (defined in `AppServiceProvider`):
+
+| Gate | Allowed roles |
+|------|---------------|
+| `manage-users` | Service |
+| `manage-settings` | Service |
+| `manage-settings-records` | Service (sub-gate for project-mapping CRUD vs. process-only) |
+| `run-process` | Service |
+| `view-student-page` | Service, Admin, Student (own record only) |

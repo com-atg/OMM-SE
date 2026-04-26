@@ -31,6 +31,10 @@ class NotifierController extends Controller
 
         $sourceToken = $this->sourceTokenFor($request);
 
+        if ($sourceToken === null) {
+            return response('', 200);
+        }
+
         // 1. Fetch the triggering eval record from source.
         $evalRecord = $source->getRecord($recordId, $sourceToken);
 
@@ -122,6 +126,8 @@ class NotifierController extends Controller
         $projectId = trim((string) $request->input('project_id', ''));
 
         if ($projectId === '') {
+            Log::error('NotifierController: webhook missing project_id; cannot resolve source token.');
+
             return null;
         }
 
@@ -133,13 +139,7 @@ class NotifierController extends Controller
             return (string) $projectMapping->redcap_token;
         }
 
-        $projectToken = config("redcap.project_tokens.{$projectId}");
-
-        if (is_string($projectToken) && $projectToken !== '') {
-            return $projectToken;
-        }
-
-        Log::warning('NotifierController: no source token mapping found for webhook project_id; falling back to REDCAP_SOURCE_TOKEN.', [
+        Log::error('NotifierController: no project mapping found for webhook project_id; rejecting.', [
             'project_id' => $projectId,
         ]);
 

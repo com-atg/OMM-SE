@@ -1,7 +1,9 @@
 <?php
 
+use App\Livewire\Dashboard;
 use App\Services\RedcapDestinationService;
 use Illuminate\Support\Facades\Cache;
+use Livewire\Livewire;
 
 use function Pest\Laravel\get;
 use function Pest\Laravel\mock;
@@ -35,17 +37,15 @@ function destRoster(): array
 
 it('renders the dashboard with aggregated stats', function () {
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('getAllStudentRecords')->once()->andReturn(destRoster());
+    $destination->shouldReceive('getAllStudentRecords')->andReturn(destRoster());
 
-    $response = get('/');
-
-    $response->assertOk()
+    get('/')->assertOk()
         ->assertViewIs('dashboard')
         ->assertSee('OMM Student Evaluations')
         ->assertDontSee('Student detail')
         ->assertDontSee('Manage users');
 
-    $stats = $response->viewData('stats');
+    $stats = Livewire::test(Dashboard::class)->viewData('stats');
 
     expect($stats['kpis']['total_students'])->toBe(3)
         ->and($stats['kpis']['total_evals'])->toBe(7)
@@ -60,7 +60,7 @@ it('renders the dashboard with aggregated stats', function () {
 });
 
 it('centers dashboard category detail table columns', function () {
-    $dashboard = file_get_contents(resource_path('views/dashboard.blade.php'));
+    $dashboard = file_get_contents(resource_path('views/livewire/dashboard.blade.php'));
 
     expect($dashboard)
         ->toContain('align="center">Category')
@@ -74,7 +74,7 @@ it('centers dashboard category detail table columns', function () {
 });
 
 it('uses a categorical y axis for the coverage chart', function () {
-    $dashboard = file_get_contents(resource_path('views/dashboard.blade.php'));
+    $dashboard = file_get_contents(resource_path('views/livewire/dashboard.blade.php'));
 
     expect($dashboard)
         ->toContain("indexAxis: 'y'")
@@ -88,7 +88,7 @@ it('uses a categorical y axis for the coverage chart', function () {
 });
 
 it('labels dashboard charts with concise metric definitions', function () {
-    $dashboard = file_get_contents(resource_path('views/dashboard.blade.php'));
+    $dashboard = file_get_contents(resource_path('views/livewire/dashboard.blade.php'));
 
     expect($dashboard)
         ->toContain('Evaluation-weighted average score on a 0-100 scale.')
@@ -102,16 +102,14 @@ it('labels dashboard charts with concise metric definitions', function () {
 
 it('renders gracefully when the destination service throws', function () {
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('getAllStudentRecords')->once()->andThrow(new RuntimeException('REDCap down'));
+    $destination->shouldReceive('getAllStudentRecords')->andThrow(new RuntimeException('REDCap down'));
 
-    $response = get('/');
-
-    $response->assertOk()
+    get('/')->assertOk()
         ->assertViewIs('dashboard')
         ->assertSee('Dashboard data needs attention')
         ->assertSee('No student records are available');
 
-    $stats = $response->viewData('stats');
+    $stats = Livewire::test(Dashboard::class)->viewData('stats');
     expect($stats['has_students'])->toBeFalse()
         ->and($stats['has_evals'])->toBeFalse()
         ->and($stats['kpis']['total_students'])->toBe(0)
@@ -131,18 +129,16 @@ it('shows a friendly empty state when the roster returns no records', function (
 
 it('shows the "no evaluations yet" state when students exist but have no evals', function () {
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('getAllStudentRecords')->once()->andReturn([
+    $destination->shouldReceive('getAllStudentRecords')->andReturn([
         ['record_id' => '1', 'first_name' => 'Ava', 'last_name' => 'Adams'],
         ['record_id' => '2', 'first_name' => 'Ben', 'last_name' => 'Brown'],
     ]);
 
-    $response = get('/');
-
-    $response->assertOk()
+    get('/')->assertOk()
         ->assertSee('No evaluations recorded yet')
         ->assertDontSee('chartAvgByCategory');
 
-    $stats = $response->viewData('stats');
+    $stats = Livewire::test(Dashboard::class)->viewData('stats');
     expect($stats['has_students'])->toBeTrue()
         ->and($stats['has_evals'])->toBeFalse()
         ->and($stats['kpis']['total_students'])->toBe(2);
@@ -150,18 +146,20 @@ it('shows the "no evaluations yet" state when students exist but have no evals',
 
 it('does not cache failed dashboard fetches as empty data', function () {
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('getAllStudentRecords')->once()->andThrow(new RuntimeException('REDCap down'));
+    $destination->shouldReceive('getAllStudentRecords')->andThrow(new RuntimeException('REDCap down'));
 
     get('/')->assertOk()
         ->assertSee('Dashboard data needs attention');
 
-    $destination->shouldReceive('getAllStudentRecords')->once()->andReturn(destRoster());
+    Cache::flush();
 
-    $response = get('/');
+    $destination = mock(RedcapDestinationService::class);
+    $destination->shouldReceive('getAllStudentRecords')->andReturn(destRoster());
 
-    $response->assertOk()
+    get('/')->assertOk()
         ->assertDontSee('Dashboard data needs attention');
 
-    expect($response->viewData('stats')['kpis']['total_students'])->toBe(3)
-        ->and($response->viewData('stats')['kpis']['total_evals'])->toBe(7);
+    $stats = Livewire::test(Dashboard::class)->viewData('stats');
+    expect($stats['kpis']['total_students'])->toBe(3)
+        ->and($stats['kpis']['total_evals'])->toBe(7);
 });

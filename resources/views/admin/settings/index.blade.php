@@ -12,7 +12,7 @@
         </flux:callout>
     @endif
 
-    <section class="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+    <section class="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
         <div class="rounded-lg border border-white/80 bg-white/86 p-6 shadow-[0_18px_50px_rgba(15,23,42,0.07)] backdrop-blur">
             <div class="flex items-start gap-4">
                 <span class="grid size-11 shrink-0 place-items-center rounded-lg bg-amber-100 text-amber-700">
@@ -33,90 +33,20 @@
         </div>
 
         @can('manage-settings-records')
-            <div class="rounded-lg border border-white/80 bg-white/86 p-6 shadow-[0_18px_50px_rgba(15,23,42,0.07)] backdrop-blur">
-                <div class="mb-5 flex items-center gap-3">
-                    <span class="grid size-10 shrink-0 place-items-center rounded-lg bg-sky-100 text-sky-700">
+            <div class="rounded-lg border border-sky-200 bg-gradient-to-br from-sky-50 to-white p-6 shadow-[0_18px_50px_rgba(15,23,42,0.07)] backdrop-blur" style="background: linear-gradient(135deg, #f0f9ff 0%, #ffffff 100%);">
+                <div class="flex items-start gap-4">
+                    <span class="grid size-11 shrink-0 place-items-center rounded-lg bg-sky-100 text-sky-700">
                         <flux:icon.plus />
                     </span>
-                    <div>
-                        <div class="text-xs font-bold uppercase tracking-[0.26em] text-slate-500">Project</div>
-                        <h2 class="text-xl font-bold text-slate-950">Add Project Mapping</h2>
+                    <div class="min-w-0 flex-1">
+                        <div class="text-xs font-bold uppercase tracking-[0.26em] text-slate-500">Onboarding</div>
+                        <h2 class="mt-2 text-xl font-bold text-slate-950">Add a New Academic Year</h2>
+                        <p class="mt-2 text-sm leading-6 text-slate-600">Walk through the REDCap prep steps and enter the new project mapping in one guided flow.</p>
+                        <div class="mt-4">
+                            <flux:button href="{{ route('admin.settings.new-academic-year') }}" variant="primary" icon="academic-cap">Start guided setup</flux:button>
+                        </div>
                     </div>
                 </div>
-
-                <form method="POST" action="{{ route('admin.settings.project-mappings.store') }}" class="grid gap-4 sm:grid-cols-2">
-                    @csrf
-
-                    <div>
-                        <label for="academic_year" class="mb-1 block text-xs font-bold uppercase tracking-[0.22em] text-slate-500">Academic Year</label>
-                        <input
-                            type="text"
-                            name="academic_year"
-                            id="academic_year"
-                            value="{{ old('academic_year') }}"
-                            placeholder="2025-2026"
-                            required
-                            class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100 @error('academic_year') border-red-400 focus:border-red-400 focus:ring-red-100 @enderror"
-                        >
-                        @error('academic_year')
-                            <p class="mt-1 text-xs font-medium text-red-600">{{ $message }}</p>
-                        @enderror
-                    </div>
-
-                    <div>
-                        <label for="graduation_year" class="mb-1 block text-xs font-bold uppercase tracking-[0.22em] text-slate-500">Graduating Year</label>
-                        <input
-                            type="text"
-                            name="graduation_year"
-                            id="graduation_year"
-                            value="{{ old('graduation_year') }}"
-                            placeholder="2028"
-                            required
-                            inputmode="numeric"
-                            class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100 @error('graduation_year') border-red-400 focus:border-red-400 focus:ring-red-100 @enderror"
-                        >
-                        @error('graduation_year')
-                            <p class="mt-1 text-xs font-medium text-red-600">{{ $message }}</p>
-                        @enderror
-                    </div>
-
-                    <div>
-                        <label for="redcap_pid" class="mb-1 block text-xs font-bold uppercase tracking-[0.22em] text-slate-500">REDCap PID</label>
-                        <input
-                            type="text"
-                            name="redcap_pid"
-                            id="redcap_pid"
-                            value="{{ old('redcap_pid') }}"
-                            placeholder="1846"
-                            required
-                            inputmode="numeric"
-                            class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100 @error('redcap_pid') border-red-400 focus:border-red-400 focus:ring-red-100 @enderror"
-                        >
-                        @error('redcap_pid')
-                            <p class="mt-1 text-xs font-medium text-red-600">{{ $message }}</p>
-                        @enderror
-                    </div>
-
-                    <div>
-                        <label for="redcap_token" class="mb-1 block text-xs font-bold uppercase tracking-[0.22em] text-slate-500">REDCap Token</label>
-                        <input
-                            type="password"
-                            name="redcap_token"
-                            id="redcap_token"
-                            value="{{ old('redcap_token') }}"
-                            required
-                            autocomplete="new-password"
-                            class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100 @error('redcap_token') border-red-400 focus:border-red-400 focus:ring-red-100 @enderror"
-                        >
-                        @error('redcap_token')
-                            <p class="mt-1 text-xs font-medium text-red-600">{{ $message }}</p>
-                        @enderror
-                    </div>
-
-                    <div class="sm:col-span-2 sm:flex sm:justify-end">
-                        <flux:button type="submit" variant="primary" icon="plus">Add mapping</flux:button>
-                    </div>
-                </form>
             </div>
         @endcan
     </section>
@@ -156,6 +86,8 @@
                                     </form>
 
                                     @can('manage-settings-records')
+                                        <flux:button href="{{ route('admin.settings.project-mappings.import-students', $projectMapping) }}" size="sm" variant="ghost" icon="user-plus" title="Import scholars for this graduating year">Import</flux:button>
+
                                         <flux:button
                                             size="sm"
                                             variant="ghost"

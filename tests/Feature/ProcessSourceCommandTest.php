@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\ProjectMapping;
 use App\Services\RedcapDestinationService;
 use App\Services\RedcapSourceService;
 use Illuminate\Support\Facades\Cache;
@@ -28,20 +29,21 @@ function studentMap(): array
 
 beforeEach(function () {
     Cache::flush();
-    $_ENV['REDCAP_TOKEN_PID_1846'] = 'PID_TOKEN_XYZ';
-    putenv('REDCAP_TOKEN_PID_1846=PID_TOKEN_XYZ');
 });
 
-afterEach(function () {
-    unset($_ENV['REDCAP_TOKEN_PID_1846']);
-    putenv('REDCAP_TOKEN_PID_1846');
-});
+function defaultMapping(): ProjectMapping
+{
+    return ProjectMapping::factory()->create([
+        'redcap_pid' => 1846,
+        'redcap_token' => 'PID_TOKEN_XYZ',
+    ]);
+}
 
 it('processes records and updates the destination project', function () {
-    config(['redcap.source_token' => 'SOURCE_TOKEN']);
+    defaultMapping();
 
     $source = mock(RedcapSourceService::class);
-    $source->shouldReceive('fetchAllRecords')->once()->with('SOURCE_TOKEN')->andReturn(sourceRecords());
+    $source->shouldReceive('fetchAllRecords')->once()->with('PID_TOKEN_XYZ')->andReturn(sourceRecords());
 
     $destination = mock(RedcapDestinationService::class);
     $destination->shouldReceive('studentMapByDatatelId')->once()->andReturn(studentMap());
@@ -53,7 +55,7 @@ it('processes records and updates the destination project', function () {
 });
 
 it('runs dry-run without calling updateStudentRecord', function () {
-    config(['redcap.source_token' => 'SOURCE_TOKEN']);
+    defaultMapping();
 
     $source = mock(RedcapSourceService::class);
     $source->shouldReceive('fetchAllRecords')->once()->andReturn(sourceRecords());
@@ -67,29 +69,23 @@ it('runs dry-run without calling updateStudentRecord', function () {
         ->expectsOutputToContain('Dry run complete. No changes were written.');
 });
 
-it('fails with an error when source token is not configured', function () {
-    config(['redcap.source_token' => '']);
-
+it('fails with an error when no project mapping is configured', function () {
     $this->artisan('omm:process-source')
         ->assertFailed()
-        ->expectsOutputToContain('REDCAP_SOURCE_TOKEN is not configured');
+        ->expectsOutputToContain('No project mapping configured');
 });
 
-it('fails when the --pid token is not configured', function () {
-    // Ensure PID 9999 has no token.
-    unset($_ENV['REDCAP_TOKEN_PID_9999']);
-    putenv('REDCAP_TOKEN_PID_9999');
-
+it('fails when the --pid mapping is not configured', function () {
     $this->artisan('omm:process-source --pid=9999')
         ->assertFailed()
-        ->expectsOutputToContain('No token configured for PID 9999');
+        ->expectsOutputToContain('No project mapping found for PID 9999');
 });
 
-it('processes using a specific PID token', function () {
-    // REDCAP_TOKEN_PID_1846 is already configured in .env (dotenv immutable repository
-    // takes precedence over runtime $_ENV changes, so we verify behaviour not token value).
+it('processes using a specific PID mapping', function () {
+    defaultMapping();
+
     $source = mock(RedcapSourceService::class);
-    $source->shouldReceive('fetchAllRecords')->once()->andReturn(sourceRecords());
+    $source->shouldReceive('fetchAllRecords')->once()->with('PID_TOKEN_XYZ')->andReturn(sourceRecords());
 
     $destination = mock(RedcapDestinationService::class);
     $destination->shouldReceive('studentMapByDatatelId')->once()->andReturn(studentMap());
@@ -101,7 +97,7 @@ it('processes using a specific PID token', function () {
 });
 
 it('returns success with a warning when source returns no records', function () {
-    config(['redcap.source_token' => 'SOURCE_TOKEN']);
+    defaultMapping();
 
     $source = mock(RedcapSourceService::class);
     $source->shouldReceive('fetchAllRecords')->once()->andReturn([]);
@@ -116,7 +112,7 @@ it('returns success with a warning when source returns no records', function () 
 });
 
 it('invalidates dashboard and student caches after a successful run', function () {
-    config(['redcap.source_token' => 'SOURCE_TOKEN']);
+    defaultMapping();
 
     Cache::put('dashboard:stats', ['cached' => true], 600);
     Cache::put('destination:all_students', ['cached' => true], 600);
@@ -135,7 +131,7 @@ it('invalidates dashboard and student caches after a successful run', function (
 });
 
 it('does not invalidate caches on dry-run', function () {
-    config(['redcap.source_token' => 'SOURCE_TOKEN']);
+    defaultMapping();
 
     Cache::put('dashboard:stats', ['cached' => true], 600);
     Cache::put('destination:all_students', ['cached' => true], 600);

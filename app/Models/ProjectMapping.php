@@ -47,6 +47,13 @@ class ProjectMapping extends Model
             ->first();
     }
 
+    public static function byGraduationYear(int $graduationYear): ?self
+    {
+        return self::query()
+            ->where('graduation_year', $graduationYear)
+            ->first();
+    }
+
     public function displayName(): string
     {
         return "Academic Year {$this->academic_year} (Class of {$this->graduation_year})";

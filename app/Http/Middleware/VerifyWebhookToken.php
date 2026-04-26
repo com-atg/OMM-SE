@@ -17,9 +17,15 @@ class VerifyWebhookToken
      */
     public function handle(Request $request, Closure $next): Response
     {
-        $secret = config('redcap.webhook_secret');
+        $secret = trim((string) config('redcap.webhook_secret'));
 
-        if ($secret && ! hash_equals($secret, (string) $request->query('token', ''))) {
+        if ($secret === '') {
+            abort_unless(app()->environment(['local', 'testing']), 403, 'Webhook token verification is not configured.');
+
+            return $next($request);
+        }
+
+        if (! hash_equals($secret, (string) $request->query('token', ''))) {
             abort(403, 'Invalid webhook token.');
         }
 
