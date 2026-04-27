@@ -30,45 +30,20 @@ class SamlService
             throw new RuntimeException('SAML assertion did not include an email address.');
         }
 
-        $role = $this->resolveRole($email);
-        $existingUser = User::where('email', $email)->first();
+        $user = User::firstOrNew(['email' => $email]);
 
-        if ($role === Role::Student && $existingUser?->role === Role::Faculty) {
-            $role = Role::Faculty;
+        if (! $user->exists) {
+            $user->role = Role::Student;
         }
 
-        $user = User::updateOrCreate(
-            ['email' => $email],
-            [
-                'name' => $name !== null && trim($name) !== '' ? trim($name) : $email,
-                'role' => $role,
-                'okta_nameid' => $nameId,
-                'last_login_at' => now(),
-            ],
-        );
+        $user->name = $name !== null && trim($name) !== '' ? trim($name) : $email;
+        $user->okta_nameid = $nameId;
+        $user->last_login_at = now();
+        $user->save();
 
         Auth::login($user, remember: false);
 
         return $user;
-    }
-
-    /**
-     * Pick a role for an email based on the env allowlists.
-     * Service/Admin are allowlisted by email; anyone else defaults to Student.
-     */
-    public function resolveRole(string $email): Role
-    {
-        $email = strtolower(trim($email));
-
-        if (in_array($email, config('saml.service_users', []), true)) {
-            return Role::Service;
-        }
-
-        if (in_array($email, config('saml.admin_users', []), true)) {
-            return Role::Admin;
-        }
-
-        return Role::Student;
     }
 
     /**

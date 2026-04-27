@@ -4,47 +4,28 @@ use App\Enums\Role;
 use App\Models\User;
 use App\Services\SamlService;
 
-beforeEach(function () {
-    config([
-        'saml.service_users' => ['super@example.com'],
-        'saml.admin_users' => ['boss@example.com'],
-    ]);
-});
-
-it('resolves role from the service allowlist', function () {
-    expect(app(SamlService::class)->resolveRole('SUPER@example.com'))->toBe(Role::Service);
-});
-
-it('resolves role from the admin allowlist', function () {
-    expect(app(SamlService::class)->resolveRole('boss@example.com'))->toBe(Role::Admin);
-});
-
-it('defaults unknown emails to Student', function () {
-    expect(app(SamlService::class)->resolveRole('random@example.com'))->toBe(Role::Student);
-});
-
-it('creates a user with the resolved role and lowercases the email', function () {
+it('creates a new user as Student and lowercases the email', function () {
     app(SamlService::class)->loginFromAssertion('Boss@Example.COM', 'The Boss', 'nameid-xyz');
 
     $user = User::where('email', 'boss@example.com')->firstOrFail();
 
-    expect($user->role)->toBe(Role::Admin)
+    expect($user->role)->toBe(Role::Student)
         ->and($user->name)->toBe('The Boss')
         ->and($user->okta_nameid)->toBe('nameid-xyz')
         ->and($user->last_login_at)->not->toBeNull()
         ->and(auth()->id())->toBe($user->id);
 });
 
-it('recomputes the database role from allowlists on subsequent logins', function () {
-    User::factory()->create(['email' => 'boss@example.com', 'role' => Role::Student]);
+it('preserves the database role for an existing admin on subsequent logins', function () {
+    User::factory()->create(['email' => 'boss@example.com', 'role' => Role::Admin]);
 
     app(SamlService::class)->loginFromAssertion('boss@example.com', 'The Boss', null);
 
     expect(User::where('email', 'boss@example.com')->first()->role)->toBe(Role::Admin);
 });
 
-it('promotes an existing student record to service when the email is allowlisted', function () {
-    User::factory()->student()->create(['email' => 'super@example.com']);
+it('preserves the database role for an existing service user on subsequent logins', function () {
+    User::factory()->create(['email' => 'super@example.com', 'role' => Role::Service]);
 
     $user = app(SamlService::class)->loginFromAssertion('super@example.com', 'Super User', null);
 
@@ -52,7 +33,7 @@ it('promotes an existing student record to service when the email is allowlisted
         ->and($user->canManageUsers())->toBeTrue();
 });
 
-it('preserves an existing faculty role for non allowlisted logins', function () {
+it('preserves an existing faculty role on subsequent logins', function () {
     User::factory()->faculty()->create(['email' => 'faculty@example.com']);
 
     $user = app(SamlService::class)->loginFromAssertion('faculty@example.com', 'Faculty User', null);
@@ -61,10 +42,22 @@ it('preserves an existing faculty role for non allowlisted logins', function () 
         ->and($user->isFaculty())->toBeTrue();
 });
 
-it('uses the allowlist role for first-time logins', function () {
-    app(SamlService::class)->loginFromAssertion('boss@example.com', 'The Boss', null);
+it('updates name, okta_nameid, and last_login_at without touching role', function () {
+    $existing = User::factory()->create([
+        'email' => 'someone@example.com',
+        'role' => Role::Admin,
+        'name' => 'Old Name',
+        'okta_nameid' => 'old-nameid',
+    ]);
 
-    expect(User::where('email', 'boss@example.com')->first()->role)->toBe(Role::Admin);
+    app(SamlService::class)->loginFromAssertion('someone@example.com', 'New Name', 'new-nameid');
+
+    $existing->refresh();
+
+    expect($existing->role)->toBe(Role::Admin)
+        ->and($existing->name)->toBe('New Name')
+        ->and($existing->okta_nameid)->toBe('new-nameid')
+        ->and($existing->last_login_at)->not->toBeNull();
 });
 
 it('rejects empty emails', function () {

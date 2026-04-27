@@ -1,12 +1,5 @@
 <?php
 
-$splitCsv = function (string $raw): array {
-    return array_values(array_filter(array_map(
-        fn (string $v): string => strtolower(trim($v)),
-        explode(',', $raw),
-    )));
-};
-
 $appUrl = rtrim((string) env('APP_URL'), '/');
 $spUrl = fn (string $path): ?string => $appUrl !== '' ? $appUrl.$path : null;
 
@@ -85,19 +78,6 @@ return [
         'email' => env('SAML_ATTR_EMAIL', 'email'),
         'name' => env('SAML_ATTR_NAME', 'displayName'),
     ],
-
-    /*
-    | ─────────────────────────────────────────────────────────────────────────
-    | App-level role assignments (email allowlists, comma-separated, lowercased)
-    | ─────────────────────────────────────────────────────────────────────────
-    |
-    | These are consulted on every login. They prime the users table on first
-    | sign-in and keep it authoritative if env values change. Users not in
-    | either list default to the Student role and must resolve to a REDCap
-    | destination record by email.
-    */
-    'service_users' => $splitCsv((string) env('SERVICE_USERS', '')),
-    'admin_users' => $splitCsv((string) env('ADMIN_USERS', '')),
 
     /*
     | Where to send users after ACS completes without an explicit intended URL.

@@ -41,22 +41,22 @@ class User extends Authenticatable
 
     public function isService(): bool
     {
-        return $this->role === Role::Service || $this->emailIsInConfigList('saml.service_users');
+        return $this->role === Role::Service;
     }
 
     public function isAdmin(): bool
     {
-        return $this->role === Role::Admin || $this->emailIsInConfigList('saml.admin_users');
+        return $this->role === Role::Admin;
     }
 
     public function isStudent(): bool
     {
-        return $this->role === Role::Student && ! $this->isService() && ! $this->isAdmin();
+        return $this->role === Role::Student;
     }
 
     public function isFaculty(): bool
     {
-        return $this->role === Role::Faculty && ! $this->isService() && ! $this->isAdmin();
+        return $this->role === Role::Faculty;
     }
 
     public function canManageUsers(): bool
@@ -87,10 +87,5 @@ class User extends Authenticatable
     public function canViewFacultyDetail(): bool
     {
         return $this->canViewAllStudents() || $this->isFaculty();
-    }
-
-    private function emailIsInConfigList(string $key): bool
-    {
-        return in_array(strtolower($this->email), config($key, []), true);
     }
 }
