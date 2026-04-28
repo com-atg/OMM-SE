@@ -20,6 +20,7 @@ ARG FLUX_PASSWORD
 
 WORKDIR /app
 COPY composer.json composer.lock ./
+COPY packages ./packages
 RUN if [ -n "$COMPOSER_AUTH" ]; then \
         export COMPOSER_AUTH="$COMPOSER_AUTH"; \
     elif [ -n "$FLUX_USERNAME" ] && [ -n "$FLUX_LICENSE_KEY" ]; then \
