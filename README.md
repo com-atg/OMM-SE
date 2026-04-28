@@ -1,4 +1,4 @@
-# OMM Scholar Eval
+# OMM ACE Eval
 
 A Laravel 13 app that receives student evaluation submissions from REDCap, computes per-category semester aggregates, writes them back to a permanent destination REDCap project, delivers email notifications to students and faculty, and exposes role-based dashboards protected by Okta SAML SSO.
 
@@ -9,7 +9,7 @@ A Laravel 13 app that receives student evaluation submissions from REDCap, compu
 ```mermaid
 sequenceDiagram
     participant RC as REDCap Source Project
-    participant App as OMM Scholar Eval
+    participant App as OMM ACE Eval
     participant Dest as REDCap OMMScholarEvalList
     participant Mail as Mail Server
     participant Student as Student (browser)
@@ -43,6 +43,7 @@ sequenceDiagram
 | Sessions / Cache / Queue | Database driver |
 | Authentication | Okta SAML 2.0 via `onelogin/php-saml` |
 | Authorization | App-level role enum (Service / Admin / Faculty / Student) |
+| Documentation viewer | `com-atg/laravel-docs-viewer` rendering `/Docs/*.md` + `README.md` at `/admin/docs` (Service-only) |
 | Testing | Pest 4 |
 | CI/CD | GitHub Actions |
 | Containerisation | Docker (multi-stage) |
@@ -54,24 +55,26 @@ sequenceDiagram
 
 | Role | Access |
 |------|--------|
-| **Service** | Everything: dashboard, all student records, faculty view, current or per-PID bulk aggregation, `/admin/users`, `/admin/settings`, CSV import, REDCap roster import, impersonation |
+| **Service** | Everything: dashboard, all student records, faculty view, current or per-PID bulk aggregation, `/admin/users`, `/admin/settings`, CSV import, REDCap roster import, impersonation, email-template editor, `/admin/docs` documentation viewer |
 | **Admin** | Dashboard, all student records, and faculty view. No user/settings management and no bulk processing. |
 | **Faculty** | Dashboard and faculty view scoped to evaluations they authored, matched by faculty email or faculty name. |
 | **Student** | Own student record only. Redirected from the dashboard to `/student`. |
 
 Service and Admin users can be managed in the UI; `.env` allowlists (`SERVICE_USERS=`, `ADMIN_USERS=`) remain supported and are recomputed at login. Faculty and Student users can be created manually or imported. Students auto-provision on first SAML login if their email matches a record in the REDCap destination project. Unmatched users see a 404.
 
-Roles are persisted on the `users` table via the `Role` enum (`Service`, `Admin`, `Faculty`, `Student`) and enforced through Gates: `view-dashboard`, `view-all-students`, `view-faculty-detail`, `manage-users`, `manage-settings`, `manage-settings-records`, `run-process`, and `view-student-page`.
+Roles are persisted on the `users` table via the `Role` enum (`Service`, `Admin`, `Faculty`, `Student`) and enforced through Gates: `view-dashboard`, `view-all-students`, `view-faculty-detail`, `view-student-page`, `run-process`, `manage-users`, `manage-settings`, `manage-settings-records`, `edit-email-template`, and `view-docs`.
 
 ---
 
 ## Documentation
 
+These same files are also browsable in-app at **`/admin/docs`** (Service-only, served by `com-atg/laravel-docs-viewer`).
+
 | Guide | Description |
 |-------|-------------|
 | [Architecture](Docs/architecture.md) | System design, component breakdown, SAML + webhook data flows |
 | [REDCap Integration](Docs/redcap-integration.md) | Source/destination schemas, webhook setup, field mappings |
-| [Admin Features](Docs/admin-features.md) | User management, CSV import, project-mapping settings, impersonation |
+| [Admin Features](Docs/admin-features.md) | User management, CSV import, project-mapping settings, academic-year wizard, email-template editor, docs viewer, impersonation |
 | [Local Development](Docs/local-development.md) | Docker setup, environment variables, simulating SSO login |
 | [Testing](Docs/testing.md) | Pest test suite, auth helpers, test structure |
 | [Production Deployment](Docs/production.md) | CI/CD pipeline, CalVer tagging, Docker Hub, SSH deploy, Okta setup |
@@ -132,9 +135,10 @@ app/
 │   ├── Dashboard.php                    # Dashboard stats and academic-year filter
 │   └── FacultyDetail.php                # Faculty-scoped evaluation detail
 ├── Models/
-│   ├── User.php                         # Role enum + soft deletes + UUID public_token
+│   ├── AppSetting.php                   # Key/value app config (e.g. custom email template)
+│   ├── CategoryWeight.php               # Final-score formula weights
 │   ├── ProjectMapping.php               # Source/destination REDCap PID mapping
-│   └── CategoryWeight.php               # Final-score formula weights
+│   └── User.php                         # Role enum + soft deletes + UUID public_token
 ├── Providers/AppServiceProvider.php     # Gate definitions
 └── Services/
     ├── SamlService.php                  # Role resolution + user provisioning
@@ -142,6 +146,7 @@ app/
     └── RedcapDestinationService.php     # OMMScholarEvalList API
 
 app/Jobs/
+├── ImportScholarsJob.php                # Queued student import for a project mapping (cache-backed status)
 └── ProcessSourceProjectJob.php          # Queued bulk aggregation with cache-backed status
 
 app/Support/
@@ -149,15 +154,25 @@ app/Support/
 └── FinalScoreFormulaParser.php          # Parses destination REDCap calculated-score formulas
 
 config/
+├── docs-viewer.php                      # Service-only `/admin/docs` viewer config
 ├── redcap.php
 └── saml.php
 
-resources/views/
-├── admin/
-│   ├── users/                           # Index, create, edit, import-csv pages
-│   └── settings/                        # Project-mapping index + edit
-├── livewire/admin/csv-user-import.blade.php
-└── components/app-shell.blade.php       # Layout wrapper
+resources/
+├── css/
+│   ├── app.css
+│   └── docs-prose.css                   # Markdown styles for the docs viewer
+└── views/
+    ├── admin/
+    │   ├── users/                       # Index, create, edit, import-csv pages
+    │   └── settings/                    # Project-mapping index + edit + new-academic-year wizard
+    ├── components/
+    │   ├── admin/
+    │   │   └── ⚡academic-year-wizard.blade.php  # Multi-step wizard (mapping → weights → email → import)
+    │   ├── ⚡email-template-modal.blade.php      # Inline editor + live preview for evaluation email
+    │   └── app-shell.blade.php          # Layout wrapper
+    ├── livewire/admin/csv-user-import.blade.php
+    └── vendor/docs-viewer/              # Published views for `com-atg/laravel-docs-viewer`
 
 packages/redcap-advanced-link/          # Reusable REDCap Advanced Link template
                                         # (not wired into this app — copy-paste for other projects)

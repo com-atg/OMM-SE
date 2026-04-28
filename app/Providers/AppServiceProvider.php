@@ -26,6 +26,8 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('manage-users', fn (User $user) => $user->canManageUsers());
         Gate::define('manage-settings', fn (User $user) => $user->canViewSettings());
         Gate::define('manage-settings-records', fn (User $user) => $user->canManageSettingsRecords());
+        Gate::define('edit-email-template', fn (User $user) => $user->isService());
+        Gate::define('view-docs', fn (User $user) => $user->isService());
     }
 
     private function productionRootUrl(): string

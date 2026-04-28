@@ -208,6 +208,14 @@ GET https://your-local-domain/omm_ace/test/email
 
 This renders a stubbed Teaching (Category A) evaluation for Catherine Chin. Refresh after editing [`resources/views/emails/evaluation.blade.php`](../resources/views/emails/evaluation.blade.php) to preview changes.
 
+Service users can also override the template at runtime from `/admin/settings` via the email-template modal — overrides are stored in the `app_settings` table under the `email_template` key and take precedence over the Blade view in `EvaluationNotification::content()`.
+
+---
+
+## Browsing Docs In-App
+
+Once you're signed in as a Service user, all the files in `Docs/` plus the project `README.md` are rendered at `/admin/docs` (powered by `com-atg/laravel-docs-viewer`). Useful when you want to verify a docs change locally before committing — no rebuild needed since markdown is rendered on the fly.
+
 ---
 
 ## Useful Commands

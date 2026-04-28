@@ -119,6 +119,11 @@
                             Settings
                         </a>
                     @endcan
+                    @can('view-docs')
+                        <a href="{{ route('admin.docs.index') }}" class="{{ $navLink('docs') }} rounded-lg px-3 py-2 text-sm font-semibold transition">
+                            Documentation
+                        </a>
+                    @endcan
                 </div>
 
                 <div class="ml-auto hidden items-center gap-2 md:flex">
@@ -150,6 +155,9 @@
                         @endcan
                         @can('manage-settings')
                             <flux:menu.item href="{{ route('admin.settings.index') }}" icon="cog-6-tooth">Settings</flux:menu.item>
+                        @endcan
+                        @can('view-docs')
+                            <flux:menu.item href="{{ route('admin.docs.index') }}" icon="document-text">Documentation</flux:menu.item>
                         @endcan
                         <flux:menu.separator />
                         <form method="POST" action="{{ route('saml.logout') }}">

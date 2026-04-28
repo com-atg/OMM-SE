@@ -1,0 +1,39 @@
+{
+    "name": "com-atg/laravel-docs-viewer",
+    "description": "Render markdown docs directories as styled web pages inside any Laravel admin panel.",
+    "version": "1.0.0",
+    "type": "library",
+    "license": "proprietary",
+    "require": {
+        "php": "^8.2",
+        "laravel/framework": "^11.0|^12.0|^13.0",
+        "league/commonmark": "^2.0"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^9.0|^10.0",
+        "pestphp/pest": "^3.0|^4.0",
+        "pestphp/pest-plugin-laravel": "^3.0|^4.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "ComAtg\\DocsViewer\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "ComAtg\\DocsViewer\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "ComAtg\\DocsViewer\\DocsViewerServiceProvider"
+            ]
+        }
+    },
+    "config": {
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    }
+}

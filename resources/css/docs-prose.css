@@ -1,0 +1,61 @@
+/* ============================================================
+   docs-prose — com-atg/laravel-docs-viewer
+   Copy this into your app.css (or @import it if your bundler
+   supports CSS imports from vendor paths).
+   ============================================================ */
+
+.docs-prose { color: #1e293b; line-height: 1.75; font-size: 0.9375rem; }
+.dark .docs-prose { color: #e2e8f0; }
+
+.docs-prose h1 { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.02em; color: #0f172a; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid #e2e8f0; }
+.dark .docs-prose h1 { color: #f8fafc; border-bottom-color: rgba(255,255,255,0.1); }
+
+.docs-prose h2 { font-size: 1.25rem; font-weight: 700; color: #0f172a; margin-top: 2.5rem; margin-bottom: 0.75rem; padding-bottom: 0.5rem; border-bottom: 1px solid #f1f5f9; }
+.dark .docs-prose h2 { color: #f8fafc; border-bottom-color: rgba(255,255,255,0.07); }
+
+.docs-prose h3 { font-size: 1.0625rem; font-weight: 600; color: #1e293b; margin-top: 1.75rem; margin-bottom: 0.5rem; }
+.dark .docs-prose h3 { color: #e2e8f0; }
+
+.docs-prose h4 { font-size: 0.9375rem; font-weight: 600; color: #334155; margin-top: 1.25rem; margin-bottom: 0.375rem; }
+.dark .docs-prose h4 { color: #cbd5e1; }
+
+.docs-prose p { margin-bottom: 1.125rem; }
+.docs-prose p:last-child { margin-bottom: 0; }
+
+.docs-prose strong, .docs-prose b { font-weight: 600; color: #0f172a; }
+.dark .docs-prose strong, .dark .docs-prose b { color: #f8fafc; }
+.docs-prose em { font-style: italic; }
+
+.docs-prose ul { list-style-type: disc; padding-left: 1.5rem; margin-bottom: 1.125rem; }
+.docs-prose ol { list-style-type: decimal; padding-left: 1.5rem; margin-bottom: 1.125rem; }
+.docs-prose li { margin-bottom: 0.375rem; }
+.docs-prose li > ul, .docs-prose li > ol { margin-top: 0.375rem; margin-bottom: 0; }
+
+.docs-prose a { color: #2563eb; font-weight: 500; text-decoration: underline; text-underline-offset: 2px; }
+.docs-prose a:hover { color: #1d4ed8; }
+.dark .docs-prose a { color: #93c5fd; }
+.dark .docs-prose a:hover { color: #bfdbfe; }
+
+.docs-prose code { background: rgba(14,116,144,0.08); color: #0e7490; padding: 0.15em 0.4em; border-radius: 0.3rem; font-family: ui-monospace, 'Cascadia Code', monospace; font-size: 0.85em; }
+.dark .docs-prose code { background: rgba(56,189,248,0.12); color: #7dd3fc; }
+
+.docs-prose pre { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.75rem; padding: 1rem 1.25rem; overflow-x: auto; margin-bottom: 1.25rem; }
+.dark .docs-prose pre { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.08); }
+.docs-prose pre code { background: transparent; color: inherit; padding: 0; font-size: 0.875em; }
+
+.docs-prose pre.mermaid { background: transparent; border: none; padding: 0; display: flex; justify-content: center; margin: 1.75rem 0; }
+.docs-prose pre.mermaid svg { max-width: 100%; height: auto; border-radius: 0.75rem; }
+
+.docs-prose blockquote { border-left: 3px solid #94a3b8; background: #f8fafc; padding: 0.75rem 1.125rem; border-radius: 0 0.5rem 0.5rem 0; margin-bottom: 1.125rem; color: #475569; font-style: italic; }
+.dark .docs-prose blockquote { background: rgba(255,255,255,0.04); border-left-color: rgba(255,255,255,0.2); color: #94a3b8; }
+
+.docs-prose hr { border: none; border-top: 1px solid #e2e8f0; margin: 2rem 0; }
+.dark .docs-prose hr { border-top-color: rgba(255,255,255,0.1); }
+
+.docs-prose table { width: 100%; border-collapse: collapse; margin-bottom: 1.25rem; font-size: 0.875rem; }
+.docs-prose th { background: #f1f5f9; font-weight: 600; text-align: left; padding: 0.625rem 0.875rem; border: 1px solid #e2e8f0; }
+.dark .docs-prose th { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.08); }
+.docs-prose td { padding: 0.5rem 0.875rem; border: 1px solid #e2e8f0; vertical-align: top; }
+.dark .docs-prose td { border-color: rgba(255,255,255,0.08); }
+.docs-prose tr:nth-child(even) td { background: rgba(241,245,249,0.5); }
+.dark .docs-prose tr:nth-child(even) td { background: rgba(255,255,255,0.02); }

@@ -6,14 +6,14 @@ The app sits between annual REDCap source projects, a permanent REDCap destinati
 
 ```mermaid
 C4Context
-    title OMM Scholar Eval — System Context
+    title OMM ACE Eval — System Context
 
     Person(faculty, "Faculty", "Submits student evaluations in REDCap; views own evaluation roster in app")
     Person(student, "Student", "Logs in via Okta; views own eval records")
     Person(admin, "Administrator", "Logs in via Okta; views all student records")
     Person(service, "Service User", "Logs in via Okta; full access + user management + project-mapping settings + impersonation")
 
-    System(app, "OMM Scholar Eval", "Laravel 13 web app + webhook processor")
+    System(app, "OMM ACE Eval", "Laravel 13 web app + webhook processor")
     System_Ext(okta, "Okta", "SAML 2.0 Identity Provider")
     System_Ext(src, "REDCap Source Project", "OMMACEvaluations AY20XX-20XX\nRotates each academic year")
     System_Ext(dest, "REDCap OMMScholarEvalList", "Aggregated grade records\nper student per semester")
@@ -122,7 +122,18 @@ classDiagram
     NotifierController --> RedcapDestinationService : injects
     RequireSamlAuth --> SamlService : delegates
     VerifyWebhookToken --> NotifierController : guards
+    EvaluationNotification --> AppSetting : reads `email_template`
 ```
+
+Other classes worth knowing about (not pictured above):
+
+| Class | Role |
+|-------|------|
+| `App\Jobs\ImportScholarsJob` | Queued import of destination students for a project mapping; cache-backed progress (`import_scholars:{jobId}`) |
+| `App\Jobs\ProcessSourceProjectJob` | Queued bulk re-aggregation of every record in a source project |
+| `App\Models\AppSetting` | Key/value store; currently used for the `email_template` override |
+| `App\Support\EvalAggregator` | Shared aggregation logic used by `NotifierController`, `ProcessSourceProjectJob`, and `omm:process-source` |
+| `App\Support\FinalScoreFormulaParser` | Parses destination REDCap calculated-score formulas to compute final scores |
 
 ---
 
@@ -259,10 +270,10 @@ The application keeps operational state in MySQL and aggregate evaluation data i
 | Concern | Solution |
 |---------|---------|
 | Sessions | `SESSION_DRIVER=database` — `sessions` table in MySQL |
-| Cache | `CACHE_STORE=database` — `cache` table; destination roster cached 10 min, per-student lookup 1 h, process status 60 min |
-| Queue | `QUEUE_CONNECTION=database` — `jobs` table; bulk-aggregation job dispatched after response |
-| Migrations | `users`, `project_mappings`, `category_weights`, `sessions`, `cache`, `jobs`, `password_reset_tokens` |
-| Persistence | User records (with roles + REDCap record IDs), project mappings, and category weights in MySQL; aggregated grades in REDCap |
+| Cache | `CACHE_STORE=database` — `cache` table; destination roster cached 10 min, per-student lookup 1 h, process & student-import status 60 min |
+| Queue | `QUEUE_CONNECTION=database` — `jobs` table; `ProcessSourceProjectJob` dispatched after response, `ImportScholarsJob` dispatched from the academic-year wizard |
+| Migrations | `users`, `project_mappings`, `category_weights`, `app_settings`, `sessions`, `cache`, `jobs`, `password_reset_tokens` |
+| Persistence | User records (with roles + REDCap record IDs), project mappings, category weights, and app settings (e.g. custom email template) in MySQL; aggregated grades in REDCap |
 
 User authentication state is stored in the database-backed session. The `users` table caches each student's `redcap_record_id` after their first SAML login, avoiding a REDCap API call on every request.
 
@@ -276,12 +287,16 @@ In addition to the webhook and student/faculty views, the app exposes a Service-
 flowchart LR
     SVC[Service user] --> UI[/admin/users/]
     SVC --> SET[/admin/settings/]
+    SVC --> DOCS[/admin/docs/]
     UI --> CRUD[Create / edit / delete users]
     UI --> CSV[CSV import - Livewire]
     UI --> RC[Import full REDCap roster]
     UI --> IMP[Impersonate non-Service user]
     SET --> PM[Project-mapping CRUD]
     SET --> RUN[Trigger per-mapping processing]
+    SET --> WIZ[Academic-year wizard\n→ ImportScholarsJob]
+    SET --> EMAIL[Email-template editor\n→ AppSetting]
+    DOCS --> MD[Render /Docs/*.md + README.md\nvia com-atg/laravel-docs-viewer]
 ```
 
 See [Admin Features](admin-features.md) for routes, gates, validation rules, and the CSV import workflow.
@@ -290,11 +305,13 @@ See [Admin Features](admin-features.md) for routes, gates, validation rules, and
 
 | Gate | Allowed roles |
 |------|---------------|
+| `view-dashboard` | Service, Admin, Faculty |
+| `view-student-page` | Service, Admin, Student (own record only) |
+| `view-all-students` | Service, Admin |
+| `view-faculty-detail` | Service, Admin, Faculty |
+| `run-process` | Service |
 | `manage-users` | Service |
 | `manage-settings` | Service |
 | `manage-settings-records` | Service (sub-gate for project-mapping CRUD vs. process-only) |
-| `run-process` | Service |
-| `view-student-page` | Service, Admin, Student (own record only) |
-| `view-dashboard` | Service, Admin, Faculty |
-| `view-all-students` | Service, Admin |
-| `view-faculty-detail` | Service, Admin, Faculty |
+| `edit-email-template` | Service (`<x-⚡email-template-modal>` on `/admin/settings`) |
+| `view-docs` | Service (`/admin/docs` documentation viewer) |

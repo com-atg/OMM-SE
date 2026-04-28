@@ -21,6 +21,10 @@ graph TD
         F8[SettingsControllerTest]
         F9[FacultyControllerTest]
         F10[Console command tests]
+        F11[AcademicYearWizardTest]
+        F12[ImportScholarsJobTest]
+        F13[DocsViewerTest]
+        F14[CsvUserImportTest]
     end
 
     U1 -->|tests| SRC[RedcapSourceService]
@@ -202,6 +206,59 @@ Tests the full webhook flow via HTTP. REDCap services are mocked; mail is faked.
 | Test | Expected |
 |------|---------|
 | Unauthenticated request | `GET /` redirects to `/saml/login` |
+
+### Feature: `AcademicYearWizardTest`
+
+Tests the multi-step `<x-admin.⚡academic-year-wizard>` Livewire component used at `/admin/settings/new-academic-year`.
+
+| Test | What it verifies |
+|------|-----------------|
+| Saves project mapping | Step 1 persists encrypted token + `ProjectMapping` row |
+| Validates input | `academic_year` regex, `graduation_year` int, `redcap_pid` unique |
+| Saves category weights | Step 2 persists 5 `CategoryWeight` rows |
+| Weights must sum to 100 | Validation error if not |
+| Weights step blocked before mapping | Cannot reach step 2 without persisted mapping |
+| Dispatches `ImportScholarsJob` | Step 4 queues the job after weights + email saved |
+
+### Feature: `ImportScholarsJobTest`
+
+Tests `app/Jobs/ImportScholarsJob.php`.
+
+| Test | What it verifies |
+|------|-----------------|
+| Imports students | Creates `User` rows for each destination record with email |
+| Skips existing emails | Including soft-deleted users |
+| Tracks missing emails | Records with no email captured under `missing_email[]` |
+| Updates cache state | `import_scholars:{jobId}` reflects `pending` → `running` → `complete` |
+| Handles errors | Catches `Throwable`; sets `status = failed` and `error` message |
+
+### Feature: `DocsViewerTest`
+
+Tests the `com-atg/laravel-docs-viewer` integration at `/admin/docs`.
+
+| Test | What it verifies |
+|------|-----------------|
+| Service-only auth | Non-Service users → 403 |
+| Index lists docs | All `Docs/*.md` plus `README.md` rendered as entries |
+| Shows a doc | Markdown rendered into `<x-app-shell>` with `.docs-prose` styles |
+| Unknown slug 404s | Bad slug returns 404 |
+
+### Feature: `CsvUserImportTest`
+
+Tests `app/Livewire/Admin/CsvUserImport.php`.
+
+| Test | What it verifies |
+|------|-----------------|
+| Parses headers + rows | Supports UTF-8 BOM |
+| Per-cell live validation | Name/email/role validated on blur |
+| Role normalization | `service` / `admin` / `faculty` / `student` (case-insensitive) |
+| Duplicate emails skipped | Existing user → warning, not error |
+| Bulk create in transaction | Partial failure rolls back |
+| File-level errors | Missing headers, > 1 MB, malformed CSV |
+
+### Modified: `SettingsControllerTest`
+
+In addition to the original project-mapping CRUD coverage, the suite now exercises the email-template editor surface (`email_template` AppSetting load + preview rendering) and the wizard entry-point.
 
 ---
 

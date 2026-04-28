@@ -10,7 +10,7 @@ graph LR
         S1[OMMACEvaluations\nAY20XX-20XX\nnew PID each year]
     end
 
-    subgraph App["OMM Scholar Eval"]
+    subgraph App["OMM ACE Eval"]
         A1[RedcapSourceService\nproject_mappings.redcap_token]
         A2[RedcapDestinationService\nREDCAP_TOKEN]
     end

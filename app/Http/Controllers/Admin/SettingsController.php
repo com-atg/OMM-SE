@@ -5,8 +5,11 @@ namespace App\Http\Controllers\Admin;
 use App\Enums\Role;
 use App\Http\Controllers\Controller;
 use App\Jobs\ProcessSourceProjectJob;
+use App\Mail\EvaluationNotification;
+use App\Models\AppSetting;
 use App\Models\ProjectMapping;
 use App\Models\User;
+use App\Services\MailTemplateRenderer;
 use App\Services\RedcapDestinationService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
@@ -28,11 +31,35 @@ class SettingsController extends Controller
             ->orderByDesc('graduation_year')
             ->get();
 
+        $emailTemplateSetting = null;
+        $emailPreviewHtml = '';
+
+        if (auth()->user()->can('edit-email-template')) {
+            $emailTemplateSetting = AppSetting::where('key', 'email_template')->first();
+            $template = AppSetting::get('email_template')
+                ?? file_get_contents(resource_path('views/emails/evaluation.blade.php'));
+            $emailPreviewHtml = $this->renderEmailPreview($template);
+        }
+
         return view('admin.settings.index', [
             'currentProject' => ProjectMapping::current(),
             'projectMappings' => $projectMappings,
             'trashedProjectMappings' => $trashedProjectMappings,
+            'emailTemplateSetting' => $emailTemplateSetting,
+            'emailPreviewHtml' => $emailPreviewHtml,
         ]);
+    }
+
+    private function renderEmailPreview(string $template): string
+    {
+        try {
+            return app(MailTemplateRenderer::class)->render(
+                $template,
+                EvaluationNotification::sampleViewData(),
+            );
+        } catch (\Throwable) {
+            return '';
+        }
     }
 
     public function newAcademicYear(): View

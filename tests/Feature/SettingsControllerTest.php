@@ -146,10 +146,10 @@ it('creates a project mapping', function () {
 it('renders graduating year and pid as text inputs', function () {
     get(route('admin.settings.new-academic-year'))
         ->assertOk()
-        ->assertSee('name="graduation_year"', false)
+        ->assertSee('wire:model="graduation_year"', false)
         ->assertSee('id="graduation_year"', false)
         ->assertSee('type="text"', false)
-        ->assertSee('name="redcap_pid"', false)
+        ->assertSee('wire:model="redcap_pid"', false)
         ->assertSee('id="redcap_pid"', false);
 });
 

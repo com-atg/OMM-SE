@@ -9,7 +9,10 @@ This guide covers the Service-only administrative surface that lives under `/adm
 | REDCap roster import | `POST /admin/users/import` | `manage-users` | `Admin\UserController@import` |
 | Impersonation | `POST /admin/users/{user}/impersonate` | `manage-users` | `Admin\UserController@impersonate` |
 | Project-mapping settings | `/admin/settings` | `manage-settings` | `Admin\SettingsController` |
-| New academic year setup | `/admin/settings/new-academic-year` | `manage-settings-records` | `Admin\SettingsController@newAcademicYear` |
+| New academic year wizard | `/admin/settings/new-academic-year` | `manage-settings-records` | `Admin\SettingsController@newAcademicYear` + `<x-admin.⚡academic-year-wizard>` |
+| Async student import | dispatched from wizard | `manage-settings-records` | `App\Jobs\ImportScholarsJob` |
+| Email-template editor | `<x-⚡email-template-modal>` on `/admin/settings` | `edit-email-template` | `App\Models\AppSetting` (`email_template` key) |
+| Docs viewer | `/admin/docs` | `view-docs` | `com-atg/laravel-docs-viewer` (config: `config/docs-viewer.php`) |
 
 ---
 
@@ -19,7 +22,7 @@ The user index at `/admin/users` lists all roles with role-count KPI tiles, a ta
 
 ```mermaid
 flowchart LR
-    A[Admin\UserController@index] --> B{Filter / search}
+    A["Admin\UserController@index"] --> B{Filter / search}
     B --> C[Active users table]
     B --> D[Deleted users table]
     C --> E[Edit / Impersonate / Delete]
@@ -118,23 +121,91 @@ The `manage-settings-records` sub-gate exists so a Service user can trigger proc
 
 ### New Academic Year Workflow
 
+The setup is a multi-step Livewire wizard published as `<x-admin.⚡academic-year-wizard>`. It walks a Service user through the full annual rotation in one flow:
+
+1. **Project mapping** — academic year (`YYYY-YYYY`), graduation year, REDCap source PID, source API token. Persisted as a `ProjectMapping`; the token is encrypted.
+2. **Category weights** — five `CategoryWeight` rows (teaching, clinic, research, didactics, leadership). Validated to sum to 100.
+3. **Email template** — optional override of the default evaluation email Blade template; persisted in `app_settings` under the `email_template` key.
+4. **Student import** — dispatches `App\Jobs\ImportScholarsJob` to fetch destination students for the graduation year and create missing `Student` users in the background. The wizard polls a cache key for live status.
+
 ```mermaid
 sequenceDiagram
     participant S as Service User
-    participant UI as Settings UI
-    participant DB as project_mappings/users
+    participant W as AcademicYearWizard (Livewire)
+    participant DB as project_mappings / category_weights / app_settings / users
+    participant Q as Queue
+    participant J as ImportScholarsJob
     participant RC as REDCap Destination
 
-    S->>UI: Open new academic year form
-    UI-->>S: Suggest next graduation year
-    S->>UI: Submit AY, graduation year, PID, source token
-    UI->>DB: Create project mapping with encrypted token
-    UI->>RC: Fetch destination students for graduation year
-    UI->>DB: Create missing Student users
-    UI-->>S: Created / skipped / missing-email summary
+    S->>W: Open /admin/settings/new-academic-year
+    W-->>S: Step 1 (mapping) — suggest next graduation year
+    S->>W: Submit mapping
+    W->>DB: Create ProjectMapping (token encrypted)
+    W-->>S: Step 2 (weights)
+    S->>W: Submit weights summing to 100
+    W->>DB: Persist CategoryWeight rows
+    W-->>S: Step 3 (email template)
+    S->>W: Save / skip
+    W->>DB: AppSetting('email_template')
+    W-->>S: Step 4 (student import)
+    W->>Q: dispatch(ImportScholarsJob)
+    Q->>J: handle(RedcapDestinationService)
+    J->>RC: getStudentsByGraduationYear()
+    J->>DB: User::create() per matched email
+    J->>J: cache->put(progress)
+    W-->>S: Live progress (created / skipped / missing email)
 ```
 
-Student import for a mapping filters destination REDCap records by `year` or `graduation_year`, creates missing `Student` users, caches each matched `record_id`, and reports skipped existing users plus destination records missing email addresses.
+The legacy synchronous path remains at `GET /admin/settings/project-mappings/{m}/import-students` — useful for re-running an import against an existing mapping. It filters destination REDCap records by graduation year, creates missing `Student` users, and reports skipped existing users plus destination records missing email addresses.
+
+### Async Student Import (`ImportScholarsJob`)
+
+`app/Jobs/ImportScholarsJob.php` is the queued counterpart to the synchronous import.
+
+| Aspect | Detail |
+|--------|--------|
+| Trigger | Step 4 of the academic-year wizard |
+| Inputs | `jobId` (UUID), `projectMappingId` |
+| Cache key | `import_scholars:{jobId}` (TTL 60 min) |
+| State fields | `status` (pending/running/complete/failed), `total_fetched`, `processed`, `created[]`, `skipped[]`, `missing_email[]`, `error`, `started_at`, `finished_at` |
+| Behaviour | Fetches all destination students for the mapping's graduation year, creates `User` rows with `Role::Student` and the matched `redcap_record_id`, skips any email already in `users` (including soft-deleted), records records with no email |
+
+The job clears the `destination:all_students` cache at the start so subsequent dashboard reads hit fresh data.
+
+---
+
+## Email Template Editor
+
+Service users can customize the `EvaluationNotification` email body without redeploying. The default template lives at `resources/views/emails/evaluation.blade.php`; the override is stored in the `app_settings` table under the `email_template` key (see `App\Models\AppSetting`).
+
+| Concern | Where |
+|---------|-------|
+| Default template | `resources/views/emails/evaluation.blade.php` |
+| Override storage | `AppSetting::get('email_template')` |
+| Editor UI | `<x-⚡email-template-modal>` on `/admin/settings` |
+| Live preview on settings page | `Admin\SettingsController::renderEmailPreview()` (uses dummy Teaching/Category-A data) |
+| Used by | `App\Mail\EvaluationNotification::content()` — falls back to the default markdown view when no override is stored |
+| Gate | `edit-email-template` (Service-only) |
+
+The modal has two tabs: **Edit** (raw Blade) and **Preview** (renders against the same dummy fixture used for `GET /test/email`). Saving validates by attempting a render; restoring resets the row to the packaged default.
+
+A seeder, `database/seeders/AppSettingSeeder.php`, ensures the `email_template` row exists on first migration so the editor always has a baseline to load.
+
+---
+
+## Docs Viewer
+
+The repository's documentation is browsable inside the app — handy for non-technical Service users who don't have repo access.
+
+| Aspect | Detail |
+|--------|--------|
+| URL | `/admin/docs` (index) and `/admin/docs/{slug}` (single file) |
+| Package | `com-atg/laravel-docs-viewer` |
+| Config | `config/docs-viewer.php` — `docs_path = base_path('Docs')`, `readme_path = base_path('README.md')` |
+| Middleware | `web`, `RequireSamlAuth`, `can:view-docs` |
+| Gate | `view-docs` (Service-only) |
+| Published views | `resources/views/vendor/docs-viewer/{index,show}.blade.php` (use the project's `<x-app-shell>`) |
+| Markdown styles | `resources/css/docs-prose.css` |
 
 ---
 
@@ -163,6 +234,9 @@ Student import for a mapping filters destination REDCap records by `year` or `gr
 /admin/settings/project-mappings/{m}          PATCH   update mapping
 /admin/settings/project-mappings/{m}          DELETE  destroy mapping
 /admin/settings/project-mappings/{id}/restore POST    restore mapping
+
+/admin/docs                                   GET     docs index (Service-only)
+/admin/docs/{slug}                            GET     rendered markdown (Service-only)
 ```
 
-All routes above sit inside `Route::middleware(RequireSamlAuth::class)` and either `can:manage-users` or `can:manage-settings`.
+All routes above sit inside `Route::middleware(RequireSamlAuth::class)`. Each has its own gate: `can:manage-users` for `/admin/users/*`, `can:manage-settings` (or `can:manage-settings-records` for record-mutating routes) for `/admin/settings/*`, `can:edit-email-template` for the email-template editor, and `can:view-docs` for `/admin/docs/*`.

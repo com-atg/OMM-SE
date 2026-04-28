@@ -2,6 +2,8 @@
 
 namespace App\Mail;
 
+use App\Models\AppSetting;
+use App\Services\MailTemplateRenderer;
 use App\Services\RedcapSourceService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
@@ -86,22 +88,82 @@ class EvaluationNotification extends Mailable
 
     public function content(): Content
     {
-        return new Content(
-            markdown: 'emails.evaluation',
-            with: [
-                'criteria' => self::CRITERIA[$this->evalCategory] ?? [],
-                'scoreScale' => self::SCORE_SCALE[$this->evalCategory] ?? '',
-                'categoryLabel' => RedcapSourceService::CATEGORY_LABELS[$this->evalCategory] ?? '',
-                'scoreField' => RedcapSourceService::SCORE_FIELDS[$this->evalCategory] ?? '',
-                'currentCategoryKey' => RedcapSourceService::DEST_CATEGORY[$this->evalCategory] ?? null,
-                'evalDate' => $this->formattedEvalDate(),
-            ],
-        );
+        $viewData = [
+            'evalRecord' => $this->evalRecord,
+            'studentRecord' => $this->studentRecord,
+            'semester' => $this->semester,
+            'aggregates' => $this->aggregates,
+            'criteria' => self::CRITERIA[$this->evalCategory] ?? [],
+            'scoreScale' => self::SCORE_SCALE[$this->evalCategory] ?? '',
+            'categoryLabel' => RedcapSourceService::CATEGORY_LABELS[$this->evalCategory] ?? '',
+            'scoreField' => RedcapSourceService::SCORE_FIELDS[$this->evalCategory] ?? '',
+            'currentCategoryKey' => RedcapSourceService::DEST_CATEGORY[$this->evalCategory] ?? null,
+            'evalDate' => $this->formattedEvalDate(),
+        ];
+
+        $customTemplate = AppSetting::get('email_template');
+
+        if ($customTemplate !== null && $customTemplate !== '') {
+            return new Content(
+                htmlString: app(MailTemplateRenderer::class)->render($customTemplate, $viewData),
+            );
+        }
+
+        return new Content(markdown: 'emails.evaluation', with: $viewData);
     }
 
     public function attachments(): array
     {
         return [];
+    }
+
+    /**
+     * Sample data for previewing the email template in the admin UI.
+     *
+     * @return array<string, mixed>
+     */
+    public static function sampleViewData(): array
+    {
+        return [
+            'evalRecord' => array_merge(
+                array_fill_keys(['small', 'large', 'knowledge', 'studevals', 'profess'], '4'),
+                [
+                    'record_id' => '1',
+                    'date_lab' => '04-16-2026',
+                    'semester' => '1',
+                    'student' => '1',
+                    'eval_category' => 'A',
+                    'teaching_score' => '83.33',
+                    'comments' => 'Great enthusiasm during the small group session. Keep up the excellent work!',
+                    'faculty' => 'Dr. Smith',
+                    'faculty_email' => 'faculty@example.com',
+                ]
+            ),
+            'studentRecord' => [
+                'record_id' => '1',
+                'first_name' => 'Catherine',
+                'last_name' => 'Chin',
+                'goes_by' => 'Cat',
+                'email' => 'catherine@example.com',
+            ],
+            'semester' => 'spring',
+            'aggregates' => [
+                'semester' => 'spring',
+                'by_category' => [
+                    'teaching' => ['nu' => 1, 'avg' => 83.33],
+                    'clinic' => ['nu' => 0, 'avg' => null],
+                    'research' => ['nu' => 0, 'avg' => null],
+                    'didactics' => ['nu' => 0, 'avg' => null],
+                ],
+                'fields' => [],
+            ],
+            'criteria' => self::CRITERIA['A'],
+            'scoreScale' => self::SCORE_SCALE['A'],
+            'categoryLabel' => 'Teaching',
+            'scoreField' => 'teaching_score',
+            'currentCategoryKey' => 'teaching',
+            'evalDate' => 'Apr 16, 2026',
+        ];
     }
 
     private function formattedEvalDate(): string

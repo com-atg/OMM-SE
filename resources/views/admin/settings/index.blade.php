@@ -117,6 +117,80 @@
         </div>
     </section>
 
+    @can('edit-email-template')
+        <details class="group rounded-lg border border-white/80 bg-white/86 shadow-[0_18px_50px_rgba(15,23,42,0.07)] backdrop-blur">
+            <summary class="flex cursor-pointer list-none items-center justify-between gap-3 p-5">
+                <div class="flex items-center gap-3">
+                    <span class="grid size-9 shrink-0 place-items-center rounded-lg bg-sky-100 text-sky-700">
+                        <flux:icon.envelope class="size-4" />
+                    </span>
+                    <div>
+                        <div class="text-xs font-bold uppercase tracking-[0.26em] text-slate-500">Notifications</div>
+                        <h2 class="mt-0.5 text-base font-bold text-slate-950">Evaluation Email Template</h2>
+                    </div>
+                </div>
+                <flux:icon.chevron-right class="size-4 shrink-0 text-slate-400 transition group-open:rotate-90" />
+            </summary>
+
+            <div class="border-t border-slate-200/80 p-5">
+                <div class="mb-4 flex items-center justify-between gap-3">
+                    <div class="space-y-1">
+                        <p class="text-sm text-slate-600">
+                            The template for evaluation notification emails sent to students.
+                            Open it to preview with sample data or edit the Blade/markdown content.
+                        </p>
+                        @if ($emailTemplateSetting?->updated_at)
+                            <p class="text-xs text-slate-400">
+                                Last updated {{ $emailTemplateSetting->updated_at->diffForHumans() }}
+                                @if ($emailTemplateSetting->updated_at->ne($emailTemplateSetting->created_at))
+                                    (customised)
+                                @else
+                                    (default)
+                                @endif
+                            </p>
+                        @endif
+                    </div>
+                    <flux:button
+                        size="sm"
+                        variant="primary"
+                        icon="pencil-square"
+                        onclick="event.preventDefault(); Livewire.dispatch('open-email-template')"
+                    >Edit email template</flux:button>
+                </div>
+
+                {{-- Inline preview rendered server-side with dummy data --}}
+                <div class="overflow-hidden rounded-xl border border-slate-200 bg-slate-100 shadow-inner">
+                    {{-- "Email client" chrome --}}
+                    <div class="flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-2.5">
+                        <div class="flex gap-1.5">
+                            <span class="size-2.5 rounded-full bg-red-400/80"></span>
+                            <span class="size-2.5 rounded-full bg-amber-400/80"></span>
+                            <span class="size-2.5 rounded-full bg-emerald-400/80"></span>
+                        </div>
+                        <div class="flex-1 truncate text-center text-xs font-medium text-slate-500">
+                            <flux:icon.envelope class="-mt-0.5 mr-1 inline size-3" />
+                            Teaching evaluation · spring semester · Dr. Smith
+                        </div>
+                        <span class="rounded-full bg-amber-100 px-2 py-0.5 text-[0.6rem] font-bold uppercase tracking-wide text-amber-700">Sample</span>
+                    </div>
+
+                    {{-- Rendered into a sandboxed iframe so any script/style in the
+                         template stays isolated from the admin page. --}}
+                    <div class="bg-slate-100 p-6">
+                        <div class="mx-auto max-w-[680px] overflow-hidden rounded-lg bg-white shadow-md">
+                            <iframe
+                                sandbox=""
+                                srcdoc="{{ $emailPreviewHtml }}"
+                                class="block h-[640px] w-full bg-white"
+                                title="Evaluation email preview"
+                            ></iframe>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </details>
+    @endcan
+
     @if ($trashedProjectMappings->isNotEmpty())
         <details class="group rounded-lg border border-red-100 bg-white/82 shadow-sm">
             <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4">
@@ -160,5 +234,9 @@
 
     @can('manage-settings-records')
         <livewire:edit-weights-modal />
+    @endcan
+
+    @can('edit-email-template')
+        <livewire:email-template-modal />
     @endcan
 </x-app-shell>
