@@ -15,7 +15,7 @@ public/build
 docker-compose*.yml
 Dockerfile
 *.md
+!README.md
 Reference/
-Docs/
 tests/
 phpunit.xml
