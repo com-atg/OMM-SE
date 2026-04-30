@@ -13,14 +13,16 @@ class VerifyWebhookToken
      * Configure the REDCap Data Entry Trigger URL as:
      *   https://your-server/omm_ace/notify?token=<WEBHOOK_SECRET>
      *
-     * Check is bypassed when WEBHOOK_SECRET is not configured (local / CI).
+     * Check is bypassed only when running in local development with no
+     * WEBHOOK_SECRET configured. All other environments (including testing
+     * and production) must have a secret set or the request is rejected.
      */
     public function handle(Request $request, Closure $next): Response
     {
         $secret = trim((string) config('redcap.webhook_secret'));
 
         if ($secret === '') {
-            abort_unless(app()->environment(['local', 'testing']), 403, 'Webhook token verification is not configured.');
+            abort_unless(app()->environment('local'), 403, 'Webhook token verification is not configured.');
 
             return $next($request);
         }

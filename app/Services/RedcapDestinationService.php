@@ -3,9 +3,7 @@
 namespace App\Services;
 
 use App\Models\Redcap_lib;
-use App\Support\FinalScoreFormulaParser;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Log;
 
 /**
  * Wraps Redcap_lib for the destination student list project (REDCAP_TOKEN).
@@ -15,8 +13,6 @@ class RedcapDestinationService
     private string $token;
 
     private string $url;
-
-    private ?array $finalScoreFormulas = null;
 
     public function __construct()
     {
@@ -40,7 +36,7 @@ class RedcapDestinationService
             $records = Redcap_lib::exportRecords(
                 format: 'json',
                 type: 'flat',
-                fields: 'record_id,datatelid,first_name,last_name,goes_by,email',
+                fields: 'record_id,datatelid,first_name,last_name,goes_by,email,cohort_start_term,cohort_start_year,batch,is_active',
                 rawOrLabel: 'raw',
                 filterLogic: "[datatelid]='{$datatelId}'",
                 returnAs: 'array',
@@ -136,63 +132,31 @@ class RedcapDestinationService
     }
 
     /**
-     * Fetch and parse destination REDCap calculated-field formulas for final scores.
-     *
-     * @return array<string,array{field:string,formula:string,components:array<int,array{field:string,label:string,coefficient:float,max_value:float,max_points:float,weight_percent:float}>}>
-     */
-    public function finalScoreFormulas(int $cacheMinutes = 0): array
-    {
-        if ($this->finalScoreFormulas !== null) {
-            return $this->finalScoreFormulas;
-        }
-
-        $this->finalScoreFormulas = $cacheMinutes > 0
-            ? Cache::remember('destination:final_score_formulas', now()->addMinutes($cacheMinutes), fn (): array => $this->fetchFinalScoreFormulas())
-            : $this->fetchFinalScoreFormulas();
-
-        return $this->finalScoreFormulas;
-    }
-
-    /**
-     * @return array<string,array{field:string,formula:string,components:array<int,array{field:string,label:string,coefficient:float,max_value:float,max_points:float,weight_percent:float}>}>
-     */
-    private function fetchFinalScoreFormulas(): array
-    {
-        try {
-            $metadata = Redcap_lib::exportMetadata(
-                format: 'json',
-                returnAs: 'array',
-                url: $this->url,
-                token: $this->token,
-            );
-        } catch (\Throwable $e) {
-            Log::warning('Unable to fetch destination final score formulas from REDCap metadata.', [
-                'message' => $e->getMessage(),
-            ]);
-
-            return [];
-        }
-
-        return is_array($metadata) ? FinalScoreFormulaParser::fromMetadata($metadata) : [];
-    }
-
-    /**
-     * Fetch destination student records filtered by graduating year.
-     * Filters client-side from the cached full roster so no extra REDCap call is made,
-     * and tolerates either a `year` or `graduation_year` field name on the record.
+     * Fetch destination student records filtered to is_active=1.
+     * Filters client-side from the cached full roster so no extra REDCap call is made.
      *
      * @return array<int,array<string,mixed>>
      */
-    public function getStudentsByGraduationYear(int $graduationYear): array
+    public function getActiveStudentRecords(): array
     {
-        $needle = (string) $graduationYear;
-
         return collect($this->getAllStudentRecords())
-            ->filter(function (array $record) use ($needle): bool {
-                $year = trim((string) ($record['year'] ?? $record['graduation_year'] ?? ''));
+            ->filter(fn (array $record): bool => (string) ($record['is_active'] ?? '') === '1')
+            ->values()
+            ->all();
+    }
 
-                return $year !== '' && $year === $needle;
-            })
+    /**
+     * Distinct, non-empty batch values present on the cached roster.
+     *
+     * @return array<int,string>
+     */
+    public function availableBatches(): array
+    {
+        return collect($this->getAllStudentRecords())
+            ->map(fn (array $record): string => trim((string) ($record['batch'] ?? '')))
+            ->filter(fn (string $batch): bool => $batch !== '')
+            ->unique()
+            ->sort(SORT_NATURAL | SORT_FLAG_CASE)
             ->values()
             ->all();
     }

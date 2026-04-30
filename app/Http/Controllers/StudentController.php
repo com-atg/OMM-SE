@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use App\Services\RedcapDestinationService;
 use App\Services\RedcapSourceService;
+use App\Support\SemesterSlot;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -12,8 +13,6 @@ use Illuminate\Support\Facades\Auth;
 
 class StudentController extends Controller
 {
-    private const SEMESTERS = ['spring' => 'Spring', 'fall' => 'Fall'];
-
     /**
      * Standard student page — students see their own record, Service/Admin see the full roster.
      */
@@ -154,18 +153,23 @@ class StudentController extends Controller
         $labels = array_values(RedcapSourceService::CATEGORY_LABELS); // ['Teaching', ...]
         $categoryKeys = array_values($categories);
 
+        $cohortTerm = trim((string) ($record['cohort_start_term'] ?? '')) ?: null;
+        $cohortYearRaw = trim((string) ($record['cohort_start_year'] ?? ''));
+        $cohortYear = $cohortYearRaw !== '' && ctype_digit($cohortYearRaw) ? (int) $cohortYearRaw : null;
+        $slotLabels = SemesterSlot::labelsFor($cohortTerm, $cohortYear);
+
         $out = [];
 
-        foreach (self::SEMESTERS as $slug => $label) {
+        foreach (SemesterSlot::slotKeys() as $slotIdx => $slotKey) {
             $counts = [];
             $averages = [];
             $dates = [];
             $total = 0;
 
             foreach ($categoryKeys as $catKey) {
-                $nu = (int) ($record["{$slug}_nu_{$catKey}"] ?? 0);
-                $avgRaw = $record["{$slug}_avg_{$catKey}"] ?? '';
-                $datesRaw = trim((string) ($record["{$slug}_dates_{$catKey}"] ?? ''));
+                $nu = (int) ($record["{$slotKey}_nu_{$catKey}"] ?? 0);
+                $avgRaw = $record["{$slotKey}_avg_{$catKey}"] ?? '';
+                $datesRaw = trim((string) ($record["{$slotKey}_dates_{$catKey}"] ?? ''));
 
                 $counts[] = $nu;
                 $averages[] = ($avgRaw !== '' && is_numeric($avgRaw)) ? (float) $avgRaw : null;
@@ -173,17 +177,17 @@ class StudentController extends Controller
                 $total += $nu;
             }
 
-            $finalScore = ($record["{$slug}_final_score"] ?? '') !== ''
-                ? (float) $record["{$slug}_final_score"]
+            $finalScore = ($record["{$slotKey}_final_score"] ?? '') !== ''
+                ? (float) $record["{$slotKey}_final_score"]
                 : null;
 
-            $leadership = ($record["{$slug}_leadership"] ?? '') !== ''
-                ? (int) $record["{$slug}_leadership"]
+            $leadership = ($record["{$slotKey}_leadership"] ?? '') !== ''
+                ? (int) $record["{$slotKey}_leadership"]
                 : null;
 
             $out[] = [
-                'slug' => $slug,
-                'label' => $label,
+                'slug' => $slotKey,
+                'label' => $slotLabels[$slotIdx] ?? "Semester {$slotIdx}",
                 'category_labels' => $labels,
                 'category_keys' => $categoryKeys,
                 'counts' => $counts,
@@ -192,8 +196,8 @@ class StudentController extends Controller
                 'total' => $total,
                 'final_score' => $finalScore,
                 'leadership' => $leadership,
-                'comments_count' => (int) ($record["{$slug}_nu_comments"] ?? 0),
-                'comments' => $this->parseComments(trim((string) ($record["{$slug}_comments"] ?? ''))),
+                'comments_count' => (int) ($record["{$slotKey}_nu_comments"] ?? 0),
+                'comments' => $this->parseComments(trim((string) ($record["{$slotKey}_comments"] ?? ''))),
                 'monthly' => $this->buildMonthly($dates, $categoryKeys),
             ];
         }

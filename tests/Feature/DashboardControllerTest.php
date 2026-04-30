@@ -1,7 +1,9 @@
 <?php
 
 use App\Livewire\Dashboard;
+use App\Models\ProjectMapping;
 use App\Services\RedcapDestinationService;
+use App\Services\RedcapSourceService;
 use Illuminate\Support\Facades\Cache;
 use Livewire\Livewire;
 
@@ -18,18 +20,24 @@ function destRoster(): array
     return [
         [
             'record_id' => '1',
-            'spring_nu_teaching' => '2', 'spring_avg_teaching' => '88.5',
-            'spring_nu_clinic' => '1', 'spring_avg_clinic' => '92.0',
-            'fall_nu_research' => '1', 'fall_avg_research' => '75.0',
-            'fall_nu_didactics' => '', 'fall_avg_didactics' => '',
+            'is_active' => '1',
+            'batch' => '12',
+            'sem1_nu_teaching' => '2', 'sem1_avg_teaching' => '88.5',
+            'sem1_nu_clinic' => '1', 'sem1_avg_clinic' => '92.0',
+            'sem2_nu_research' => '1', 'sem2_avg_research' => '75.0',
+            'sem2_nu_didactics' => '', 'sem2_avg_didactics' => '',
         ],
         [
             'record_id' => '2',
-            'spring_nu_teaching' => '1', 'spring_avg_teaching' => '65.0',
-            'fall_nu_clinic' => '2', 'fall_avg_clinic' => '80.0',
+            'is_active' => '1',
+            'batch' => '12',
+            'sem1_nu_teaching' => '1', 'sem1_avg_teaching' => '65.0',
+            'sem2_nu_clinic' => '2', 'sem2_avg_clinic' => '80.0',
         ],
         [
             'record_id' => '3',
+            'is_active' => '1',
+            'batch' => '12',
             // Student with no evaluations yet.
         ],
     ];
@@ -37,6 +45,7 @@ function destRoster(): array
 
 it('renders the dashboard with aggregated stats', function () {
     $destination = mock(RedcapDestinationService::class);
+    $destination->shouldReceive('availableBatches')->andReturn(['12']);
     $destination->shouldReceive('getAllStudentRecords')->andReturn(destRoster());
 
     get('/')->assertOk()
@@ -53,8 +62,10 @@ it('renders the dashboard with aggregated stats', function () {
         ->and($stats['kpis']['students_without_evals'])->toBe(1)
         ->and($stats['kpis']['overall_avg'])->toBeFloat()
         ->and($stats['category_labels'])->toBe(['Teaching', 'Clinic', 'Research', 'Didactics'])
-        ->and($stats['volume_by_semester']['spring'])->toBe([3, 1, 0, 0])
-        ->and($stats['volume_by_semester']['fall'])->toBe([0, 2, 1, 0])
+        ->and($stats['volume_by_semester']['sem1'])->toBe([3, 1, 0, 0])
+        ->and($stats['volume_by_semester']['sem2'])->toBe([0, 2, 1, 0])
+        ->and($stats['volume_by_semester']['sem3'])->toBe([0, 0, 0, 0])
+        ->and($stats['volume_by_semester']['sem4'])->toBe([0, 0, 0, 0])
         ->and($stats['coverage_pct'])->toBeArray()
         ->and($stats['histogram']['labels'])->toHaveCount(5);
 });
@@ -65,12 +76,9 @@ it('centers dashboard category detail table columns', function () {
     expect($dashboard)
         ->toContain('align="center">Category')
         ->toContain('align="center">Avg score')
-        ->toContain('align="center">Spring')
-        ->toContain('align="center">Fall')
         ->toContain('align="center">Coverage')
-        ->toContain('container:class="w-full" class="w-full min-w-[760px]')
-        ->toContain('align="center">{{ number_format($row[\'spring\']) }}')
-        ->toContain('align="center">{{ number_format($row[\'fall\']) }}');
+        ->toContain('container:class="mt-5 w-full" class="w-full min-w-[760px]')
+        ->toContain('align="center">{{ $slotLabels[$slot] }}');
 });
 
 it('uses a categorical y axis for the coverage chart', function () {
@@ -102,6 +110,7 @@ it('labels dashboard charts with concise metric definitions', function () {
 
 it('renders gracefully when the destination service throws', function () {
     $destination = mock(RedcapDestinationService::class);
+    $destination->shouldReceive('availableBatches')->andReturn([]);
     $destination->shouldReceive('getAllStudentRecords')->andThrow(new RuntimeException('REDCap down'));
 
     get('/')->assertOk()
@@ -119,6 +128,7 @@ it('renders gracefully when the destination service throws', function () {
 
 it('shows a friendly empty state when the roster returns no records', function () {
     $destination = mock(RedcapDestinationService::class);
+    $destination->shouldReceive('availableBatches')->andReturn([]);
     $destination->shouldReceive('getAllStudentRecords')->once()->andReturn([]);
 
     get('/')
@@ -129,9 +139,10 @@ it('shows a friendly empty state when the roster returns no records', function (
 
 it('shows the "no evaluations yet" state when students exist but have no evals', function () {
     $destination = mock(RedcapDestinationService::class);
+    $destination->shouldReceive('availableBatches')->andReturn([]);
     $destination->shouldReceive('getAllStudentRecords')->andReturn([
-        ['record_id' => '1', 'first_name' => 'Ava', 'last_name' => 'Adams'],
-        ['record_id' => '2', 'first_name' => 'Ben', 'last_name' => 'Brown'],
+        ['record_id' => '1', 'first_name' => 'Ava', 'last_name' => 'Adams', 'is_active' => '1'],
+        ['record_id' => '2', 'first_name' => 'Ben', 'last_name' => 'Brown', 'is_active' => '1'],
     ]);
 
     get('/')->assertOk()
@@ -144,8 +155,74 @@ it('shows the "no evaluations yet" state when students exist but have no evals',
         ->and($stats['kpis']['total_students'])->toBe(2);
 });
 
+it('filters destination roster to active students by default and respects batch selection', function () {
+    $destination = mock(RedcapDestinationService::class);
+    $destination->shouldReceive('availableBatches')->andReturn(['12', '13']);
+    $destination->shouldReceive('getAllStudentRecords')->andReturn([
+        ['record_id' => '1', 'is_active' => '1', 'batch' => '12', 'sem1_nu_teaching' => '1', 'sem1_avg_teaching' => '90'],
+        ['record_id' => '2', 'is_active' => '0', 'batch' => '12', 'sem1_nu_teaching' => '1', 'sem1_avg_teaching' => '70'],
+        ['record_id' => '3', 'is_active' => '1', 'batch' => '13', 'sem1_nu_teaching' => '1', 'sem1_avg_teaching' => '80'],
+    ]);
+
+    $defaultStats = Livewire::test(Dashboard::class)->viewData('stats');
+    expect($defaultStats['kpis']['total_students'])->toBe(2);
+
+    $allStats = Livewire::test(Dashboard::class)->set('activeOnly', false)->viewData('stats');
+    expect($allStats['kpis']['total_students'])->toBe(3);
+
+    $batchStats = Livewire::test(Dashboard::class)->set('selectedBatch', '13')->viewData('stats');
+    expect($batchStats['kpis']['total_students'])->toBe(1);
+});
+
+it('applies the active and batch filters to the faculty dashboard path', function () {
+    asFaculty('smith@example.com', 'Dr. Smith');
+
+    ProjectMapping::factory()->active()->create([
+        'redcap_pid' => 1846,
+        'redcap_token' => 'CURRENT_PROJECT_TOKEN',
+    ]);
+
+    $sourceRecords = [
+        ['record_id' => '101', 'student' => '100', 'semester' => '1', 'eval_category' => 'A', 'faculty' => 'Dr. Smith', 'faculty_email' => 'smith@example.com', 'date_lab' => '2026-04-01', 'teaching_score' => '90', 'small' => '6', 'large' => '5', 'knowledge' => '6', 'studevals' => '5', 'profess' => '6', 'omm_evaluation_complete' => '2'],
+        ['record_id' => '102', 'student' => '200', 'semester' => '1', 'eval_category' => 'A', 'faculty' => 'Dr. Smith', 'faculty_email' => 'smith@example.com', 'date_lab' => '2026-04-02', 'teaching_score' => '80', 'small' => '6', 'large' => '5', 'knowledge' => '6', 'studevals' => '5', 'profess' => '6', 'omm_evaluation_complete' => '2'],
+        ['record_id' => '103', 'student' => '300', 'semester' => '1', 'eval_category' => 'A', 'faculty' => 'Dr. Smith', 'faculty_email' => 'smith@example.com', 'date_lab' => '2026-04-03', 'teaching_score' => '70', 'small' => '6', 'large' => '5', 'knowledge' => '6', 'studevals' => '5', 'profess' => '6', 'omm_evaluation_complete' => '2'],
+    ];
+
+    $studentMap = [
+        '100' => ['record_id' => '10', 'datatelid' => '100', 'is_active' => '1', 'batch' => '12', 'cohort_start_term' => 'Fall', 'cohort_start_year' => '2025'],
+        '200' => ['record_id' => '20', 'datatelid' => '200', 'is_active' => '1', 'batch' => '13', 'cohort_start_term' => 'Fall', 'cohort_start_year' => '2025'],
+        '300' => ['record_id' => '30', 'datatelid' => '300', 'is_active' => '0', 'batch' => '12', 'cohort_start_term' => 'Fall', 'cohort_start_year' => '2025'],
+    ];
+
+    $source = mock(RedcapSourceService::class);
+    $source->shouldReceive('getCompletedEvaluationRecords')->andReturn($sourceRecords);
+
+    $destination = mock(RedcapDestinationService::class);
+    $destination->shouldReceive('availableBatches')->andReturn(['12', '13']);
+    $destination->shouldReceive('studentMapByDatatelId')->andReturn($studentMap);
+
+    $defaultStats = Livewire::test(Dashboard::class)->viewData('stats');
+    expect($defaultStats['kpis']['total_students'])->toBe(2);
+
+    $allStats = Livewire::test(Dashboard::class)->set('activeOnly', false)->viewData('stats');
+    expect($allStats['kpis']['total_students'])->toBe(3);
+
+    $batchStats = Livewire::test(Dashboard::class)
+        ->set('activeOnly', false)
+        ->set('selectedBatch', '12')
+        ->viewData('stats');
+    expect($batchStats['kpis']['total_students'])->toBe(2);
+
+    $batchActiveStats = Livewire::test(Dashboard::class)
+        ->set('activeOnly', true)
+        ->set('selectedBatch', '12')
+        ->viewData('stats');
+    expect($batchActiveStats['kpis']['total_students'])->toBe(1);
+});
+
 it('does not cache failed dashboard fetches as empty data', function () {
     $destination = mock(RedcapDestinationService::class);
+    $destination->shouldReceive('availableBatches')->andReturn([]);
     $destination->shouldReceive('getAllStudentRecords')->andThrow(new RuntimeException('REDCap down'));
 
     get('/')->assertOk()
@@ -154,6 +231,7 @@ it('does not cache failed dashboard fetches as empty data', function () {
     Cache::flush();
 
     $destination = mock(RedcapDestinationService::class);
+    $destination->shouldReceive('availableBatches')->andReturn(['12']);
     $destination->shouldReceive('getAllStudentRecords')->andReturn(destRoster());
 
     get('/')->assertOk()

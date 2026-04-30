@@ -24,9 +24,9 @@
 
                     @if ($currentProject)
                         <p class="mt-3 text-lg font-semibold text-slate-800">{{ $currentProject->displayName() }}</p>
-                        <p class="mt-2 text-sm leading-6 text-slate-500">This is informational and is automatically determined by the largest active graduation year.</p>
+                        <p class="mt-2 text-sm leading-6 text-slate-500">This single source project receives webhooks for all scholars across their 4-semester evaluation window.</p>
                     @else
-                        <p class="mt-3 text-sm leading-6 text-slate-500">No active project mappings exist yet. Add one to populate the current project.</p>
+                        <p class="mt-3 text-sm leading-6 text-slate-500">No active source project configured yet. Add one to enable webhook processing.</p>
                     @endif
                 </div>
             </div>
@@ -40,10 +40,10 @@
                     </span>
                     <div class="min-w-0 flex-1">
                         <div class="text-xs font-bold uppercase tracking-[0.26em] text-slate-500">Onboarding</div>
-                        <h2 class="mt-2 text-xl font-bold text-slate-950">Add a New Academic Year</h2>
-                        <p class="mt-2 text-sm leading-6 text-slate-600">Walk through the REDCap prep steps and enter the new project mapping in one guided flow.</p>
+                        <h2 class="mt-2 text-xl font-bold text-slate-950">Configure the Source Project</h2>
+                        <p class="mt-2 text-sm leading-6 text-slate-600">Set the active REDCap source project that receives evaluation webhooks. Only one source project is active at a time.</p>
                         <div class="mt-4">
-                            <flux:button href="{{ route('admin.settings.new-academic-year') }}" variant="primary" icon="academic-cap">Start guided setup</flux:button>
+                            <flux:button href="{{ route('admin.settings.source-project.create') }}" variant="primary" icon="academic-cap">Configure source project</flux:button>
                         </div>
                     </div>
                 </div>
@@ -64,8 +64,7 @@
             <table class="w-full min-w-[900px] text-sm">
                 <thead class="border-b border-slate-200/80 bg-slate-50/80 text-[0.7rem] uppercase tracking-[0.24em] text-slate-500">
                     <tr>
-                        <th class="px-5 py-3 text-left">Academic Year</th>
-                        <th class="px-5 py-3 text-left">Graduating Year</th>
+                        <th class="px-5 py-3 text-left">Status</th>
                         <th class="px-5 py-3 text-left">REDCap PID</th>
                         <th class="px-5 py-3 text-left">Token</th>
                         <th class="px-5 py-3 text-right">Actions</th>
@@ -74,27 +73,26 @@
                 <tbody class="divide-y divide-slate-100">
                     @forelse ($projectMappings as $projectMapping)
                         <tr class="transition hover:bg-sky-50/55">
-                            <td class="px-5 py-4 font-semibold text-slate-950">{{ $projectMapping->academic_year }}</td>
-                            <td class="px-5 py-4 text-slate-700">Class of {{ $projectMapping->graduation_year }}</td>
-                            <td class="px-5 py-4 text-slate-700">{{ $projectMapping->redcap_pid }}</td>
+                            <td class="px-5 py-4">
+                                @if ($projectMapping->is_active)
+                                    <span class="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">Active</span>
+                                @else
+                                    <span class="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">Inactive</span>
+                                @endif
+                            </td>
+                            <td class="px-5 py-4 font-semibold text-slate-950">{{ $projectMapping->redcap_pid }}</td>
                             <td class="px-5 py-4 font-mono text-xs text-slate-500">{{ $projectMapping->maskedToken() }}</td>
                             <td class="px-5 py-4">
                                 <div class="flex items-center justify-end gap-2">
-                                    <form method="POST" action="{{ route('admin.settings.project-mappings.process', $projectMapping) }}" onsubmit="return confirm('Re-process this whole project now?')">
-                                        @csrf
-                                        <flux:button type="submit" size="sm" variant="ghost" icon="arrow-path">Re-process</flux:button>
-                                    </form>
-
                                     @can('manage-settings-records')
-                                        <flux:button href="{{ route('admin.settings.project-mappings.import-students', $projectMapping) }}" size="sm" variant="ghost" icon="user-plus" title="Import scholars for this graduating year">Import</flux:button>
+                                        @unless ($projectMapping->is_active)
+                                            <form method="POST" action="{{ route('admin.settings.project-mappings.activate', $projectMapping) }}">
+                                                @csrf
+                                                <flux:button type="submit" size="sm" variant="ghost" icon="check-circle">Activate</flux:button>
+                                            </form>
+                                        @endunless
 
-                                        <flux:button
-                                            size="sm"
-                                            variant="ghost"
-                                            icon="scale"
-                                            title="Edit category weights"
-                                            onclick="Livewire.dispatch('open-weights', { id: {{ $projectMapping->id }} })"
-                                        >Weights</flux:button>
+                                        <flux:button href="{{ route('admin.settings.project-mappings.import-students', $projectMapping) }}" size="sm" variant="ghost" icon="user-plus" title="Import scholars from destination">Import</flux:button>
 
                                         <flux:button href="{{ route('admin.settings.project-mappings.edit', $projectMapping) }}" size="sm" variant="ghost" icon="pencil-square" aria-label="Edit project mapping" title="Edit project mapping" />
 
@@ -109,13 +107,15 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="5" class="px-5 py-12 text-center text-slate-500">No project mappings found.</td>
+                            <td colspan="4" class="px-5 py-12 text-center text-slate-500">No project mappings found.</td>
                         </tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
     </section>
+
+    <livewire:admin.reprocess-card />
 
     @can('edit-email-template')
         <details class="group rounded-lg border border-white/80 bg-white/86 shadow-[0_18px_50px_rgba(15,23,42,0.07)] backdrop-blur">
@@ -203,7 +203,6 @@
                     <thead class="bg-red-50/80 text-[0.7rem] uppercase tracking-[0.24em] text-red-500">
                         <tr>
                             <th class="px-5 py-3 text-left">Academic Year</th>
-                            <th class="px-5 py-3 text-left">Graduating Year</th>
                             <th class="px-5 py-3 text-left">REDCap PID</th>
                             <th class="px-5 py-3 text-left">Deleted</th>
                             <th class="px-5 py-3 text-right">Actions</th>
@@ -212,8 +211,7 @@
                     <tbody class="divide-y divide-slate-100">
                         @foreach ($trashedProjectMappings as $projectMapping)
                             <tr class="opacity-70">
-                                <td class="px-5 py-4 font-semibold text-slate-800">{{ $projectMapping->academic_year }}</td>
-                                <td class="px-5 py-4 text-slate-600">Class of {{ $projectMapping->graduation_year }}</td>
+                                <td class="px-5 py-4 font-semibold text-slate-800">{{ $projectMapping->academic_year ?? '—' }}</td>
                                 <td class="px-5 py-4 text-slate-600">{{ $projectMapping->redcap_pid }}</td>
                                 <td class="px-5 py-4 text-slate-500">{{ $projectMapping->deleted_at?->diffForHumans() }}</td>
                                 <td class="px-5 py-4 text-right">
@@ -231,10 +229,6 @@
             </div>
         </details>
     @endif
-
-    @can('manage-settings-records')
-        <livewire:edit-weights-modal />
-    @endcan
 
     @can('edit-email-template')
         <livewire:email-template-modal />

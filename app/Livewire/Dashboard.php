@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Services\RedcapDestinationService;
 use App\Services\RedcapSourceService;
 use App\Support\EvalAggregator;
+use App\Support\SemesterSlot;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
@@ -15,15 +16,19 @@ use Livewire\Component;
 
 class Dashboard extends Component
 {
-    public ?int $selectedGraduationYear = null;
+    public bool $activeOnly = true;
 
-    public const SESSION_KEY = 'academic_year_filter';
+    public ?string $selectedBatch = null;
 
-    private const CACHE_KEY_PREFIX = 'dashboard:stats:v3';
+    public const SESSION_KEY_ACTIVE_ONLY = 'roster_filter:active_only';
 
-    private const FALLBACK_CACHE_KEY_PREFIX = 'dashboard:stats:last-success';
+    public const SESSION_KEY_BATCH = 'roster_filter:batch';
 
-    private const SEMESTERS = ['spring', 'fall'];
+    private const CACHE_KEY_PREFIX = 'dashboard:stats:v4';
+
+    private const FALLBACK_CACHE_KEY_PREFIX = 'dashboard:stats:last-success:v4';
+
+    private const SEMESTERS = ['sem1', 'sem2', 'sem3', 'sem4'];
 
     private const HISTOGRAM_BUCKETS = [
         ['label' => '<60', 'min' => 0.0, 'max' => 60.0],
@@ -35,12 +40,19 @@ class Dashboard extends Component
 
     public function mount(): void
     {
-        $this->selectedGraduationYear = $this->resolveInitialGraduationYear();
+        $this->activeOnly = (bool) session(self::SESSION_KEY_ACTIVE_ONLY, true);
+        $batch = (string) session(self::SESSION_KEY_BATCH, '');
+        $this->selectedBatch = $batch !== '' ? $batch : null;
     }
 
-    public function updatedSelectedGraduationYear(): void
+    public function updatedActiveOnly(): void
     {
-        session([self::SESSION_KEY => $this->selectedGraduationYear]);
+        session([self::SESSION_KEY_ACTIVE_ONLY => $this->activeOnly]);
+    }
+
+    public function updatedSelectedBatch(): void
+    {
+        session([self::SESSION_KEY_BATCH => $this->selectedBatch ?? '']);
     }
 
     public function render(): View
@@ -48,14 +60,15 @@ class Dashboard extends Component
         $user = Auth::user();
         abort_unless($user instanceof User && $user->canViewDashboard(), 403);
 
-        $availableMappings = ProjectMapping::query()
-            ->orderByDesc('graduation_year')
-            ->get(['id', 'academic_year', 'graduation_year']);
+        $destination = app(RedcapDestinationService::class);
+        $availableBatches = $destination->availableBatches();
 
-        $year = $this->selectedGraduationYear;
-        $mapping = $year !== null
-            ? ProjectMapping::byGraduationYear($year)
-            : ProjectMapping::current();
+        if ($this->selectedBatch !== null && ! in_array($this->selectedBatch, $availableBatches, true)) {
+            $this->selectedBatch = null;
+            session([self::SESSION_KEY_BATCH => '']);
+        }
+
+        $mapping = ProjectMapping::activeSource();
 
         if ($user->isFaculty()) {
             $stats = $this->buildStats(
@@ -64,20 +77,18 @@ class Dashboard extends Component
 
             return view('livewire.dashboard', [
                 'stats' => $stats,
-                'availableMappings' => $availableMappings,
+                'availableBatches' => $availableBatches,
             ]);
         }
 
-        $cacheKey = self::CACHE_KEY_PREFIX.':gy:'.($year ?? 'none');
-        $fallbackKey = self::FALLBACK_CACHE_KEY_PREFIX.':gy:'.($year ?? 'none');
+        $cacheKey = self::CACHE_KEY_PREFIX.':active='.($this->activeOnly ? '1' : '0').':batch='.($this->selectedBatch ?? 'all');
+        $fallbackKey = self::FALLBACK_CACHE_KEY_PREFIX.':active='.($this->activeOnly ? '1' : '0').':batch='.($this->selectedBatch ?? 'all');
 
         $stats = Cache::get($cacheKey);
 
         if ($stats === null) {
             try {
-                $records = ($year !== null && $availableMappings->count() >= 2)
-                    ? app(RedcapDestinationService::class)->getStudentsByGraduationYear($year)
-                    : app(RedcapDestinationService::class)->getAllStudentRecords();
+                $records = $this->filterRecords($destination->getAllStudentRecords());
                 $stats = $this->buildStats($records);
 
                 Cache::put($cacheKey, $stats, now()->addMinutes(10));
@@ -98,28 +109,30 @@ class Dashboard extends Component
 
         return view('livewire.dashboard', [
             'stats' => $stats,
-            'availableMappings' => $availableMappings,
+            'availableBatches' => $availableBatches,
         ]);
     }
 
-    private function resolveInitialGraduationYear(): ?int
+    /**
+     * @param  array<int,array<string,mixed>>  $records
+     * @return array<int,array<string,mixed>>
+     */
+    private function filterRecords(array $records): array
     {
-        $available = ProjectMapping::query()
-            ->orderByDesc('graduation_year')
-            ->pluck('graduation_year')
-            ->map(fn ($year) => (int) $year)
+        return collect($records)
+            ->filter(function (array $record): bool {
+                if ($this->activeOnly && (string) ($record['is_active'] ?? '') !== '1') {
+                    return false;
+                }
+
+                if ($this->selectedBatch !== null && trim((string) ($record['batch'] ?? '')) !== $this->selectedBatch) {
+                    return false;
+                }
+
+                return true;
+            })
+            ->values()
             ->all();
-
-        if ($available === []) {
-            return null;
-        }
-
-        $stored = (int) session(self::SESSION_KEY, 0);
-        if ($stored > 0 && in_array($stored, $available, true)) {
-            return $stored;
-        }
-
-        return $available[0];
     }
 
     /**
@@ -131,24 +144,74 @@ class Dashboard extends Component
         $records = collect($sourceToken === '' ? [] : app(RedcapSourceService::class)->getCompletedEvaluationRecords($sourceToken))
             ->filter(fn (array $record): bool => $this->recordBelongsToFaculty($record, $user));
 
-        $studentRecords = [];
+        $studentMap = $this->filterStudentMap(
+            app(RedcapDestinationService::class)->studentMapByDatatelId()
+        );
 
-        foreach ($records->groupBy(fn (array $record): string => trim((string) ($record['student'] ?? '')).'|'.trim((string) ($record['semester'] ?? ''))) as $key => $group) {
-            [$studentId, $semesterCode] = explode('|', $key);
-            $semester = EvalAggregator::SEMESTER_MAP[$semesterCode] ?? null;
+        $groups = [];
 
-            if ($studentId === '' || $semester === null) {
+        foreach ($records as $record) {
+            $studentId = trim((string) ($record['student'] ?? ''));
+            $semesterCode = trim((string) ($record['semester'] ?? ''));
+            $dateLab = trim((string) ($record['date_lab'] ?? ''));
+
+            if ($studentId === '' || $semesterCode === '' || $dateLab === '') {
                 continue;
             }
 
+            $studentRecord = $studentMap[$studentId] ?? null;
+
+            if (! $studentRecord) {
+                continue;
+            }
+
+            $cohortTerm = trim((string) ($studentRecord['cohort_start_term'] ?? '')) ?: null;
+            $cohortYearRaw = trim((string) ($studentRecord['cohort_start_year'] ?? ''));
+            $cohortYear = $cohortYearRaw !== '' && ctype_digit($cohortYearRaw) ? (int) $cohortYearRaw : null;
+
+            $slot = SemesterSlot::compute($semesterCode, $dateLab, $cohortTerm, $cohortYear);
+
+            if ($slot === null) {
+                continue;
+            }
+
+            $slotKey = SemesterSlot::slotKey($slot);
+            $groups["{$studentId}|{$slotKey}"][] = $record;
+        }
+
+        $studentRecords = [];
+
+        foreach ($groups as $key => $groupRecords) {
+            [$studentId, $slotKey] = explode('|', $key);
             $studentRecords[$studentId] ??= ['record_id' => $studentId];
             $studentRecords[$studentId] = array_merge(
                 $studentRecords[$studentId],
-                EvalAggregator::aggregate($group->values()->all(), $semester)['fields'],
+                EvalAggregator::aggregate($groupRecords, $slotKey)['fields'],
             );
         }
 
         return array_values($studentRecords);
+    }
+
+    /**
+     * @param  array<string,array<string,mixed>>  $studentMap
+     * @return array<string,array<string,mixed>>
+     */
+    private function filterStudentMap(array $studentMap): array
+    {
+        return collect($studentMap)
+            ->filter(function (array $record): bool {
+                if ($this->activeOnly && (string) ($record['is_active'] ?? '') !== '1') {
+                    return false;
+                }
+
+                if ($this->selectedBatch !== null && trim((string) ($record['batch'] ?? '')) !== $this->selectedBatch) {
+                    return false;
+                }
+
+                return true;
+            })
+            ->all();
     }
 
     /**
@@ -285,8 +348,10 @@ class Dashboard extends Component
             'avg_by_category' => $avgByCategory,
             'volume_by_semester' => [
                 'labels' => array_values($categoryLabels),
-                'spring' => $volumeBySemester['spring'],
-                'fall' => $volumeBySemester['fall'],
+                'sem1' => $volumeBySemester['sem1'],
+                'sem2' => $volumeBySemester['sem2'],
+                'sem3' => $volumeBySemester['sem3'],
+                'sem4' => $volumeBySemester['sem4'],
             ],
             'coverage_pct' => $coveragePct,
             'histogram' => [

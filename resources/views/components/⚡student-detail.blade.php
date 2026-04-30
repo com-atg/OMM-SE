@@ -1,12 +1,11 @@
 <?php
 
-use App\Enums\WeightCategory;
-use App\Models\ProjectMapping;
+use App\Livewire\Dashboard;
 use App\Services\RedcapDestinationService;
 use App\Services\RedcapSourceService;
+use App\Support\SemesterSlot;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Collection;
 use Livewire\Attributes\Url;
 use Livewire\Component;
 
@@ -19,125 +18,80 @@ new class extends Component
 
     public ?string $shareableUrl = null;
 
-    public ?int $selectedGraduationYear = null;
+    public bool $activeOnly = true;
 
-    public const SESSION_KEY = 'academic_year_filter';
-
-    private const SEMESTERS = ['spring' => 'Spring', 'fall' => 'Fall'];
+    public ?string $selectedBatch = null;
 
     public function mount(?string $initialSelectedId = null, bool $lockSelection = false, ?string $shareableUrl = null): void
     {
         $this->selectedId = (string) ($initialSelectedId ?? $this->selectedId);
         $this->lockSelection = $lockSelection;
         $this->shareableUrl = $shareableUrl;
-        $this->selectedGraduationYear = $this->resolveInitialGraduationYear();
+
+        if (! $this->lockSelection) {
+            $this->activeOnly = (bool) session(Dashboard::SESSION_KEY_ACTIVE_ONLY, true);
+            $batch = (string) session(Dashboard::SESSION_KEY_BATCH, '');
+            $this->selectedBatch = $batch !== '' ? $batch : null;
+        }
     }
 
-    public function updatedSelectedGraduationYear(): void
+    public function updatedActiveOnly(): void
     {
-        session([self::SESSION_KEY => $this->selectedGraduationYear]);
+        session([Dashboard::SESSION_KEY_ACTIVE_ONLY => $this->activeOnly]);
+        $this->selectedId = '';
+    }
+
+    public function updatedSelectedBatch(): void
+    {
+        session([Dashboard::SESSION_KEY_BATCH => $this->selectedBatch ?? '']);
         $this->selectedId = '';
     }
 
     public function render(): View
     {
         $destination = app(RedcapDestinationService::class);
+        $records = $destination->getAllStudentRecords();
+        $availableBatches = $this->lockSelection ? [] : $destination->availableBatches();
 
-        $availableMappings = ProjectMapping::query()
-            ->orderByDesc('graduation_year')
-            ->get(['id', 'academic_year', 'graduation_year']);
-
-        $year = $this->selectedGraduationYear;
-
-        if ($this->lockSelection || $availableMappings->count() < 2) {
-            $records = $destination->getAllStudentRecords();
-        } else {
-            $records = $year !== null
-                ? $destination->getStudentsByGraduationYear($year)
-                : $destination->getAllStudentRecords();
+        if ($this->selectedBatch !== null && ! in_array($this->selectedBatch, $availableBatches, true)) {
+            $this->selectedBatch = null;
+            session([Dashboard::SESSION_KEY_BATCH => '']);
         }
 
-        $selectedRecord = $this->resolveRecord($records, $this->selectedId);
-        $selected = $selectedRecord ? $this->selectedStudent($selectedRecord) : null;
-        $scoreFormulas = $selectedRecord ? $this->scoreFormulasFromDb($year) : [];
-        $semesters = $selectedRecord ? $this->buildSemesters($selectedRecord, $scoreFormulas) : [];
+        $filteredRecords = $this->lockSelection ? $records : $this->filterRecords($records);
 
-        $mapping = $year !== null
-            ? ProjectMapping::byGraduationYear($year)
-            : ProjectMapping::current();
+        $selectedRecord = $this->resolveRecord($filteredRecords, $this->selectedId);
+        $selected = $selectedRecord ? $this->selectedStudent($selectedRecord) : null;
+        $semesters = $selectedRecord ? $this->buildSemesters($selectedRecord) : [];
 
         return view('components.⚡student-detail', [
-            'roster' => $this->lockSelection ? [] : $this->roster($records),
+            'roster' => $this->lockSelection ? [] : $this->roster($filteredRecords),
             'selected' => $selected,
             'semesters' => $semesters,
-            'finalGrade' => $this->finalGrade($semesters),
-            'academicYear' => $mapping?->academic_year,
-            'availableMappings' => $availableMappings,
+            'availableBatches' => $availableBatches,
         ]);
     }
 
-    private function resolveInitialGraduationYear(): ?int
-    {
-        $available = ProjectMapping::query()
-            ->orderByDesc('graduation_year')
-            ->pluck('graduation_year')
-            ->map(fn ($y) => (int) $y)
-            ->all();
-
-        if ($available === []) {
-            return null;
-        }
-
-        $stored = (int) session(self::SESSION_KEY, 0);
-        if ($stored > 0 && in_array($stored, $available, true)) {
-            return $stored;
-        }
-
-        return $available[0];
-    }
-
     /**
-     * @return array<string,array{field:string,components:array<int,array{field:string,label:string,coefficient:float,max_value:float,max_points:float,weight_percent:float}>}>
+     * @param  array<int,array<string,mixed>>  $records
+     * @return array<int,array<string,mixed>>
      */
-    private function scoreFormulasFromDb(?int $graduationYear = null): array
+    private function filterRecords(array $records): array
     {
-        $mapping = $graduationYear !== null
-            ? ProjectMapping::byGraduationYear($graduationYear)
-            : ProjectMapping::current();
+        return collect($records)
+            ->filter(function (array $record): bool {
+                if ($this->activeOnly && (string) ($record['is_active'] ?? '') !== '1') {
+                    return false;
+                }
 
-        if (! $mapping) {
-            return [];
-        }
+                if ($this->selectedBatch !== null && trim((string) ($record['batch'] ?? '')) !== $this->selectedBatch) {
+                    return false;
+                }
 
-        /** @var Collection<string,\App\Models\CategoryWeight> $weights */
-        $weights = $mapping->categoryWeights()->get()->keyBy(fn ($w) => $w->category->value);
-
-        if ($weights->isEmpty()) {
-            return [];
-        }
-
-        $components = collect(WeightCategory::cases())
-            ->filter(fn (WeightCategory $cat): bool => $weights->has($cat->value))
-            ->map(function (WeightCategory $cat) use ($weights): array {
-                $weight = (float) $weights->get($cat->value)->weight;
-                $maxValue = $cat === WeightCategory::Leadership ? 10.0 : 100.0;
-
-                return [
-                    'field' => $cat->value,
-                    'label' => $cat->label(),
-                    'coefficient' => round($weight / 100, 4),
-                    'max_value' => $maxValue,
-                    'max_points' => $weight,
-                    'weight_percent' => $weight,
-                ];
+                return true;
             })
             ->values()
             ->all();
-
-        return [
-            'spring' => ['field' => 'spring_final_score', 'components' => $components],
-            'fall' => ['field' => 'fall_final_score', 'components' => $components],
-        ];
     }
 
     /**
@@ -199,26 +153,31 @@ new class extends Component
 
     /**
      * @param  array<string,mixed>  $record
-     * @param  array<string,array<string,mixed>>  $scoreFormulas
      * @return array<int,array<string,mixed>>
      */
-    private function buildSemesters(array $record, array $scoreFormulas = []): array
+    private function buildSemesters(array $record): array
     {
         $categories = RedcapSourceService::DEST_CATEGORY;
         $labels = array_values(RedcapSourceService::CATEGORY_LABELS);
         $categoryKeys = array_values($categories);
+
+        $cohortTerm = trim((string) ($record['cohort_start_term'] ?? '')) ?: null;
+        $cohortYearRaw = trim((string) ($record['cohort_start_year'] ?? ''));
+        $cohortYear = $cohortYearRaw !== '' && ctype_digit($cohortYearRaw) ? (int) $cohortYearRaw : null;
+        $slotLabels = SemesterSlot::labelsFor($cohortTerm, $cohortYear);
+
         $out = [];
 
-        foreach (self::SEMESTERS as $slug => $label) {
+        foreach (SemesterSlot::slotKeys() as $slotIdx => $slotKey) {
             $counts = [];
             $averages = [];
             $dates = [];
             $total = 0;
 
             foreach ($categoryKeys as $catKey) {
-                $nu = (int) ($record["{$slug}_nu_{$catKey}"] ?? 0);
-                $avgRaw = $record["{$slug}_avg_{$catKey}"] ?? '';
-                $datesRaw = trim((string) ($record["{$slug}_dates_{$catKey}"] ?? ''));
+                $nu = (int) ($record["{$slotKey}_nu_{$catKey}"] ?? 0);
+                $avgRaw = $record["{$slotKey}_avg_{$catKey}"] ?? '';
+                $datesRaw = trim((string) ($record["{$slotKey}_dates_{$catKey}"] ?? ''));
 
                 $counts[] = $nu;
                 $averages[] = ($avgRaw !== '' && is_numeric($avgRaw)) ? (float) $avgRaw : null;
@@ -227,19 +186,18 @@ new class extends Component
             }
 
             $out[] = [
-                'slug' => $slug,
-                'label' => $label,
+                'slug' => $slotKey,
+                'label' => $slotLabels[$slotIdx] ?? "Semester {$slotIdx}",
                 'category_labels' => $labels,
                 'category_keys' => $categoryKeys,
                 'counts' => $counts,
                 'averages' => $averages,
                 'dates' => $dates,
                 'total' => $total,
-                'final_score' => ($record["{$slug}_final_score"] ?? '') !== '' ? (float) $record["{$slug}_final_score"] : null,
-                'leadership' => ($record["{$slug}_leadership"] ?? '') !== '' ? (int) $record["{$slug}_leadership"] : null,
-                'score_formula' => $scoreFormulas[$slug] ?? null,
-                'comments_count' => (int) ($record["{$slug}_nu_comments"] ?? 0),
-                'comments' => $this->parseComments(trim((string) ($record["{$slug}_comments"] ?? ''))),
+                'final_score' => ($record["{$slotKey}_final_score"] ?? '') !== '' ? (float) $record["{$slotKey}_final_score"] : null,
+                'leadership' => ($record["{$slotKey}_leadership"] ?? '') !== '' ? (int) $record["{$slotKey}_leadership"] : null,
+                'comments_count' => (int) ($record["{$slotKey}_nu_comments"] ?? 0),
+                'comments' => $this->parseComments(trim((string) ($record["{$slotKey}_comments"] ?? ''))),
                 'monthly' => $this->buildMonthly($dates, $categoryKeys),
             ];
         }
@@ -310,25 +268,6 @@ new class extends Component
         return $buckets;
     }
 
-    /**
-     * @param  array<int,array<string,mixed>>  $semesters
-     * @return array{label:string,score:float}|null
-     */
-    private function finalGrade(array $semesters): ?array
-    {
-        $semester = collect($semesters)
-            ->reverse()
-            ->first(fn (array $semester): bool => $semester['final_score'] !== null);
-
-        if (! $semester) {
-            return null;
-        }
-
-        return [
-            'label' => (string) $semester['label'],
-            'score' => (float) $semester['final_score'],
-        ];
-    }
 };
 
 $categoryKeys = $semesters[0]['category_keys'] ?? [];
@@ -371,20 +310,8 @@ $selectedInitials = collect(explode(' ', $selected['name'] ?? ''))
     ->map(fn (string $part) => mb_substr($part, 0, 1))
     ->take(2)
     ->implode('');
-$chartSemesters = collect($semesters)
-    ->map(function (array $sem): array {
-        if (! empty($sem['score_formula'])) {
-            $sem['score_formula'] = [
-                'field' => $sem['score_formula']['field'] ?? null,
-                'components' => $sem['score_formula']['components'] ?? [],
-            ];
-        }
-
-        return $sem;
-    })
-    ->all();
 $chartPayload = [
-    'semesters' => $chartSemesters,
+    'semesters' => $semesters,
     'categoryLabels' => $categoryLabels,
     'categoryKeys' => $categoryKeys,
     'mergedMonthly' => $mergedMonthly,
@@ -394,34 +321,61 @@ $chartPayload = [
 
 <div class="flex flex-col gap-7">
     @unless ($lockSelection)
-        <section class="rounded-lg border border-[#d8e3fa] bg-white/90 p-5 shadow-[0_14px_38px_rgba(26,54,93,0.06)] backdrop-blur">
-            <div class="flex flex-col gap-4 sm:flex-row sm:items-end">
-                @if ($availableMappings->count() >= 2)
-                    <flux:select
-                        class="max-w-[14rem]"
-                        wire:model.live="selectedGraduationYear"
-                        label="Academic Year"
-                    >
-                        @foreach ($availableMappings as $am)
-                            <flux:select.option value="{{ $am->graduation_year }}" wire:key="student-ay-option-{{ $am->id }}">
-                                {{ $am->academic_year }} (Class of {{ $am->graduation_year }})
-                            </flux:select.option>
-                        @endforeach
-                    </flux:select>
-                @endif
+        <section class="overflow-hidden rounded-xl border border-white/80 bg-white/95 shadow-[0_8px_24px_rgba(15,23,42,0.05)] backdrop-blur">
+            <div class="flex flex-col divide-y divide-slate-200/70 md:flex-row md:items-stretch md:divide-x md:divide-y-0">
+                <div class="relative flex items-center gap-3 bg-gradient-to-br from-sky-50 via-white to-slate-50 px-5 py-4 md:min-w-[200px]">
+                    <span class="absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-sky-400 to-indigo-500"></span>
+                    <span class="grid size-9 shrink-0 place-items-center rounded-lg bg-white text-sky-600 shadow-sm ring-1 ring-sky-100">
+                        <flux:icon.funnel variant="mini" class="size-4" />
+                    </span>
+                    <div class="min-w-0">
+                        <div class="text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-sky-700">Filters</div>
+                        <div class="truncate text-sm font-semibold text-slate-900">Student scope</div>
+                    </div>
+                </div>
 
-                <flux:select
-                    class="max-w-sm"
-                    wire:model.live="selectedId"
-                    label="Choose a student"
-                >
-                    <flux:select.option value="">Select a student...</flux:select.option>
-                    @foreach ($roster as $student)
-                        <flux:select.option value="{{ $student['record_id'] }}" wire:key="student-option-{{ $student['record_id'] }}">
-                            {{ $student['name'] }}
-                        </flux:select.option>
-                    @endforeach
-                </flux:select>
+                <div class="flex flex-1 flex-wrap items-center gap-x-5 gap-y-3 px-5 py-4">
+                    <flux:field variant="inline">
+                        <flux:label class="text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-slate-500">Student</flux:label>
+                        <flux:select
+                            wire:model.live="selectedId"
+                            size="sm"
+                            class="min-w-56"
+                            placeholder="Select a student..."
+                        >
+                            <flux:select.option value="">Select a student...</flux:select.option>
+                            @foreach ($roster as $student)
+                                <flux:select.option value="{{ $student['record_id'] }}" wire:key="student-option-{{ $student['record_id'] }}">
+                                    {{ $student['name'] }}
+                                </flux:select.option>
+                            @endforeach
+                        </flux:select>
+                    </flux:field>
+
+                    <div class="hidden h-7 w-px bg-slate-200 md:block" aria-hidden="true"></div>
+
+                    <flux:field variant="inline">
+                        <flux:label class="text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-slate-500">Active only</flux:label>
+                        <flux:switch wire:model.live="activeOnly" />
+                    </flux:field>
+
+                    <div class="hidden h-7 w-px bg-slate-200 md:block" aria-hidden="true"></div>
+
+                    <flux:field variant="inline">
+                        <flux:label class="text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-slate-500">Batch</flux:label>
+                        <flux:select
+                            wire:model.live="selectedBatch"
+                            size="sm"
+                            class="min-w-40"
+                            placeholder="All batches"
+                        >
+                            <flux:select.option value="">All batches</flux:select.option>
+                            @foreach ($availableBatches as $batch)
+                                <flux:select.option value="{{ $batch }}">{{ $batch }}</flux:select.option>
+                            @endforeach
+                        </flux:select>
+                    </flux:field>
+                </div>
             </div>
         </section>
     @endunless
@@ -439,67 +393,50 @@ $chartPayload = [
     @else
         <section class="flex flex-col gap-6" wire:key="student-detail-{{ $selected['record_id'] }}">
             <div class="rounded-lg border border-[#d8e3fa] bg-white/92 p-5 shadow-[0_16px_42px_rgba(26,54,93,0.06)] backdrop-blur">
-                <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-                    <div class="flex min-w-0 items-start gap-4">
+                <div class="flex flex-col gap-6 lg:flex-row lg:items-center">
+                    <div class="flex min-w-0 flex-1 items-center gap-5">
                         <div class="shrink-0 overflow-hidden rounded-lg border border-[#cfdaf1] bg-[#e7eeff]">
                             @if ($selected['photo_url'])
                                 <img
                                     src="{{ $selected['photo_url'] }}"
                                     alt="{{ $selected['name'] }}"
-                                    class="size-40 object-cover"
+                                    class="size-28 object-cover"
                                     onerror="this.classList.add('hidden'); this.nextElementSibling.classList.remove('hidden'); this.nextElementSibling.classList.add('grid');"
                                 >
-                                <div class="hidden size-40 place-items-center bg-[#002045] text-4xl font-bold text-white">
+                                <div class="hidden size-28 place-items-center bg-[#002045] text-3xl font-bold text-white">
                                     {{ $selectedInitials }}
                                 </div>
                             @else
-                                <div class="grid size-40 place-items-center bg-[#002045] text-4xl font-bold text-white">
+                                <div class="grid size-28 place-items-center bg-[#002045] text-3xl font-bold text-white">
                                     {{ $selectedInitials }}
                                 </div>
                             @endif
                         </div>
 
-                        <div class="min-w-0">
-                            <div class="flex flex-wrap items-center gap-2">
-                                <span class="rounded-full bg-[#d6e3ff] px-3 py-1 text-[0.68rem] font-bold uppercase tracking-[0.22em] text-[#001b3c]">Student Profile</span>
-                            </div>
-                            <h2 class="mt-3 text-3xl font-semibold tracking-tight text-[#111c2c] sm:text-4xl">{{ $selected['name'] }}</h2>
-                            <div class="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm text-[#43474e]">
-                                <span class="inline-flex items-center gap-1.5">
-                                    <flux:icon.academic-cap variant="mini" class="size-4 text-[#455f88]" />
-                                    Final Grade:
-                                    <strong class="font-semibold text-[#111c2c]">{{ $finalGrade ? number_format($finalGrade['score'], 2) : 'Pending' }}</strong>
-                                </span>
-                            </div>
-                            @unless ($finalGrade)
-                                <p class="mt-2 text-sm font-medium text-[#74777f]">Final grade is not available yet.</p>
-                            @endunless
+                        <div class="min-w-0 flex-1">
+                            <h2 class="text-2xl font-semibold tracking-tight text-[#111c2c] sm:text-3xl">{{ $selected['name'] }}</h2>
                         </div>
                     </div>
 
-                    <dl class="grid grid-cols-2 gap-3 sm:min-w-[460px] sm:grid-cols-4">
-                        <div class="rounded-lg border border-[#e2e8f0] bg-[#f9f9ff] p-4 text-center">
-                            <dt class="text-[0.68rem] font-bold uppercase tracking-[0.18em] text-[#455f88]">Evals</dt>
+                    <dl class="grid grid-cols-2 gap-3 sm:flex sm:flex-row sm:flex-wrap lg:flex-none lg:flex-nowrap">
+                        <div class="rounded-lg border border-[#e2e8f0] bg-[#f9f9ff] p-3 text-center sm:w-28">
+                            <dt class="text-[0.65rem] font-bold uppercase tracking-[0.18em] text-[#455f88]">Evals</dt>
                             <dd class="mt-1 text-2xl font-semibold tabular-nums text-[#111c2c]">{{ number_format($totalEvaluations) }}</dd>
                         </div>
-                        <div class="rounded-lg border border-[#e2e8f0] bg-[#f9f9ff] p-4 text-center">
-                            <dt class="text-[0.68rem] font-bold uppercase tracking-[0.18em] text-[#455f88]">Comments</dt>
+                        <div class="rounded-lg border border-[#e2e8f0] bg-[#f9f9ff] p-3 text-center sm:w-28">
+                            <dt class="text-[0.65rem] font-bold uppercase tracking-[0.18em] text-[#455f88]">Comments</dt>
                             <dd class="mt-1 text-2xl font-semibold tabular-nums text-[#111c2c]">{{ number_format($totalComments) }}</dd>
                         </div>
-                        <div class="rounded-lg border border-[#e2e8f0] bg-[#f4fbfa] p-4 text-center">
-                            <dt class="text-[0.68rem] font-bold uppercase tracking-[0.18em] text-[#006a63]">Leadership</dt>
+                        <div class="col-span-2 rounded-lg border border-[#e2e8f0] bg-[#f4fbfa] p-3 text-center sm:col-auto sm:w-44">
+                            <dt class="text-[0.65rem] font-bold uppercase tracking-[0.18em] text-[#006a63]">Leadership</dt>
                             <dd class="mt-1 text-xl font-semibold tabular-nums text-[#111c2c]">
                                 {{ $hasLeadershipPoints ? number_format($leadershipEarned).'/'.number_format($leadershipMax) : 'Pending' }}
                             </dd>
-                            <div class="mt-2 flex justify-center gap-2 text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-[#74777f]">
+                            <div class="mt-2 flex flex-wrap justify-center gap-1 text-[0.6rem] font-semibold uppercase tracking-[0.06em] text-[#52606d]">
                                 @foreach ($leadershipRows as $row)
-                                    <span>{{ $row['label'] }} {{ $row['points'] ?? '-' }}</span>
+                                    <span class="rounded-full bg-white px-2 py-0.5 ring-1 ring-[#dce1e8]">{{ $row['label'] }} {{ $row['points'] ?? '–' }}</span>
                                 @endforeach
                             </div>
-                        </div>
-                        <div class="rounded-lg border border-[#e2e8f0] bg-[#f9f9ff] p-4 text-center">
-                            <dt class="text-[0.68rem] font-bold uppercase tracking-[0.18em] text-[#455f88]">Status</dt>
-                            <dd class="mt-1 text-sm font-semibold text-[#111c2c]">{{ $finalGrade ? $finalGrade['label'] : 'Pending' }}</dd>
                         </div>
                     </dl>
                 </div>
@@ -540,32 +477,10 @@ $chartPayload = [
                         </section>
                     @endif
 
-                    @php $weightComponents = $semesters[0]['score_formula']['components'] ?? []; @endphp
-                    <section class="rounded-lg border border-[#d8e3fa] bg-white/92 p-6 shadow-[0_16px_42px_rgba(26,54,93,0.06)] backdrop-blur">
-                        <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                            <div>
-                                <div class="text-[0.72rem] font-bold uppercase tracking-[0.24em] text-[#455f88]">Score Weights</div>
-                                <h2 class="mt-2 text-lg font-semibold text-[#111c2c]">Weight Distribution</h2>
-                            </div>
-                            @if ($academicYear)
-                                <span class="rounded-full bg-[#d6e3ff] px-3 py-1 text-xs font-bold uppercase tracking-[0.12em] text-[#001b3c]">{{ $academicYear }}</span>
-                            @endif
-                        </div>
-
-                        @if (! empty($weightComponents))
-                            <div class="mt-5 mx-auto max-w-xs">
-                                <div class="h-64">
-                                    <canvas data-student-chart="weights" data-semester-index="0"></canvas>
-                                </div>
-                            </div>
-                        @else
-                            <div class="mt-5 rounded-lg border border-dashed border-[#c4c6cf] bg-white p-5 text-sm leading-6 text-[#74777f]">
-                                No category weights configured for this academic year. Add them in Settings → Project Mapping → Weights.
-                            </div>
-                        @endif
-                    </section>
-
                     @foreach ($semesters as $i => $sem)
+                        @if ($sem['total'] === 0)
+                            @continue
+                        @endif
                         <section class="rounded-lg border border-[#d8e3fa] bg-white/92 p-6 shadow-[0_16px_42px_rgba(26,54,93,0.06)] backdrop-blur" wire:key="semester-{{ $selected['record_id'] }}-{{ $sem['slug'] }}">
                             <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                 <div>
@@ -576,82 +491,71 @@ $chartPayload = [
                                     @if ($sem['leadership'] !== null)
                                         <flux:badge color="teal">Leadership {{ $sem['leadership'] }}/10</flux:badge>
                                     @endif
-                                    @if ($sem['final_score'] !== null)
-                                        <flux:badge color="blue">Final {{ number_format($sem['final_score'], 2) }}</flux:badge>
-                                    @endif
                                     <flux:badge color="zinc">{{ number_format($sem['total']) }} evals</flux:badge>
                                 </div>
                             </div>
 
-                            @if ($sem['total'] === 0)
-                                <div class="mt-5 rounded-lg border border-dashed border-[#c4c6cf] bg-[#f9f9ff] p-8 text-center text-sm text-[#74777f]">
-                                    <flux:icon.no-symbol variant="mini" class="mx-auto mb-3 size-6 text-[#98a2b3]" />
-                                    No evaluations recorded this semester.
-                                </div>
-                            @else
-                                <div class="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_280px]">
-                                    <div class="overflow-hidden rounded-lg border border-[#e2e8f0] bg-white">
-                                        <flux:table>
-                                            <flux:table.columns>
-                                                <flux:table.column class="bg-[#f0f3ff] px-6 text-xs font-bold uppercase tracking-[0.16em] text-[#455f88]" align="center">Category</flux:table.column>
-                                                <flux:table.column class="bg-[#f0f3ff] px-6 text-xs font-bold uppercase tracking-[0.16em] text-[#455f88]" align="center">Evals</flux:table.column>
-                                                <flux:table.column class="bg-[#f0f3ff] px-6 text-xs font-bold uppercase tracking-[0.16em] text-[#455f88]" align="center">Avg</flux:table.column>
-                                            </flux:table.columns>
-                                            <flux:table.rows>
-                                                @foreach ($sem['category_keys'] as $j => $catKey)
-                                                    <flux:table.row class="transition hover:bg-[#f9f9ff]" wire:key="semester-{{ $sem['slug'] }}-{{ $catKey }}">
-                                                        <flux:table.cell class="px-6 font-semibold text-[#111c2c]" align="center">{{ $sem['category_labels'][$j] }}</flux:table.cell>
-                                                        <flux:table.cell class="px-6 font-medium tabular-nums text-[#43474e]" align="center">{{ $sem['counts'][$j] }}</flux:table.cell>
-                                                        <flux:table.cell class="px-6 tabular-nums" align="center">
-                                                            @if ($sem['averages'][$j] !== null)
-                                                                <span class="font-semibold text-[#111c2c]">{{ number_format($sem['averages'][$j], 1) }}</span>
-                                                                <span class="text-xs text-[#74777f]">/100</span>
-                                                            @else
-                                                                <span class="text-[#74777f]">-</span>
-                                                            @endif
-                                                        </flux:table.cell>
-                                                    </flux:table.row>
-                                                @endforeach
-                                            </flux:table.rows>
-                                        </flux:table>
-                                    </div>
-
-                                    <div class="rounded-lg border border-[#e2e8f0] bg-[#f9f9ff] p-4">
-                                        <div class="mb-3 text-sm font-semibold text-[#111c2c]">Evaluations by Category</div>
-                                        <div class="h-56">
-                                            <canvas data-student-chart="semester" data-semester-index="{{ $i }}"></canvas>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                @php $hasDates = collect($sem['dates'])->some(fn ($entries) => count($entries) > 0); @endphp
-                                @if ($hasDates)
-                                    <div class="mt-5 rounded-lg border border-[#e2e8f0] bg-white p-5">
-                                        <div class="mb-4 flex items-center gap-2 text-[0.72rem] font-bold uppercase tracking-[0.22em] text-[#455f88]">
-                                            <flux:icon.calendar-days variant="mini" class="size-4" />
-                                            Evaluation Dates by Category
-                                        </div>
-                                        <div class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+                            <div class="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_280px]">
+                                <div class="overflow-hidden rounded-lg border border-[#e2e8f0] bg-white">
+                                    <flux:table>
+                                        <flux:table.columns>
+                                            <flux:table.column class="bg-[#f0f3ff] px-6 text-xs font-bold uppercase tracking-[0.16em] text-[#455f88]" align="center">Category</flux:table.column>
+                                            <flux:table.column class="bg-[#f0f3ff] px-6 text-xs font-bold uppercase tracking-[0.16em] text-[#455f88]" align="center">Evals</flux:table.column>
+                                            <flux:table.column class="bg-[#f0f3ff] px-6 text-xs font-bold uppercase tracking-[0.16em] text-[#455f88]" align="center">Avg</flux:table.column>
+                                        </flux:table.columns>
+                                        <flux:table.rows>
                                             @foreach ($sem['category_keys'] as $j => $catKey)
-                                                @if (! empty($sem['dates'][$catKey]))
-                                                    <div class="min-w-0 border-l border-[#d8e3fa] pl-4">
-                                                        <div class="mb-2 flex items-center gap-2">
-                                                            <span class="size-2 rounded-full bg-[#006a63]"></span>
-                                                            <p class="text-sm font-semibold text-[#111c2c]">{{ $sem['category_labels'][$j] }}</p>
-                                                        </div>
-                                                        <ul class="space-y-1.5">
-                                                            @foreach ($sem['dates'][$catKey] as $entry)
-                                                                <li class="text-sm leading-5 text-[#43474e]">{{ $entry }}</li>
-                                                            @endforeach
-                                                        </ul>
-                                                    </div>
-                                                @endif
+                                                <flux:table.row class="transition hover:bg-[#f9f9ff]" wire:key="semester-{{ $sem['slug'] }}-{{ $catKey }}">
+                                                    <flux:table.cell class="px-6 font-semibold text-[#111c2c]" align="center">{{ $sem['category_labels'][$j] }}</flux:table.cell>
+                                                    <flux:table.cell class="px-6 font-medium tabular-nums text-[#43474e]" align="center">{{ $sem['counts'][$j] }}</flux:table.cell>
+                                                    <flux:table.cell class="px-6 tabular-nums" align="center">
+                                                        @if ($sem['averages'][$j] !== null)
+                                                            <span class="font-semibold text-[#111c2c]">{{ number_format($sem['averages'][$j], 1) }}</span>
+                                                            <span class="text-xs text-[#74777f]">/100</span>
+                                                        @else
+                                                            <span class="text-[#74777f]">-</span>
+                                                        @endif
+                                                    </flux:table.cell>
+                                                </flux:table.row>
                                             @endforeach
-                                        </div>
-                                    </div>
-                                @endif
-                            @endif
+                                        </flux:table.rows>
+                                    </flux:table>
+                                </div>
 
+                                <div class="rounded-lg border border-[#e2e8f0] bg-[#f9f9ff] p-4">
+                                    <div class="mb-3 text-sm font-semibold text-[#111c2c]">Evaluations by Category</div>
+                                    <div class="h-56">
+                                        <canvas data-student-chart="semester" data-semester-index="{{ $i }}"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+
+                            @php $hasDates = collect($sem['dates'])->some(fn ($entries) => count($entries) > 0); @endphp
+                            @if ($hasDates)
+                                <div class="mt-5 rounded-lg border border-[#e2e8f0] bg-white p-5">
+                                    <div class="mb-4 flex items-center gap-2 text-[0.72rem] font-bold uppercase tracking-[0.22em] text-[#455f88]">
+                                        <flux:icon.calendar-days variant="mini" class="size-4" />
+                                        Evaluation Dates by Category
+                                    </div>
+                                    <div class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+                                        @foreach ($sem['category_keys'] as $j => $catKey)
+                                            @if (! empty($sem['dates'][$catKey]))
+                                                <div class="min-w-0 border-l border-[#d8e3fa] pl-4">
+                                                    <div class="mb-2 flex items-center gap-2">
+                                                        <span class="size-2 rounded-full bg-[#006a63]"></span>
+                                                        <p class="text-sm font-semibold text-[#111c2c]">{{ $sem['category_labels'][$j] }}</p>
+                                                    </div>
+                                                    <ul class="space-y-1.5">
+                                                        @foreach ($sem['dates'][$catKey] as $entry)
+                                                            <li class="text-sm leading-5 text-[#43474e]">{{ $entry }}</li>
+                                                        @endforeach
+                                                    </ul>
+                                                </div>
+                                            @endif
+                                        @endforeach
+                                    </div>
+                                </div>
+                            @endif
                         </section>
                     @endforeach
                 </div>

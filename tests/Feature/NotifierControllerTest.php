@@ -10,10 +10,19 @@ use Illuminate\Support\Facades\Route;
 use function Pest\Laravel\mock;
 
 beforeEach(function () {
+    // Treat the test environment as local so the webhook secret bypass applies.
+    // Tests that exercise non-local secret behavior override this explicitly.
+    $this->app->detectEnvironment(fn (): string => 'local');
+
     ProjectMapping::factory()->create([
         'redcap_pid' => 1846,
         'redcap_token' => 'PID_TOKEN_1846',
+        'is_active' => true,
     ]);
+});
+
+afterEach(function () {
+    $this->app->detectEnvironment(fn (): string => 'testing');
 });
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -44,6 +53,8 @@ function destStudentRecord(array $overrides = []): array
         'last_name' => 'Chin',
         'goes_by' => 'Cat',
         'email' => 'catherine@example.com',
+        'cohort_start_term' => 'Spring',
+        'cohort_start_year' => '2026',
     ], $overrides);
 }
 
@@ -88,7 +99,7 @@ test('accepts webhook when token matches secret', function () {
         ->assertSuccessful();
 });
 
-test('bypasses token check when webhook_secret is not configured', function () {
+test('bypasses token check in local environment when webhook_secret is not configured', function () {
     Mail::fake();
     config(['redcap.webhook_secret' => '']);
 
@@ -98,14 +109,12 @@ test('bypasses token check when webhook_secret is not configured', function () {
     $this->postJson('/notify', ['record' => '1', 'project_id' => '1846'])->assertSuccessful();
 });
 
-test('rejects webhook requests in production when webhook_secret is not configured', function () {
+test('rejects webhook requests in non-local environments when webhook_secret is not configured', function () {
     $this->app->detectEnvironment(fn (): string => 'production');
     config(['redcap.webhook_secret' => '']);
 
     $this->postJson('/notify', ['record' => '1', 'project_id' => '1846'])
         ->assertForbidden();
-
-    $this->app->detectEnvironment(fn (): string => 'testing');
 });
 
 // ─── Edge cases ──────────────────────────────────────────────────────────────
@@ -170,6 +179,27 @@ test('returns 200 when no matching destination student record exists', function 
     Mail::assertNothingSent();
 });
 
+test('returns 200 when eval falls outside scholar cohort window', function () {
+    Mail::fake();
+
+    // Eval in 2030 but cohort starts Spring 2026 → slot would be > 4.
+    $evalRecord = sourceEvalRecord('A', ['date_lab' => '2030-04-15', 'semester' => '1']);
+
+    $source = mock(RedcapSourceService::class);
+    $source->shouldReceive('getRecord')->andReturn($evalRecord);
+    // getStudentEvals should NOT be called — we reject before fetching.
+
+    $destination = mock(RedcapDestinationService::class);
+    $destination->shouldReceive('findStudentByDatatelId')
+        ->with('1')
+        ->andReturn(destStudentRecord());
+    $destination->shouldNotReceive('updateStudentRecord');
+
+    $this->postJson('/notify', ['record' => '1', 'project_id' => '1846'])->assertSuccessful();
+
+    Mail::assertNothingSent();
+});
+
 // ─── Happy path ───────────────────────────────────────────────────────────────
 
 test('sends EvaluationNotification email on successful webhook', function () {
@@ -182,7 +212,7 @@ test('sends EvaluationNotification email on successful webhook', function () {
     Mail::assertSent(EvaluationNotification::class);
 });
 
-test('uses mapped source project token when webhook includes project id', function () {
+test('uses active source project token regardless of webhook project id', function () {
     Mail::fake();
 
     $source = mock(RedcapSourceService::class);
@@ -192,7 +222,7 @@ test('uses mapped source project token when webhook includes project id', functi
         ->andReturn(sourceEvalRecord());
     $source->shouldReceive('getStudentEvals')
         ->once()
-        ->with('1', '1', 'PID_TOKEN_1846')
+        ->with('1', '1', 2026, 'PID_TOKEN_1846')
         ->andReturn([sourceEvalRecord()]);
 
     $destination = mock(RedcapDestinationService::class);
@@ -287,7 +317,7 @@ test('does not CC when faculty email is malformed', function () {
 
 // ─── Aggregate logic ─────────────────────────────────────────────────────────
 
-test('aggregates scores from multiple evals of the same category', function () {
+test('aggregates scores from multiple evals of the same category into the slot', function () {
     Mail::fake();
 
     $evals = [
@@ -314,9 +344,10 @@ test('aggregates scores from multiple evals of the same category', function () {
 
     $this->postJson('/notify', ['record' => '1', 'project_id' => '1846']);
 
+    // Spring 2026 eval for Spring-2026 cohort = slot 1 = sem1.
     expect($capturedPayload)
-        ->toHaveKey('spring_nu_teaching', 2)
-        ->toHaveKey('spring_avg_teaching', 90.0);
+        ->toHaveKey('sem1_nu_teaching', 2)
+        ->toHaveKey('sem1_avg_teaching', 90.0);
 });
 
 test('skips scores outside 0–100 range in aggregation', function () {
@@ -324,8 +355,8 @@ test('skips scores outside 0–100 range in aggregation', function () {
 
     $evals = [
         sourceEvalRecord('A', ['teaching_score' => '80.00']),
-        sourceEvalRecord('A', ['teaching_score' => '-5.00']),   // invalid — below 0
-        sourceEvalRecord('A', ['teaching_score' => '150.00']),  // invalid — above 100
+        sourceEvalRecord('A', ['teaching_score' => '-5.00']),
+        sourceEvalRecord('A', ['teaching_score' => '150.00']),
     ];
 
     $source = mock(RedcapSourceService::class);
@@ -347,10 +378,9 @@ test('skips scores outside 0–100 range in aggregation', function () {
 
     $this->postJson('/notify', ['record' => '1', 'project_id' => '1846']);
 
-    // Only the valid 80.00 score should be counted.
     expect($capturedPayload)
-        ->toHaveKey('spring_nu_teaching', 1)
-        ->toHaveKey('spring_avg_teaching', 80.0);
+        ->toHaveKey('sem1_nu_teaching', 1)
+        ->toHaveKey('sem1_avg_teaching', 80.0);
 });
 
 test('aggregates comments count and concatenated text', function () {
@@ -382,11 +412,10 @@ test('aggregates comments count and concatenated text', function () {
     $this->postJson('/notify', ['record' => '1', 'project_id' => '1846']);
 
     expect($capturedPayload)
-        ->toHaveKey('spring_nu_comments', 2)
-        ->toHaveKey('spring_comments');
+        ->toHaveKey('sem1_nu_comments', 2)
+        ->toHaveKey('sem1_comments');
 
-    // New format: "Faculty; Date; Comment" per line.
-    expect($capturedPayload['spring_comments'])
+    expect($capturedPayload['sem1_comments'])
         ->toContain('Dr. A;')
         ->toContain('First comment.')
         ->toContain('Dr. B;')
@@ -396,7 +425,6 @@ test('aggregates comments count and concatenated text', function () {
 test('sets count to zero and omits avg when no evals exist for a category', function () {
     Mail::fake();
 
-    // Only a Teaching eval — Clinic/Research/Didactics should have nu=0, no avg key.
     $evals = [sourceEvalRecord('A', ['teaching_score' => '85.00'])];
 
     $source = mock(RedcapSourceService::class);
@@ -419,16 +447,20 @@ test('sets count to zero and omits avg when no evals exist for a category', func
     $this->postJson('/notify', ['record' => '1', 'project_id' => '1846']);
 
     expect($capturedPayload)
-        ->toHaveKey('spring_nu_clinic', 0)
-        ->not->toHaveKey('spring_avg_clinic');
+        ->toHaveKey('sem1_nu_clinic', 0)
+        ->not->toHaveKey('sem1_avg_clinic');
 });
 
-// ─── Semester routing ─────────────────────────────────────────────────────────
+// ─── Slot routing ─────────────────────────────────────────────────────────────
 
-test('uses fall semester fields when semester code is 2', function () {
+test('routes Fall 2027 eval into sem3 for a Fall 2026 cohort', function () {
     Mail::fake();
 
-    $evalRecord = sourceEvalRecord('A', ['semester' => '2', 'teaching_score' => '75.00']);
+    $evalRecord = sourceEvalRecord('A', [
+        'semester' => '2',
+        'date_lab' => '2027-10-15',
+        'teaching_score' => '75.00',
+    ]);
 
     $source = mock(RedcapSourceService::class);
     $source->shouldReceive('getRecord')->andReturn($evalRecord);
@@ -437,7 +469,9 @@ test('uses fall semester fields when semester code is 2', function () {
     $capturedPayload = null;
 
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('findStudentByDatatelId')->andReturn(destStudentRecord());
+    $destination->shouldReceive('findStudentByDatatelId')->andReturn(
+        destStudentRecord(['cohort_start_term' => 'Fall', 'cohort_start_year' => '2026']),
+    );
     $destination->shouldReceive('updateStudentRecord')
         ->once()
         ->withArgs(function (array $payload) use (&$capturedPayload) {
@@ -450,9 +484,9 @@ test('uses fall semester fields when semester code is 2', function () {
     $this->postJson('/notify', ['record' => '1', 'project_id' => '1846']);
 
     expect($capturedPayload)
-        ->toHaveKey('fall_nu_teaching', 1)
-        ->toHaveKey('fall_avg_teaching', 75.0)
-        ->not->toHaveKey('spring_nu_teaching');
+        ->toHaveKey('sem3_nu_teaching', 1)
+        ->toHaveKey('sem3_avg_teaching', 75.0)
+        ->not->toHaveKey('sem1_nu_teaching');
 });
 
 // ─── Email preview route ──────────────────────────────────────────────────────

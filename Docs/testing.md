@@ -8,7 +8,10 @@ The test suite uses [Pest 4](https://pestphp.com/) and covers unit and feature l
 graph TD
     subgraph Unit Tests
         U1[RedcapSourceServiceTest]
-        U2[EvaluationNotificationTest]
+        U2[RedcapDestinationServiceTest]
+        U3[EvaluationNotificationTest]
+        U4[EvalAggregatorTest]
+        U5[SemesterSlotTest]
     end
     subgraph Feature Tests
         F1[NotifierControllerTest]
@@ -16,15 +19,19 @@ graph TD
         F3[StudentControllerTest]
         F4[ProcessControllerTest]
         F5[SamlServiceTest]
-        F6[RoleAuthorizationTest]
-        F7[AdminUserControllerTest]
-        F8[SettingsControllerTest]
-        F9[FacultyControllerTest]
-        F10[Console command tests]
-        F11[AcademicYearWizardTest]
-        F12[ImportScholarsJobTest]
-        F13[DocsViewerTest]
-        F14[CsvUserImportTest]
+        F6[SamlMetadataRouteTest]
+        F7[RoleAuthorizationTest]
+        F8[AppServiceProviderTest]
+        F9[AdminUserControllerTest]
+        F10[SettingsControllerTest]
+        F11[FacultyControllerTest]
+        F12[Console command tests]
+        F13[AcademicYearWizardTest]
+        F14[ImportScholarsJobTest]
+        F15[EmailTemplateTest]
+        F16[ReprocessCardTest]
+        F17[DocsViewerTest]
+        F18[CsvUserImportTest]
     end
 
     U1 -->|tests| SRC[RedcapSourceService]
@@ -82,9 +89,10 @@ Tests `app/Services/RedcapSourceService.php` in isolation — no HTTP calls.
 | `CATEGORY_LABELS` constant | Maps A/B/C/D to human-readable labels |
 | `DEST_CATEGORY` constant | Maps A/B/C/D to destination field suffixes |
 | All constants share the same keys | A/B/C/D present in all three constants |
-| Rejects non-numeric datatelid | `getStudentEvals("1' OR '1'='1", '1', $token)` → `[]` |
-| Rejects invalid semester code | `getStudentEvals('1', '9', $token)` → `[]` |
-| Rejects injection in semester | `getStudentEvals('1', "1' OR '1'='1", $token)` → `[]` |
+| Rejects non-numeric datatelid | `getStudentEvals("1' OR '1'='1", '1', 2026, $token)` → `[]` |
+| Rejects invalid semester code | `getStudentEvals('1', '9', 2026, $token)` → `[]` |
+| Rejects injection in semester | `getStudentEvals('1', "1' OR '1'='1", 2026, $token)` → `[]` |
+| Year-filters in PHP | Records whose `date_lab` year ≠ `$year` are dropped after the REDCap export |
 
 ### Unit: `EvaluationNotificationTest`
 
@@ -209,16 +217,14 @@ Tests the full webhook flow via HTTP. REDCap services are mocked; mail is faked.
 
 ### Feature: `AcademicYearWizardTest`
 
-Tests the multi-step `<x-admin.⚡academic-year-wizard>` Livewire component used at `/admin/settings/new-academic-year`.
+Tests the 2-step `<x-admin.⚡academic-year-wizard>` Livewire component rendered at `/admin/settings/source-project/create`.
 
 | Test | What it verifies |
 |------|-----------------|
-| Saves project mapping | Step 1 persists encrypted token + `ProjectMapping` row |
-| Validates input | `academic_year` regex, `graduation_year` int, `redcap_pid` unique |
-| Saves category weights | Step 2 persists 5 `CategoryWeight` rows |
-| Weights must sum to 100 | Validation error if not |
-| Weights step blocked before mapping | Cannot reach step 2 without persisted mapping |
-| Dispatches `ImportScholarsJob` | Step 4 queues the job after weights + email saved |
+| Saves project mapping | Step 1 persists encrypted token + `ProjectMapping` row and flips the previous active mapping to `is_active = 0` |
+| Validates input | `redcap_pid` required, integer, unique among non-deleted rows; `redcap_token` required |
+| Import disabled before mapping | "Start import" cannot run until `savedProjectMappingId` is set |
+| Dispatches `ImportScholarsJob` | Step 2 queues `ImportScholarsJob::dispatchAfterResponse(jobId, mappingId)` and seeds the cache key `import_scholars:{jobId}` |
 
 ### Feature: `ImportScholarsJobTest`
 
@@ -226,8 +232,8 @@ Tests `app/Jobs/ImportScholarsJob.php`.
 
 | Test | What it verifies |
 |------|-----------------|
-| Imports students | Creates `User` rows for each destination record with email |
-| Skips existing emails | Including soft-deleted users |
+| Creates new students | `User` rows are created for destination records whose email is not yet in the `users` table |
+| Updates existing students | Existing users (including soft-deleted) get their `name`, `redcap_record_id`, and cohort fields refreshed |
 | Tracks missing emails | Records with no email captured under `missing_email[]` |
 | Updates cache state | `import_scholars:{jobId}` reflects `pending` → `running` → `complete` |
 | Handles errors | Catches `Throwable`; sets `status = failed` and `error` message |
@@ -258,7 +264,35 @@ Tests `app/Livewire/Admin/CsvUserImport.php`.
 
 ### Modified: `SettingsControllerTest`
 
-In addition to the original project-mapping CRUD coverage, the suite now exercises the email-template editor surface (`email_template` AppSetting load + preview rendering) and the wizard entry-point.
+In addition to the original project-mapping CRUD coverage, the suite now exercises the email-template editor surface (`email_template` AppSetting load + `MailTemplateRenderer` preview rendering), the wizard entry-point at `/admin/settings/source-project/create`, the `activate` action that flips `is_active`, and the synchronous `importStudents` re-run that upserts cohort fields onto existing users.
+
+### Unit: `RedcapDestinationServiceTest`
+
+Covers `findStudentByDatatelId` (filterLogic + 1-hour cache + cohort fields returned), `findStudentByEmail`, `getActiveStudentRecords`, `availableBatches`, and `studentMapByDatatelId`.
+
+### Unit: `EvalAggregatorTest`
+
+Covers the `sem{n}_*` field shape: per-category sums/counts/averages, date entries (`Faculty, M/D/YYYY`), comments serialization, and out-of-range / empty score handling.
+
+### Unit: `SemesterSlotTest`
+
+Covers `compute(semester, dateLab, cohortTerm, cohortYear)` over the in-window and out-of-window cases, `slotKey`, `labelsFor`, and `yearFromDate` for both `MM-DD-YYYY` and `YYYY-MM-DD` inputs.
+
+### Feature: `AppServiceProviderTest`
+
+Exercises every gate registered in `AppServiceProvider::boot()` against each role to confirm the matrix in [Security](security.md#2a-authorization-application-role-model) holds.
+
+### Feature: `SamlMetadataRouteTest`
+
+Confirms `GET /saml/metadata` is reachable without session middleware, returns XML, and that the Service Provider entity ID matches `config('saml.sp.entityId')`.
+
+### Feature: `EmailTemplateTest`
+
+Covers the inline email-template editor on `/admin/settings`: gate enforcement (`edit-email-template` allows Service + Admin), saving / restoring the `AppSetting('email_template')` value, cache invalidation, and that `EvaluationNotification::content()` honours the override.
+
+### Feature: `ReprocessCardTest`
+
+Exercises the reprocess-card panel on the dashboard / settings page that triggers `ProcessSourceProjectJob` for a chosen mapping and polls its cache-backed status.
 
 ---
 

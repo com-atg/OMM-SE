@@ -107,14 +107,14 @@ Route::middleware(RequireSamlAuth::class)->group(function () {
     // Settings.
     Route::middleware('can:manage-settings')->prefix('admin')->name('admin.')->group(function () {
         Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');
-        Route::post('/settings/project-mappings/{projectMapping}/process', [SettingsController::class, 'process'])->name('settings.project-mappings.process');
 
         Route::middleware('can:manage-settings-records')->group(function () {
-            Route::get('/settings/new-academic-year', [SettingsController::class, 'newAcademicYear'])->name('settings.new-academic-year');
+            Route::get('/settings/source-project/create', [SettingsController::class, 'create'])->name('settings.source-project.create');
             Route::post('/settings/project-mappings', [SettingsController::class, 'store'])->name('settings.project-mappings.store');
             Route::get('/settings/project-mappings/{projectMapping}/import-students', [SettingsController::class, 'importStudents'])->name('settings.project-mappings.import-students');
             Route::get('/settings/project-mappings/{projectMapping}/edit', [SettingsController::class, 'edit'])->name('settings.project-mappings.edit');
             Route::patch('/settings/project-mappings/{projectMapping}', [SettingsController::class, 'update'])->name('settings.project-mappings.update');
+            Route::post('/settings/project-mappings/{projectMapping}/activate', [SettingsController::class, 'activate'])->name('settings.project-mappings.activate');
             Route::delete('/settings/project-mappings/{projectMapping}', [SettingsController::class, 'destroy'])->name('settings.project-mappings.destroy');
             Route::post('/settings/project-mappings/{id}/restore', [SettingsController::class, 'restore'])->name('settings.project-mappings.restore');
         });
@@ -124,7 +124,7 @@ Route::middleware(RequireSamlAuth::class)->group(function () {
 // REDCap webhook — triggered when an evaluation record is saved in PID 1846.
 // Append ?token=<WEBHOOK_SECRET> to the DET URL configured in REDCap.
 Route::any('/notify', NotifierController::class)
-    ->middleware(VerifyWebhookToken::class)
+    ->middleware(['throttle:60,1', VerifyWebhookToken::class])
     ->name('notify');
 
 // Email preview for local development — shows a Teaching (A) evaluation stub.

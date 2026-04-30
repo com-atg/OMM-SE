@@ -93,47 +93,6 @@ function renderStudentCharts(root = document) {
         }));
     });
 
-    root.querySelectorAll('[data-student-chart="weights"]').forEach((canvas) => {
-        const sem = payload.semesters[Number(canvas.dataset.semesterIndex)];
-        const components = sem?.score_formula?.components || [];
-
-        if (components.length === 0) {
-            return;
-        }
-
-        window.studentDetailCharts.push(new Chart(canvas, {
-            type: 'doughnut',
-            data: {
-                labels: components.map((component) => component.label),
-                datasets: [{
-                    data: components.map((component) => component.max_points),
-                    backgroundColor: components.map((component, index) => palette[index % palette.length]),
-                    borderColor: '#ffffff',
-                    borderWidth: 3,
-                    hoverOffset: 6,
-                }],
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                cutout: '58%',
-                plugins: {
-                    legend: { position: 'bottom', labels: { color: tickColor, boxWidth: 10, font: { size: 11 } } },
-                    tooltip: {
-                        callbacks: {
-                            label: (ctx) => {
-                                const component = components[ctx.dataIndex];
-                                const percent = Number(component.weight_percent).toFixed(1).replace(/\.0$/, '');
-                                const points = Number(component.max_points).toFixed(1).replace(/\.0$/, '');
-
-                                return `${component.label}: ${percent}% (${points} pts)`;
-                            },
-                        },
-                    },
-                },
-            },
-        }));
-    });
 }
 
 export function bootStudentDetailCharts(Livewire) {

@@ -13,40 +13,65 @@
 @endphp
 
 <div class="flex flex-col gap-7">
-    @if ($availableMappings->count() >= 2 || ! $lockSelection)
-        <section class="rounded-lg border border-[#d8e3fa] bg-white/90 p-5 shadow-[0_14px_38px_rgba(26,54,93,0.06)] backdrop-blur">
-            <div class="flex flex-col gap-4 sm:flex-row sm:items-end">
-                @if ($availableMappings->count() >= 2)
-                    <flux:select
-                        class="max-w-[14rem]"
-                        wire:model.live="selectedGraduationYear"
-                        label="Academic Year"
-                    >
-                        @foreach ($availableMappings as $am)
-                            <flux:select.option value="{{ $am->graduation_year }}" wire:key="ay-option-{{ $am->id }}">
-                                {{ $am->academic_year }} (Class of {{ $am->graduation_year }})
-                            </flux:select.option>
-                        @endforeach
-                    </flux:select>
-                @endif
-
-                @unless ($lockSelection)
-                    <flux:select
-                        class="max-w-sm"
-                        wire:model.live="selectedFaculty"
-                        label="Choose a faculty member"
-                    >
-                        <flux:select.option value="">Select faculty...</flux:select.option>
-                        @foreach ($facultyRoster as $faculty)
-                            <flux:select.option value="{{ $faculty }}" wire:key="faculty-option-{{ md5($faculty) }}">
-                                {{ $faculty }}
-                            </flux:select.option>
-                        @endforeach
-                    </flux:select>
-                @endunless
+    <section class="overflow-hidden rounded-xl border border-white/80 bg-white/95 shadow-[0_8px_24px_rgba(15,23,42,0.05)] backdrop-blur">
+        <div class="flex flex-col divide-y divide-slate-200/70 md:flex-row md:items-stretch md:divide-x md:divide-y-0">
+            <div class="relative flex items-center gap-3 bg-gradient-to-br from-sky-50 via-white to-slate-50 px-5 py-4 md:min-w-[200px]">
+                <span class="absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-sky-400 to-indigo-500"></span>
+                <span class="grid size-9 shrink-0 place-items-center rounded-lg bg-white text-sky-600 shadow-sm ring-1 ring-sky-100">
+                    <flux:icon.funnel variant="mini" class="size-4" />
+                </span>
+                <div class="min-w-0">
+                    <div class="text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-sky-700">Filters</div>
+                    <div class="truncate text-sm font-semibold text-slate-900">Faculty scope</div>
+                </div>
             </div>
-        </section>
-    @endif
+
+            <div class="flex flex-1 flex-wrap items-center gap-x-5 gap-y-3 px-5 py-4">
+                @unless ($lockSelection)
+                    <flux:field variant="inline">
+                        <flux:label class="text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-slate-500">Faculty</flux:label>
+                        <flux:select
+                            wire:model.live="selectedFaculty"
+                            size="sm"
+                            class="min-w-56"
+                            placeholder="Select faculty..."
+                        >
+                            <flux:select.option value="">Select faculty...</flux:select.option>
+                            @foreach ($facultyRoster as $faculty)
+                                <flux:select.option value="{{ $faculty }}" wire:key="faculty-option-{{ md5($faculty) }}">
+                                    {{ $faculty }}
+                                </flux:select.option>
+                            @endforeach
+                        </flux:select>
+                    </flux:field>
+
+                    <div class="hidden h-7 w-px bg-slate-200 md:block" aria-hidden="true"></div>
+                @endunless
+
+                <flux:field variant="inline">
+                    <flux:label class="text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-slate-500">Active only</flux:label>
+                    <flux:switch wire:model.live="activeOnly" />
+                </flux:field>
+
+                <div class="hidden h-7 w-px bg-slate-200 md:block" aria-hidden="true"></div>
+
+                <flux:field variant="inline">
+                    <flux:label class="text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-slate-500">Batch</flux:label>
+                    <flux:select
+                        wire:model.live="selectedBatch"
+                        size="sm"
+                        class="min-w-40"
+                        placeholder="All batches"
+                    >
+                        <flux:select.option value="">All batches</flux:select.option>
+                        @foreach ($availableBatches as $batch)
+                            <flux:select.option value="{{ $batch }}">{{ $batch }}</flux:select.option>
+                        @endforeach
+                    </flux:select>
+                </flux:field>
+            </div>
+        </div>
+    </section>
 
     @if ($displayFaculty === '')
         <section class="rounded-lg border border-[#d8e3fa] bg-white/90 p-10 text-center shadow-[0_14px_38px_rgba(26,54,93,0.05)]">

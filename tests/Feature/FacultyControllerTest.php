@@ -12,9 +12,7 @@ use function Pest\Laravel\mock;
 beforeEach(function () {
     Cache::flush();
     asService();
-    ProjectMapping::factory()->create([
-        'academic_year' => '2025-2026',
-        'graduation_year' => 2028,
+    ProjectMapping::factory()->active()->create([
         'redcap_pid' => 1846,
         'redcap_token' => 'CURRENT_PROJECT_TOKEN',
     ]);
@@ -74,6 +72,8 @@ function facultyStudentMap(): array
             'first_name' => 'Catherine',
             'last_name' => 'Chin',
             'goes_by' => 'Cat',
+            'is_active' => '1',
+            'batch' => '12',
         ],
         '200' => [
             'record_id' => '20',
@@ -81,6 +81,8 @@ function facultyStudentMap(): array
             'first_name' => 'Ava',
             'last_name' => 'Adams',
             'goes_by' => '',
+            'is_active' => '1',
+            'batch' => '12',
         ],
     ];
 }
@@ -92,23 +94,22 @@ it('renders the faculty page for users who can view all students', function () {
         ->andReturn(facultySourceRecords());
 
     $destination = mock(RedcapDestinationService::class);
+    $destination->shouldReceive('availableBatches')->andReturn(['12']);
     $destination->shouldReceive('studentMapByDatatelId')->andReturn(facultyStudentMap());
 
     get('/faculty')
         ->assertOk()
         ->assertViewIs('faculty')
         ->assertSee('Faculty Evaluation Activity')
-        ->assertSee('Choose a faculty member', false)
+        ->assertSee('Faculty scope', false)
         ->assertSee('Dr. Jones', false)
         ->assertSee('Dr. Smith', false);
 });
 
-it('defaults to the mapping with the highest graduation year and shows the academic year switcher when multiple exist', function () {
+it('uses the active source project token to fetch evaluation records', function () {
     ProjectMapping::factory()->create([
-        'academic_year' => '2026-2027',
-        'graduation_year' => 2027,
         'redcap_pid' => 1847,
-        'redcap_token' => 'OLDER_TOKEN',
+        'redcap_token' => 'INACTIVE_TOKEN',
     ]);
 
     $source = mock(RedcapSourceService::class);
@@ -117,13 +118,11 @@ it('defaults to the mapping with the highest graduation year and shows the acade
         ->andReturn(facultySourceRecords());
 
     $destination = mock(RedcapDestinationService::class);
+    $destination->shouldReceive('availableBatches')->andReturn(['12']);
     $destination->shouldReceive('studentMapByDatatelId')->andReturn(facultyStudentMap());
 
     get('/faculty')
         ->assertOk()
-        ->assertSee('Academic Year', false)
-        ->assertSee('2025-2026 (Class of 2028)', false)
-        ->assertSee('2026-2027 (Class of 2027)', false)
         ->assertSee('Dr. Smith', false);
 });
 
@@ -133,13 +132,14 @@ it('forbids students from the faculty page', function () {
     get('/faculty')->assertForbidden();
 });
 
-it('lets faculty view only their own evaluations without the selector', function () {
+it('lets faculty view only their own evaluations without the faculty selector', function () {
     asFaculty('smith@example.com', 'Dr. Smith');
 
     $source = mock(RedcapSourceService::class);
     $source->shouldReceive('getCompletedEvaluationRecords')->andReturn(facultySourceRecords());
 
     $destination = mock(RedcapDestinationService::class);
+    $destination->shouldReceive('availableBatches')->andReturn(['12']);
     $destination->shouldReceive('studentMapByDatatelId')->andReturn(facultyStudentMap());
 
     get('/faculty')
@@ -147,9 +147,33 @@ it('lets faculty view only their own evaluations without the selector', function
         ->assertSee('Dr. Smith', false)
         ->assertSee('Cat Chin', false)
         ->assertSee('Teaching', false)
+        ->assertSee('Active only', false)
+        ->assertSee('Batch', false)
         ->assertDontSee('Choose a faculty member', false)
+        ->assertDontSee('Select faculty...', false)
         ->assertDontSee('Dr. Jones', false)
         ->assertDontSee('Ava Adams', false);
+});
+
+it('lets faculty narrow their roster with the batch filter', function () {
+    asFaculty('smith@example.com', 'Dr. Smith');
+
+    $source = mock(RedcapSourceService::class);
+    $source->shouldReceive('getCompletedEvaluationRecords')->andReturn(facultySourceRecords());
+
+    $studentMap = facultyStudentMap();
+    $studentMap['100']['batch'] = '12';
+    $studentMap['200']['batch'] = '13';
+
+    $destination = mock(RedcapDestinationService::class);
+    $destination->shouldReceive('availableBatches')->andReturn(['12', '13']);
+    $destination->shouldReceive('studentMapByDatatelId')->andReturn($studentMap);
+
+    Livewire::test('faculty-detail')
+        ->assertSee('Cat Chin')
+        ->set('selectedBatch', '13')
+        ->assertSee('Active only', false)
+        ->assertDontSee('Cat Chin');
 });
 
 it('prevents faculty from opening another faculty evaluation through livewire', function () {
@@ -159,6 +183,7 @@ it('prevents faculty from opening another faculty evaluation through livewire', 
     $source->shouldReceive('getCompletedEvaluationRecords')->andReturn(facultySourceRecords());
 
     $destination = mock(RedcapDestinationService::class);
+    $destination->shouldReceive('availableBatches')->andReturn(['12']);
     $destination->shouldReceive('studentMapByDatatelId')->andReturn(facultyStudentMap());
 
     Livewire::test('faculty-detail')
@@ -173,6 +198,7 @@ it('updates evaluations when a faculty member is selected', function () {
     $source->shouldReceive('getCompletedEvaluationRecords')->andReturn(facultySourceRecords());
 
     $destination = mock(RedcapDestinationService::class);
+    $destination->shouldReceive('availableBatches')->andReturn(['12']);
     $destination->shouldReceive('studentMapByDatatelId')->andReturn(facultyStudentMap());
 
     Livewire::test('faculty-detail')
@@ -193,6 +219,7 @@ it('opens a modal with specific evaluation details', function () {
     $source->shouldReceive('getCompletedEvaluationRecords')->andReturn(facultySourceRecords());
 
     $destination = mock(RedcapDestinationService::class);
+    $destination->shouldReceive('availableBatches')->andReturn(['12']);
     $destination->shouldReceive('studentMapByDatatelId')->andReturn(facultyStudentMap());
 
     Livewire::test('faculty-detail')
@@ -206,29 +233,21 @@ it('opens a modal with specific evaluation details', function () {
         ->assertSee('#101');
 });
 
-it('switches the source token when the academic year dropdown changes', function () {
+it('always uses the active source project token regardless of inactive mappings', function () {
     ProjectMapping::factory()->create([
-        'academic_year' => '2026-2027',
-        'graduation_year' => 2027,
         'redcap_pid' => 1847,
-        'redcap_token' => 'OLDER_TOKEN',
+        'redcap_token' => 'INACTIVE_TOKEN',
     ]);
 
     $source = mock(RedcapSourceService::class);
     $source->shouldReceive('getCompletedEvaluationRecords')->with('CURRENT_PROJECT_TOKEN')->andReturn(facultySourceRecords());
-    $source->shouldReceive('getCompletedEvaluationRecords')->with('OLDER_TOKEN')->andReturn([]);
 
     $destination = mock(RedcapDestinationService::class);
+    $destination->shouldReceive('availableBatches')->andReturn(['12']);
     $destination->shouldReceive('studentMapByDatatelId')->andReturn(facultyStudentMap());
 
     Livewire::test('faculty-detail')
-        ->assertSet('selectedGraduationYear', 2028)
-        ->assertSee('Dr. Smith')
-        ->set('selectedGraduationYear', 2027)
-        ->assertSet('selectedFaculty', '')
-        ->assertDontSee('Dr. Smith');
-
-    expect(session('academic_year_filter'))->toBe(2027);
+        ->assertSee('Dr. Smith');
 });
 
 it('centers the faculty and modal table columns', function () {

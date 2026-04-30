@@ -1,6 +1,6 @@
 @php
     $createdCount = count($created);
-    $skippedCount = count($skipped);
+    $updatedCount = count($updated);
     $missingCount = count($missingEmail);
     $subheading = "Scholars for {$projectMapping->displayName()} were imported from the OMM ACE List REDCap project.";
 @endphp
@@ -26,9 +26,9 @@
             <div class="min-w-0">
                 <h2 class="text-base font-bold text-sky-950">Scholar users imported from OMM ACE List</h2>
                 <p class="mt-1 text-sm leading-6 text-sky-900">
-                    Pulled records for graduating year
-                    <span class="font-mono font-semibold">{{ $projectMapping->graduation_year }}</span>
-                    and created student-role users for {{ $projectMapping->displayName() }}.
+                    Pulled the destination roster from {{ $projectMapping->displayName() }}, creating new student-role users
+                    and refreshing existing users with their latest <span class="font-mono">batch</span>
+                    and <span class="font-mono">is_active</span> values.
                 </p>
             </div>
         </div>
@@ -44,7 +44,7 @@
         <div class="rounded-lg border border-white/80 bg-white/86 p-5 shadow-sm">
             <div class="text-xs font-bold uppercase tracking-[0.22em] text-slate-500">Fetched from REDCap</div>
             <p class="mt-2 text-3xl font-bold text-slate-950">{{ $totalFetched }}</p>
-            <p class="mt-1 text-xs text-slate-500">Records with year = {{ $projectMapping->graduation_year }}</p>
+            <p class="mt-1 text-xs text-slate-500">Total destination roster records</p>
         </div>
 
         <div class="rounded-lg border border-emerald-100 bg-emerald-50/70 p-5 shadow-sm">
@@ -53,10 +53,10 @@
             <p class="mt-1 text-xs text-emerald-700">New users with student role</p>
         </div>
 
-        <div class="rounded-lg border border-slate-200 bg-slate-50/70 p-5 shadow-sm">
-            <div class="text-xs font-bold uppercase tracking-[0.22em] text-slate-600">Skipped</div>
-            <p class="mt-2 text-3xl font-bold text-slate-700">{{ $skippedCount }}</p>
-            <p class="mt-1 text-xs text-slate-500">User already existed</p>
+        <div class="rounded-lg border border-sky-200 bg-sky-50/70 p-5 shadow-sm">
+            <div class="text-xs font-bold uppercase tracking-[0.22em] text-sky-700">Updated</div>
+            <p class="mt-2 text-3xl font-bold text-sky-900">{{ $updatedCount }}</p>
+            <p class="mt-1 text-xs text-sky-700">Refreshed batch &amp; is_active</p>
         </div>
 
         <div class="rounded-lg border border-amber-200 bg-amber-50/70 p-5 shadow-sm">
@@ -93,11 +93,11 @@
         </section>
     @endif
 
-    @if ($skippedCount > 0)
-        <section class="rounded-lg border border-slate-200 bg-white/82 shadow-sm">
-            <div class="border-b border-slate-200/80 p-5">
-                <div class="text-xs font-bold uppercase tracking-[0.26em] text-slate-500">Skipped</div>
-                <h2 class="mt-1 text-lg font-bold text-slate-800">Already Existed ({{ $skippedCount }})</h2>
+    @if ($updatedCount > 0)
+        <section class="rounded-lg border border-sky-200 bg-white/82 shadow-sm">
+            <div class="border-b border-sky-200/80 p-5">
+                <div class="text-xs font-bold uppercase tracking-[0.26em] text-sky-600">Updated</div>
+                <h2 class="mt-1 text-lg font-bold text-slate-800">Refreshed Existing Users ({{ $updatedCount }})</h2>
             </div>
             <div class="overflow-x-auto">
                 <table class="w-full min-w-[600px] text-sm">
@@ -108,7 +108,7 @@
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
-                        @foreach ($skipped as $row)
+                        @foreach ($updated as $row)
                             <tr>
                                 <td class="px-5 py-3 text-slate-700">{{ $row['name'] }}</td>
                                 <td class="px-5 py-3 text-slate-500">{{ $row['email'] }}</td>
@@ -150,8 +150,7 @@
 
     @if ($totalFetched === 0)
         <section class="rounded-lg border border-slate-200 bg-white/82 p-8 text-center text-sm text-slate-500">
-            No scholars were found in the destination REDCap project for graduating year {{ $projectMapping->graduation_year }}.
-            Confirm the destination roster contains records with <span class="font-mono">year = {{ $projectMapping->graduation_year }}</span>, then re-run the import.
+            No scholars were found in the destination REDCap project. Confirm the roster has records, then re-run the import.
         </section>
     @endif
 </x-app-shell>

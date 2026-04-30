@@ -1,8 +1,5 @@
 <?php
 
-use App\Enums\WeightCategory;
-use App\Models\CategoryWeight;
-use App\Models\ProjectMapping;
 use App\Services\RedcapDestinationService;
 use Illuminate\Support\Facades\Cache;
 use Livewire\Livewire;
@@ -24,18 +21,21 @@ function studentRoster(): array
             'first_name' => 'Catherine',
             'last_name' => 'Chin',
             'goes_by' => 'Cat',
-            'spring_nu_teaching' => '2', 'spring_avg_teaching' => '88.5',
-            'spring_nu_clinic' => '1', 'spring_avg_clinic' => '92.0',
-            'spring_nu_research' => '0', 'spring_avg_research' => '',
-            'spring_nu_didactics' => '0', 'spring_avg_didactics' => '',
-            'spring_nu_comments' => '2',
-            'spring_leadership' => '8',
-            'fall_nu_teaching' => '1', 'fall_avg_teaching' => '75.0',
-            'fall_final_score' => '91.25',
-            'fall_leadership' => '9',
-            'fall_nu_clinic' => '0',
-            'fall_nu_research' => '0',
-            'fall_nu_didactics' => '0',
+            'is_active' => '1',
+            'cohort_start_term' => 'Spring',
+            'cohort_start_year' => '2026',
+            'sem1_nu_teaching' => '2', 'sem1_avg_teaching' => '88.5',
+            'sem1_nu_clinic' => '1', 'sem1_avg_clinic' => '92.0',
+            'sem1_nu_research' => '0', 'sem1_avg_research' => '',
+            'sem1_nu_didactics' => '0', 'sem1_avg_didactics' => '',
+            'sem1_nu_comments' => '2',
+            'sem1_leadership' => '8',
+            'sem2_nu_teaching' => '1', 'sem2_avg_teaching' => '75.0',
+            'sem2_final_score' => '91.25',
+            'sem2_leadership' => '9',
+            'sem2_nu_clinic' => '0',
+            'sem2_nu_research' => '0',
+            'sem2_nu_didactics' => '0',
         ],
         [
             'record_id' => '11',
@@ -43,6 +43,9 @@ function studentRoster(): array
             'first_name' => 'Ava',
             'last_name' => 'Adams',
             'goes_by' => '',
+            'is_active' => '1',
+            'cohort_start_term' => 'Fall',
+            'cohort_start_year' => '2026',
         ],
     ];
 }
@@ -50,6 +53,7 @@ function studentRoster(): array
 it('renders the picker with a sorted roster and no selection', function () {
     $destination = mock(RedcapDestinationService::class);
     $destination->shouldReceive('getAllStudentRecords')->twice()->andReturn(studentRoster());
+    $destination->shouldReceive('availableBatches')->andReturn([]);
 
     $response = get('/student');
 
@@ -88,8 +92,8 @@ it('bundles the Livewire and Flux runtimes through Vite', function () {
     expect(file_get_contents(resource_path('js/student-detail-charts.js')))
         ->toContain('renderStudentCharts')
         ->toContain('bootStudentDetailCharts')
-        ->toContain('data-student-chart="weights"')
-        ->toContain("type: 'doughnut'");
+        ->not->toContain('data-student-chart="weights"')
+        ->not->toContain("type: 'doughnut'");
 });
 
 it('uses a path-safe Livewire config for the Vite runtime', function () {
@@ -110,6 +114,7 @@ it('ignores configured app url paths for local livewire endpoints', function () 
 
     $destination = mock(RedcapDestinationService::class);
     $destination->shouldReceive('getAllStudentRecords')->twice()->andReturn(studentRoster());
+    $destination->shouldReceive('availableBatches')->andReturn([]);
 
     get('/student')
         ->assertOk()
@@ -136,28 +141,21 @@ it('serves runtime fallback assets without js or css route extensions', function
 });
 
 it('renders per-semester eval counts when a student is selected', function () {
-    $mapping = ProjectMapping::factory()->create();
-    $weights = ['teaching' => 25.0, 'clinic' => 25.0, 'research' => 20.0, 'didactics' => 20.0, 'leadership' => 10.0];
-    foreach (WeightCategory::cases() as $category) {
-        CategoryWeight::create(['project_mapping_id' => $mapping->id, 'category' => $category->value, 'weight' => $weights[$category->value]]);
-    }
-
     $destination = mock(RedcapDestinationService::class);
     $destination->shouldReceive('getAllStudentRecords')->twice()->andReturn(studentRoster());
+    $destination->shouldReceive('availableBatches')->andReturn([]);
 
     $response = get('/student?id=10');
 
     $response->assertOk()
         ->assertSee('Cat Chin', false)
-        ->assertSee('Student Profile', false)
-        ->assertSee('Final Grade', false)
-        ->assertSee('91.25', false)
         ->assertSee('Leadership', false)
-        ->assertSee('17/20', false)
-        ->assertSee('Weight Distribution', false)
-        ->assertSee('data-student-chart="weights"', false)
+        ->assertSee('17/40', false)
+        ->assertDontSee('Final Grade', false)
+        ->assertDontSee('Weight Distribution', false)
+        ->assertDontSee('data-student-chart="weights"', false)
         ->assertDontSee('REDCap formula', false)
-        ->assertDontSee('round(([spring_avg_teaching]*0.25)', false)
+        ->assertDontSee('round(([sem1_avg_teaching]*0.25)', false)
         ->assertSee('https://guru.nyit.edu/GuruAdmin/StudentOverview/StudentPhotoImageHandler.ashx?id=1234567', false);
 
     $semesters = $response->viewData('semesters');
@@ -165,19 +163,24 @@ it('renders per-semester eval counts when a student is selected', function () {
 
     expect($selected['datatelid'])->toBe('1234567')
         ->and($selected['photo_url'])->toBe('https://guru.nyit.edu/GuruAdmin/StudentOverview/StudentPhotoImageHandler.ashx?id=1234567')
-        ->and($semesters)->toHaveCount(2)
-        ->and($semesters[0]['slug'])->toBe('spring')
+        ->and($semesters)->toHaveCount(4)
+        ->and($semesters[0]['slug'])->toBe('sem1')
+        ->and($semesters[0]['label'])->toBe('Spring 2026')
         ->and($semesters[0]['counts'])->toBe([2, 1, 0, 0])
         ->and($semesters[0]['averages'])->toBe([88.5, 92.0, null, null])
         ->and($semesters[0]['total'])->toBe(3)
-        ->and($semesters[1]['slug'])->toBe('fall')
+        ->and($semesters[1]['slug'])->toBe('sem2')
+        ->and($semesters[1]['label'])->toBe('Fall 2026')
         ->and($semesters[1]['counts'])->toBe([1, 0, 0, 0])
-        ->and($semesters[1]['total'])->toBe(1);
+        ->and($semesters[1]['total'])->toBe(1)
+        ->and($semesters[2]['slug'])->toBe('sem3')
+        ->and($semesters[3]['slug'])->toBe('sem4');
 });
 
 it('ignores an unknown student id', function () {
     $destination = mock(RedcapDestinationService::class);
     $destination->shouldReceive('getAllStudentRecords')->twice()->andReturn(studentRoster());
+    $destination->shouldReceive('availableBatches')->andReturn([]);
 
     $response = get('/student?id=999');
 
@@ -188,26 +191,25 @@ it('ignores an unknown student id', function () {
 it('updates the student detail component when the selection changes', function () {
     $destination = mock(RedcapDestinationService::class);
     $destination->shouldReceive('getAllStudentRecords')->twice()->andReturn(studentRoster());
+    $destination->shouldReceive('availableBatches')->andReturn([]);
 
     Livewire::test('student-detail')
         ->assertSee('Select a student')
-        ->assertDontSee('Student Profile')
+        ->assertDontSee('Leadership')
         ->set('selectedId', '10')
         ->assertSet('selectedId', '10')
         ->assertSee('Cat Chin')
-        ->assertSee('Final Grade')
-        ->assertSee('91.25');
+        ->assertSee('Leadership');
 });
 
-it('shows a pending final grade when no final score exists', function () {
+it('renders a student with no final score', function () {
     $destination = mock(RedcapDestinationService::class);
     $destination->shouldReceive('getAllStudentRecords')->once()->andReturn(studentRoster());
+    $destination->shouldReceive('availableBatches')->andReturn([]);
 
     Livewire::test('student-detail', ['initialSelectedId' => '11'])
         ->assertSee('Ava Adams')
-        ->assertSee('Final Grade')
-        ->assertSee('Pending')
-        ->assertSee('Final grade is not available yet.');
+        ->assertDontSee('Final Grade');
 });
 
 it('hides student-only navigation and sharing controls on the student view', function () {
@@ -215,6 +217,7 @@ it('hides student-only navigation and sharing controls on the student view', fun
 
     $destination = mock(RedcapDestinationService::class);
     $destination->shouldReceive('getAllStudentRecords')->twice()->andReturn(studentRoster());
+    $destination->shouldReceive('availableBatches')->andReturn([]);
 
     $response = get('/student');
 

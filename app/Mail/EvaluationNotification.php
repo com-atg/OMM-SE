@@ -72,7 +72,9 @@ class EvaluationNotification extends Mailable
     public function __construct(
         public readonly array $evalRecord,
         public readonly array $studentRecord,
-        public readonly string $semester,
+        public readonly string $slotKey,
+        public readonly string $slotLabel,
+        public readonly int $slotIndex,
         public readonly array $aggregates,
         public readonly string $evalCategory,
     ) {}
@@ -91,7 +93,10 @@ class EvaluationNotification extends Mailable
         $viewData = [
             'evalRecord' => $this->evalRecord,
             'studentRecord' => $this->studentRecord,
-            'semester' => $this->semester,
+            'slotKey' => $this->slotKey,
+            'slotLabel' => $this->slotLabel,
+            'slotIndex' => $this->slotIndex,
+            'semester' => $this->slotLabel,
             'aggregates' => $this->aggregates,
             'criteria' => self::CRITERIA[$this->evalCategory] ?? [],
             'scoreScale' => self::SCORE_SCALE[$this->evalCategory] ?? '',
@@ -145,10 +150,15 @@ class EvaluationNotification extends Mailable
                 'last_name' => 'Chin',
                 'goes_by' => 'Cat',
                 'email' => 'catherine@example.com',
+                'cohort_start_term' => 'Spring',
+                'cohort_start_year' => 2026,
             ],
-            'semester' => 'spring',
+            'slotKey' => 'sem1',
+            'slotLabel' => 'Spring 2026',
+            'slotIndex' => 1,
+            'semester' => 'Spring 2026',
             'aggregates' => [
-                'semester' => 'spring',
+                'slot_key' => 'sem1',
                 'by_category' => [
                     'teaching' => ['nu' => 1, 'avg' => 83.33],
                     'clinic' => ['nu' => 0, 'avg' => null],

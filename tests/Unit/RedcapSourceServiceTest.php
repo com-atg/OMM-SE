@@ -42,19 +42,19 @@ test('SCORE_FIELDS DEST_CATEGORY and CATEGORY_LABELS all share the same category
 test('getStudentEvals returns empty array for non-numeric datatelid', function () {
     $service = new RedcapSourceService;
 
-    expect($service->getStudentEvals("1' OR '1'='1", '1', 'TOKEN'))->toBe([]);
+    expect($service->getStudentEvals("1' OR '1'='1", '1', 2026, 'TOKEN'))->toBe([]);
 });
 
 test('getStudentEvals returns empty array for invalid semester code', function () {
     $service = new RedcapSourceService;
 
-    expect($service->getStudentEvals('1', '9', 'TOKEN'))->toBe([]);
+    expect($service->getStudentEvals('1', '9', 2026, 'TOKEN'))->toBe([]);
 });
 
 test('getStudentEvals returns empty array when semester contains injection attempt', function () {
     $service = new RedcapSourceService;
 
-    expect($service->getStudentEvals('1', "1' OR '1'='1", 'TOKEN'))->toBe([]);
+    expect($service->getStudentEvals('1', "1' OR '1'='1", 2026, 'TOKEN'))->toBe([]);
 });
 
 test('getCompletedEvaluationRecords returns only completed source evaluations', function () {

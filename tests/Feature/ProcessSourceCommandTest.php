@@ -11,19 +11,19 @@ use function Pest\Laravel\mock;
 function sourceRecords(): array
 {
     return [
-        ['record_id' => '1', 'student' => '100', 'semester' => '1', 'eval_category' => 'A', 'teaching_score' => '90.0'],
-        ['record_id' => '2', 'student' => '100', 'semester' => '2', 'eval_category' => 'B', 'clinical_performance_score' => '85.0'],
-        ['record_id' => '3', 'student' => '200', 'semester' => '1', 'eval_category' => 'A', 'teaching_score' => '75.0'],
+        ['record_id' => '1', 'student' => '100', 'semester' => '1', 'date_lab' => '2026-04-01', 'eval_category' => 'A', 'teaching_score' => '90.0'],
+        ['record_id' => '2', 'student' => '100', 'semester' => '2', 'date_lab' => '2026-10-01', 'eval_category' => 'B', 'clinical_performance_score' => '85.0'],
+        ['record_id' => '3', 'student' => '200', 'semester' => '1', 'date_lab' => '2026-04-01', 'eval_category' => 'A', 'teaching_score' => '75.0'],
         // Missing required field — skipped during grouping.
-        ['record_id' => '4', 'student' => '', 'semester' => '1', 'eval_category' => 'A'],
+        ['record_id' => '4', 'student' => '', 'semester' => '1', 'date_lab' => '2026-04-01', 'eval_category' => 'A'],
     ];
 }
 
 function studentMap(): array
 {
     return [
-        '100' => ['record_id' => '10', 'datatelid' => '100'],
-        '200' => ['record_id' => '20', 'datatelid' => '200'],
+        '100' => ['record_id' => '10', 'datatelid' => '100', 'cohort_start_term' => 'Spring', 'cohort_start_year' => '2026'],
+        '200' => ['record_id' => '20', 'datatelid' => '200', 'cohort_start_term' => 'Spring', 'cohort_start_year' => '2026'],
     ];
 }
 
@@ -69,10 +69,10 @@ it('runs dry-run without calling updateStudentRecord', function () {
         ->expectsOutputToContain('Dry run complete. No changes were written.');
 });
 
-it('fails with an error when no project mapping is configured', function () {
+it('fails with an error when no active source project is configured', function () {
     $this->artisan('omm:process-source')
         ->assertFailed()
-        ->expectsOutputToContain('No project mapping configured');
+        ->expectsOutputToContain('No active source project configured');
 });
 
 it('fails when the --pid mapping is not configured', function () {

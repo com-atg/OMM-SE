@@ -8,19 +8,21 @@ use Illuminate\Support\Facades\Log;
 
 class EvalAggregator
 {
-    public const SEMESTER_MAP = ['1' => 'spring', '2' => 'fall'];
-
     /**
-     * Aggregate a flat list of source eval records (for one student+semester)
+     * Aggregate a flat list of source eval records (for one student + slot)
      * into destination-shaped fields plus a per-category summary.
      *
+     * Field names use the slot key ('sem1' … 'sem4') as a prefix:
+     *   sem{n}_nu_{cat}, sem{n}_avg_{cat}, sem{n}_dates_{cat},
+     *   sem{n}_nu_comments, sem{n}_comments.
+     *
      * Dates field format  : "Faculty Name, M/D/YYYY; Faculty Name, M/D/YYYY"
-     * Comments field format: "Faculty; M/D/YYYY; Comment text\nFaculty; M/D/YYYY; Comment text"
+     * Comments field format: "Faculty; M/D/YYYY; Category; Comment text\n…"
      *
      * @param  array<int,array<string,mixed>>  $evals
-     * @return array{fields: array<string,mixed>, by_category: array<string,array{nu:int,avg:float|null}>, semester: string}
+     * @return array{fields: array<string,mixed>, by_category: array<string,array{nu:int,avg:float|null}>, slot_key: string}
      */
-    public static function aggregate(array $evals, string $semester): array
+    public static function aggregate(array $evals, string $slotKey): array
     {
         $sums = [];
         $counts = [];
@@ -64,28 +66,28 @@ class EvalAggregator
             $nu = $counts[$destKey] ?? 0;
             $avg = $nu > 0 ? round($sums[$destKey] / $nu, 2) : null;
 
-            $fields["{$semester}_nu_{$destKey}"] = $nu;
+            $fields["{$slotKey}_nu_{$destKey}"] = $nu;
             if ($avg !== null) {
-                $fields["{$semester}_avg_{$destKey}"] = $avg;
+                $fields["{$slotKey}_avg_{$destKey}"] = $avg;
             }
 
             if (! empty($dateEntries[$destKey])) {
-                $fields["{$semester}_dates_{$destKey}"] = implode('; ', $dateEntries[$destKey]);
+                $fields["{$slotKey}_dates_{$destKey}"] = implode('; ', $dateEntries[$destKey]);
             }
 
             $byCategory[$destKey] = ['nu' => $nu, 'avg' => $avg];
         }
 
         $commentCount = count($commentLines);
-        $fields["{$semester}_nu_comments"] = $commentCount;
+        $fields["{$slotKey}_nu_comments"] = $commentCount;
         if ($commentCount > 0) {
-            $fields["{$semester}_comments"] = implode("\n", $commentLines);
+            $fields["{$slotKey}_comments"] = implode("\n", $commentLines);
         }
 
         return [
             'fields' => $fields,
             'by_category' => $byCategory,
-            'semester' => $semester,
+            'slot_key' => $slotKey,
         ];
     }
 

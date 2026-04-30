@@ -2,9 +2,11 @@
 
 namespace App\Jobs;
 
+use App\Models\ProjectMapping;
 use App\Services\RedcapDestinationService;
 use App\Services\RedcapSourceService;
 use App\Support\EvalAggregator;
+use App\Support\SemesterSlot;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Cache;
@@ -21,7 +23,9 @@ class ProcessSourceProjectJob implements ShouldQueue
     public function __construct(
         public string $jobId,
         public string $pid,
-        public string $sourceToken,
+        public int $projectMappingId,
+        public bool $activeOnly = false,
+        public ?string $batch = null,
     ) {}
 
     public function handle(
@@ -32,11 +36,31 @@ class ProcessSourceProjectJob implements ShouldQueue
         $state = Cache::get($cacheKey, []);
 
         try {
-            $records = $source->fetchAllRecords($this->sourceToken);
+            $mapping = ProjectMapping::find($this->projectMappingId);
 
-            $groups = $this->groupByStudentSemester($records, $state);
+            if ($mapping === null) {
+                throw new \RuntimeException("Project mapping {$this->projectMappingId} not found.");
+            }
+
+            $records = $source->fetchAllRecords((string) $mapping->redcap_token);
 
             $studentMap = $destination->studentMapByDatatelId();
+
+            if ($this->activeOnly || $this->batch !== null) {
+                $studentMap = array_filter($studentMap, function (array $record): bool {
+                    if ($this->activeOnly && (string) ($record['is_active'] ?? '') !== '1') {
+                        return false;
+                    }
+
+                    if ($this->batch !== null && trim((string) ($record['batch'] ?? '')) !== $this->batch) {
+                        return false;
+                    }
+
+                    return true;
+                });
+            }
+
+            $groups = $this->groupByStudentSlot($records, $studentMap, $state);
 
             $state['status'] = 'running';
             $state['total_records'] = count($records);
@@ -48,15 +72,7 @@ class ProcessSourceProjectJob implements ShouldQueue
             Cache::put($cacheKey, $state, now()->addMinutes(self::TTL_MINUTES));
 
             foreach ($groups as $key => $groupEvals) {
-                [$datatelId, $semesterCode] = explode('|', $key);
-                $semester = EvalAggregator::SEMESTER_MAP[$semesterCode] ?? null;
-
-                if ($semester === null) {
-                    $this->bumpSkip($state, 'unknown_semester');
-                    $this->tick($cacheKey, $state);
-
-                    continue;
-                }
+                [$datatelId, $slotKey] = explode('|', $key);
 
                 $studentRecord = $studentMap[$datatelId] ?? null;
 
@@ -67,7 +83,7 @@ class ProcessSourceProjectJob implements ShouldQueue
                     continue;
                 }
 
-                $aggregates = EvalAggregator::aggregate($groupEvals, $semester);
+                $aggregates = EvalAggregator::aggregate($groupEvals, $slotKey);
 
                 $payload = array_merge(
                     ['record_id' => $studentRecord['record_id']],
@@ -86,8 +102,8 @@ class ProcessSourceProjectJob implements ShouldQueue
                     $state['updated']++;
                 } catch (\Throwable $e) {
                     Log::error('ProcessSourceProjectJob: update failed', [
-                        'datatelid' => $datatelId,
-                        'semester' => $semester,
+                        'destination_record_id' => $studentRecord['record_id'] ?? null,
+                        'slot' => $slotKey,
                         'error' => $e->getMessage(),
                     ]);
                     $state['failed']++;
@@ -109,7 +125,7 @@ class ProcessSourceProjectJob implements ShouldQueue
                 'error' => $e->getMessage(),
             ]);
             $state['status'] = 'failed';
-            $state['error'] = $e->getMessage();
+            $state['error'] = 'Processing failed. Check application logs for details.';
             $state['finished_at'] = now()->toIso8601String();
             Cache::put($cacheKey, $state, now()->addMinutes(self::TTL_MINUTES));
         }
@@ -121,14 +137,40 @@ class ProcessSourceProjectJob implements ShouldQueue
     }
 
     /**
-     * Group source records by "{student}|{semester}". Records missing required
-     * fields are tallied as skips in the state and excluded from groups.
+     * @return array<string, mixed>
+     */
+    public static function initialState(string $jobId, string $pid, bool $activeOnly = false, ?string $batch = null): array
+    {
+        return [
+            'job_id' => $jobId,
+            'pid' => $pid,
+            'status' => 'pending',
+            'started_at' => now()->toIso8601String(),
+            'finished_at' => null,
+            'total_records' => 0,
+            'total_groups' => 0,
+            'processed_groups' => 0,
+            'updated' => 0,
+            'unchanged' => 0,
+            'failed' => 0,
+            'skip_reasons' => [],
+            'error' => null,
+            'filter_active_only' => $activeOnly,
+            'filter_batch' => $batch,
+        ];
+    }
+
+    /**
+     * Group source records by "{student}|{slotKey}". Records missing required
+     * fields, with no matching scholar in the destination, or with no resolvable
+     * cohort window are tallied as skips and excluded from groups.
      *
      * @param  array<int,array<string,mixed>>  $records
+     * @param  array<string,array<string,mixed>>  $studentMap
      * @param  array<string,mixed>  $state
      * @return array<string,array<int,array<string,mixed>>>
      */
-    private function groupByStudentSemester(array $records, array &$state): array
+    private function groupByStudentSlot(array $records, array $studentMap, array &$state): array
     {
         $groups = [];
 
@@ -136,14 +178,36 @@ class ProcessSourceProjectJob implements ShouldQueue
             $student = (string) ($record['student'] ?? '');
             $semester = (string) ($record['semester'] ?? '');
             $category = (string) ($record['eval_category'] ?? '');
+            $dateLab = (string) ($record['date_lab'] ?? '');
 
-            if ($student === '' || $semester === '' || $category === '') {
+            if ($student === '' || $semester === '' || $category === '' || $dateLab === '') {
                 $this->bumpSkip($state, 'missing_required_fields');
 
                 continue;
             }
 
-            $groups["{$student}|{$semester}"][] = $record;
+            $studentRecord = $studentMap[$student] ?? null;
+
+            if (! $studentRecord) {
+                $this->bumpSkip($state, 'student_not_found');
+
+                continue;
+            }
+
+            $cohortTerm = trim((string) ($studentRecord['cohort_start_term'] ?? '')) ?: null;
+            $cohortYearRaw = trim((string) ($studentRecord['cohort_start_year'] ?? ''));
+            $cohortYear = $cohortYearRaw !== '' && ctype_digit($cohortYearRaw) ? (int) $cohortYearRaw : null;
+
+            $slot = SemesterSlot::compute($semester, $dateLab, $cohortTerm, $cohortYear);
+
+            if ($slot === null) {
+                $this->bumpSkip($state, 'out_of_cohort_window');
+
+                continue;
+            }
+
+            $slotKey = SemesterSlot::slotKey($slot);
+            $groups["{$student}|{$slotKey}"][] = $record;
         }
 
         return $groups;

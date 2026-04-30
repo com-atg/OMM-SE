@@ -123,47 +123,53 @@ it('aggregates source records and pushes updates for matched students without em
 
     $sourceRecords = [
         [
-            'record_id' => '1', 'student' => '100', 'semester' => '1',
+            'record_id' => '1', 'student' => '100', 'semester' => '1', 'date_lab' => '2026-04-01',
             'eval_category' => 'A', 'teaching_score' => '90.0', 'comments' => 'Great',
             'faculty' => 'Dr. Smith',
         ],
         [
-            'record_id' => '2', 'student' => '100', 'semester' => '1',
+            'record_id' => '2', 'student' => '100', 'semester' => '1', 'date_lab' => '2026-05-01',
             'eval_category' => 'A', 'teaching_score' => '80.0',
         ],
         [
-            'record_id' => '3', 'student' => '100', 'semester' => '2',
+            'record_id' => '3', 'student' => '100', 'semester' => '2', 'date_lab' => '2026-10-01',
             'eval_category' => 'B', 'clinical_performance_score' => '85.0',
         ],
         // Unknown student — destination map has no match.
         [
-            'record_id' => '4', 'student' => '999', 'semester' => '1',
+            'record_id' => '4', 'student' => '999', 'semester' => '1', 'date_lab' => '2026-04-01',
             'eval_category' => 'A', 'teaching_score' => '70.0',
         ],
         // Missing required field — skipped during grouping.
         [
-            'record_id' => '5', 'student' => '', 'semester' => '1',
+            'record_id' => '5', 'student' => '', 'semester' => '1', 'date_lab' => '2026-04-01',
             'eval_category' => 'A',
         ],
     ];
+
+    $mapping = ProjectMapping::factory()->create(['redcap_token' => 'TOKEN_X']);
 
     $source = mock(RedcapSourceService::class);
     $source->shouldReceive('fetchAllRecords')->once()->with('TOKEN_X')->andReturn($sourceRecords);
 
     $destination = mock(RedcapDestinationService::class);
     $destination->shouldReceive('studentMapByDatatelId')->once()->andReturn([
-        '100' => ['record_id' => '10', 'datatelid' => '100', 'first_name' => 'Cat', 'last_name' => 'Chin'],
+        '100' => [
+            'record_id' => '10', 'datatelid' => '100',
+            'first_name' => 'Cat', 'last_name' => 'Chin',
+            'cohort_start_term' => 'Spring', 'cohort_start_year' => '2026',
+        ],
     ]);
     $destination->shouldReceive('updateStudentRecord')->twice()->andReturn('1');
 
-    $job = new ProcessSourceProjectJob('job-xyz', '1846', 'TOKEN_X');
+    $job = new ProcessSourceProjectJob('job-xyz', '1846', $mapping->id);
     $job->handle($destination, $source);
 
     $state = Cache::get(ProcessSourceProjectJob::cacheKey('job-xyz'));
     expect($state['status'])->toBe('complete')
         ->and($state['total_records'])->toBe(5)
-        ->and($state['total_groups'])->toBe(3)
-        ->and($state['processed_groups'])->toBe(3)
+        ->and($state['total_groups'])->toBe(2)
+        ->and($state['processed_groups'])->toBe(2)
         ->and($state['updated'])->toBe(2)
         ->and($state['unchanged'])->toBe(0)
         ->and($state['failed'])->toBe(0)
@@ -194,18 +200,22 @@ it('does not update destination records when aggregate values are unchanged', fu
         '100' => [
             'record_id' => '10',
             'datatelid' => '100',
-            'spring_nu_teaching' => '1',
-            'spring_avg_teaching' => '80',
-            'spring_dates_teaching' => 'Dr. Smith, 4/1/2026',
-            'spring_nu_clinic' => '0',
-            'spring_nu_research' => '0',
-            'spring_nu_didactics' => '0',
-            'spring_nu_comments' => '0',
+            'cohort_start_term' => 'Spring',
+            'cohort_start_year' => '2026',
+            'sem1_nu_teaching' => '1',
+            'sem1_avg_teaching' => '80',
+            'sem1_dates_teaching' => 'Dr. Smith, 4/1/2026',
+            'sem1_nu_clinic' => '0',
+            'sem1_nu_research' => '0',
+            'sem1_nu_didactics' => '0',
+            'sem1_nu_comments' => '0',
         ],
     ]);
     $destination->shouldReceive('updateStudentRecord')->never();
 
-    $job = new ProcessSourceProjectJob('job-unchanged', '1846', 'TOKEN_X');
+    $mapping = ProjectMapping::factory()->create(['redcap_token' => 'TOKEN_X']);
+
+    $job = new ProcessSourceProjectJob('job-unchanged', '1846', $mapping->id);
     $job->handle($destination, $source);
 
     $state = Cache::get(ProcessSourceProjectJob::cacheKey('job-unchanged'));
@@ -222,10 +232,12 @@ it('marks the job failed when the source export throws', function () {
 
     $destination = mock(RedcapDestinationService::class);
 
-    $job = new ProcessSourceProjectJob('job-err', '1846', 'TOKEN_X');
+    $mapping = ProjectMapping::factory()->create(['redcap_token' => 'TOKEN_X']);
+
+    $job = new ProcessSourceProjectJob('job-err', '1846', $mapping->id);
     $job->handle($destination, $source);
 
     $state = Cache::get(ProcessSourceProjectJob::cacheKey('job-err'));
     expect($state['status'])->toBe('failed')
-        ->and($state['error'])->toBe('boom');
+        ->and($state['error'])->toBe('Processing failed. Check application logs for details.');
 });

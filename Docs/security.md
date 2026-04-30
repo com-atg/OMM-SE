@@ -117,14 +117,14 @@ sequenceDiagram
     SC->>SS: processResponse()
     SS->>SS: signature, audience, NotOnOrAfter, strict checks
     alt assertion valid
-        SC->>APP: find/create User by email, recompute role
+        SC->>APP: find User by email\n(role read from users.role; not recomputed)
         APP-->>U: 302 /  (authenticated session)
     else invalid / replay / unsigned
         SC-->>U: 403 Forbidden
     end
 ```
 
-**Trust model:** the app trusts only the `email` attribute from the IdP. No groups, roles, or other claims are honored. Email is the stable identifier; `displayName` is used only for UI.
+**Trust model:** the app trusts only the `email` attribute from the IdP. No groups, roles, or other claims are honored. Email is the stable identifier; `displayName` is used only for UI. The user's role is read from the stored `users.role` column — it is **not** recomputed from env allowlists at every login.
 
 Relevant env (see `.env.example`):
 
@@ -152,19 +152,18 @@ Once authenticated, each user is assigned a role from `App\Enums\Role`:
 
 | Role | Source | Access |
 |------|--------|--------|
-| `Service` | Email in `SERVICE_USERS=` or stored user role | Everything — dashboard, all students, faculty view, run process, user/settings management |
-| `Admin` | Email in `ADMIN_USERS=` or stored user role | Dashboard, all student records, faculty view; no user/settings management and no bulk processing |
-| `Faculty` | Stored user role | Dashboard and faculty view scoped to evaluations authored by matching faculty email/name |
-| `Student` | Email matches a student in the destination project (OMMScholarEvalList) or stored user role | Own student record only |
+| `Service` | Stored on `users.role` (seeded from `SERVICE_USERS=` on first migration; managed in `/admin/users` thereafter) | Everything — dashboard, all students, faculty view, run process, user management, project-mapping CRUD, email-template editor |
+| `Admin` | Stored on `users.role` (seeded from `ADMIN_USERS=` on first migration; managed in `/admin/users` thereafter) | Dashboard, all student records, faculty view, **read-only `/admin/settings`** (with email-template editor); no user management, no project-mapping CRUD, no bulk processing |
+| `Faculty` | Stored on `users.role` | Dashboard and faculty view scoped to evaluations authored by matching faculty email/name |
+| `Student` | Stored on `users.role`; auto-provisioned when an Okta email matches a destination student record | Own student record only |
 
 Rules:
 
-- `SERVICE_USERS` / `ADMIN_USERS` are comma-separated emails, case-insensitive.
-- On every SAML login, the app recomputes the role from the current env allowlists — demotions/promotions take effect on the next sign-in.
-- Students auto-provision via `RedcapDestinationService::findStudentByEmail()`; the matched REDCap `record_id` is cached on the `users` row (`redcap_record_id`).
-- If an email is not on any allowlist **and** does not match a student record, the app returns `HTTP 404` rendering `resources/views/auth/records-not-found.blade.php`. This intentionally does not expose whether the user authenticated successfully against Okta.
+- `SERVICE_USERS` / `ADMIN_USERS` are comma-separated emails consumed by `DatabaseSeeder` to bootstrap the first Service/Admin accounts. They are **not** re-evaluated on each SAML login — change a user's role in `/admin/users`.
+- Students auto-provision via `RedcapDestinationService::findStudentByEmail()`; the matched REDCap `record_id` is cached on the `users` row (`redcap_record_id`), along with cohort metadata (`cohort_start_term`, `cohort_start_year`, `batch`, `is_active`).
+- If a SAML-authenticated email has no stored user **and** does not match a student record, the app returns `HTTP 404` rendering `resources/views/auth/records-not-found.blade.php`. This intentionally does not expose whether the user authenticated successfully against Okta.
 
-Authorization is enforced in controllers and views through four gates registered in `AppServiceProvider`:
+Authorization is enforced in controllers and views through gates registered in `AppServiceProvider`:
 
 | Gate | Service | Admin | Faculty | Student |
 |------|:--:|:--:|:--:|:--:|
@@ -174,7 +173,12 @@ Authorization is enforced in controllers and views through four gates registered
 | `view-student-page` | Yes | Yes | No | Own record |
 | `run-process` | Yes | No | No | No |
 | `manage-users` | Yes | No | No | No |
-| `manage-settings` | Yes | No | No | No |
+| `manage-settings` | Yes | Yes | No | No |
+| `manage-settings-records` | Yes | No | No | No |
+| `edit-email-template` | Yes | Yes | No | No |
+| `view-docs` | Yes | No | No | No |
+
+`manage-settings-records` is a sub-gate that restricts every project-mapping mutation (create / update / activate / delete / restore / synchronous import-students) to Service users; Admin users can land on `/admin/settings` and use the email-template editor but cannot mutate mappings.
 
 ---
 
@@ -284,11 +288,11 @@ $middleware->validateCsrfTokens(except: ['/notify', '/saml/acs']);
 |--------|---------------|-------|
 | `APP_KEY` | `.env` | Never commit — generate with `php artisan key:generate` |
 | `REDCAP_TOKEN` | `.env` | Destination project API token |
-| Source project API tokens | `project_mappings.redcap_token` | Encrypted in MySQL; created/updated from `/admin/settings` |
+| Source project API tokens | `project_mappings.redcap_token` | Encrypted in MySQL; created from the `/admin/settings/source-project/create` wizard, edited via `/admin/settings/project-mappings/{m}/edit`. Exactly one mapping is `is_active = 1` at any time. |
 | `WEBHOOK_SECRET` | `.env` | Shared with REDCap DET URL only |
 | `SAML_IDP_X509_CERT` | `.env` | Okta signing certificate — validates SAML assertions |
 | `SAML_SP_PRIVATE_KEY` | `.env` | Optional — only if signed AuthnRequests/encrypted assertions are enabled |
-| `SERVICE_USERS` / `ADMIN_USERS` | `.env` | App role allowlists (comma-separated emails) |
+| `SERVICE_USERS` / `ADMIN_USERS` | `.env` | Seed-time allowlists (comma-separated emails). Consumed by `DatabaseSeeder` for the first migration only — not re-evaluated on each login. |
 | `DB_PASSWORD` / `MYSQL_ROOT_PASSWORD` | `.env` | MySQL credentials |
 | `MAIL_PASSWORD` | `.env` | SMTP credential |
 | `DOCKERHUB_TOKEN` | GitHub Secret | Never in code or `.env` |
@@ -332,11 +336,11 @@ Static assets are served with `Cache-Control: public, max-age=31536000, immutabl
 ## Security Checklist for New Deployments
 
 - [ ] `WEBHOOK_SECRET` set to a 32-byte random hex value
-- [ ] Project mapping created for each active source project, with its REDCap PID and source API token
+- [ ] Active project mapping created via `/admin/settings/source-project/create`, with the current academic year's REDCap PID and source API token
 - [ ] Okta SAML app created; `SAML_IDP_ENTITY_ID`, `SAML_IDP_SSO_URL`, `SAML_IDP_SLO_URL`, `SAML_IDP_X509_CERT` populated from Okta
 - [ ] `SAML_SP_ENTITY_ID`, `SAML_SP_ACS_URL`, `SAML_SP_SLO_URL` match the Okta app configuration
 - [ ] `SAML_STRICT=true` and `SAML_DEBUG=false` in production
-- [ ] `SERVICE_USERS` / `ADMIN_USERS` populated with the real operators' emails
+- [ ] `SERVICE_USERS` / `ADMIN_USERS` populated **before first `migrate --seed`** so the initial admin accounts exist; subsequent role changes happen in `/admin/users`
 - [ ] `APP_KEY` generated (`php artisan key:generate --show`)
 - [ ] `APP_DEBUG=false` and `APP_ENV=production` in production `.env`
 - [ ] MySQL credentials (`DB_PASSWORD`, `MYSQL_ROOT_PASSWORD`) generated and not defaults
@@ -358,7 +362,7 @@ The Service-only `/admin/*` routes introduce additional attack surface beyond th
 | `POST /admin/users/import` | Long-running synchronous REDCap roster fetch; can hang the request thread | Service-only via `can:manage-users`; consider migrating to a queued job |
 | `POST /admin/users/import-csv` (Livewire) | Untrusted CSV upload; malformed rows or oversize files | 1 MB file size cap, MIME `csv,txt` validation, per-cell validation, transaction-wrapped insert. Consider a server-side `Storage::mimeType()` re-check |
 | `POST /admin/users/{user}/impersonate` | Privilege escalation if Service account compromised | Cannot impersonate Service users; cannot self-impersonate; persistent banner shown; session-only — closing the browser ends impersonation. The `/impersonate/stop` route sits **outside** the `manage-users` gate so an impersonated user can always exit |
-| `POST /admin/settings/project-mappings/*` | Settings tampering could redirect aggregation to wrong destination | Gated by `manage-settings` and CRUD operations sub-gated by `manage-settings-records` |
+| `POST /admin/settings/project-mappings/*` | Settings tampering could change which source REDCap project is treated as active and which token is used | View gated by `manage-settings` (Service + Admin); every mutating route (create / update / activate / delete / restore / import-students) sub-gated by `manage-settings-records` (Service only) |
 | `GET /test/email` | Stubbed email preview route | Guarded by `app()->environment('local')`, matching `/local/login` |
 
 ### Impersonation audit logging

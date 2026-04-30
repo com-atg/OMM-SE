@@ -1,11 +1,9 @@
 <?php
 
 use App\Enums\Role;
-use App\Jobs\ProcessSourceProjectJob;
 use App\Models\ProjectMapping;
 use App\Models\User;
 use App\Services\RedcapDestinationService;
-use Illuminate\Support\Facades\Bus;
 
 use function Pest\Laravel\delete;
 use function Pest\Laravel\from;
@@ -47,22 +45,14 @@ it('restricts settings from students', function () {
 });
 
 it('hides settings write controls from admins', function () {
-    ProjectMapping::factory()->create([
-        'academic_year' => '2024-2025',
-        'graduation_year' => 2027,
-        'redcap_pid' => 1845,
-    ]);
-    ProjectMapping::factory()->create([
-        'academic_year' => '2025-2026',
-        'graduation_year' => 2028,
-        'redcap_pid' => 1846,
-    ])->delete();
+    ProjectMapping::factory()->active()->create(['redcap_pid' => 1845]);
+    ProjectMapping::factory()->create(['redcap_pid' => 1846])->delete();
 
     asAdmin();
 
     get(route('admin.settings.index'))
         ->assertOk()
-        ->assertDontSee('Add a New Academic Year')
+        ->assertDontSee('Configure source project')
         ->assertDontSee('Edit project mapping')
         ->assertDontSee('Delete project mapping')
         ->assertDontSee('Restore')
@@ -75,8 +65,6 @@ it('forbids admins from mutating project mappings', function () {
     asAdmin();
 
     post(route('admin.settings.project-mappings.store'), [
-        'academic_year' => '2025-2026',
-        'graduation_year' => 2028,
         'redcap_pid' => 1846,
         'redcap_token' => '78A933EF74A3B5B1DBAB2E313942CDA6',
     ])->assertForbidden();
@@ -84,8 +72,6 @@ it('forbids admins from mutating project mappings', function () {
     get(route('admin.settings.project-mappings.edit', $projectMapping))->assertForbidden();
 
     patch(route('admin.settings.project-mappings.update', $projectMapping), [
-        'academic_year' => '2026-2027',
-        'graduation_year' => 2029,
         'redcap_pid' => 1847,
         'redcap_token' => 'NEWTOKEN',
     ])->assertForbidden();
@@ -93,79 +79,58 @@ it('forbids admins from mutating project mappings', function () {
     delete(route('admin.settings.project-mappings.destroy', $projectMapping))->assertForbidden();
 });
 
-it('shows current project from the largest active graduation year', function () {
-    ProjectMapping::factory()->create([
-        'academic_year' => '2024-2025',
-        'graduation_year' => 2027,
-    ]);
-    ProjectMapping::factory()->create([
-        'academic_year' => '2025-2026',
-        'graduation_year' => 2028,
-    ]);
+it('shows the active source project on the settings page', function () {
+    ProjectMapping::factory()->active()->create(['redcap_pid' => 1846]);
 
     get(route('admin.settings.index'))
         ->assertOk()
-        ->assertSee('Academic Year 2025-2026 (Class of 2028)');
+        ->assertSee('Source Project (PID 1846)');
 });
 
-it('does not use a soft-deleted mapping as the current project', function () {
-    ProjectMapping::factory()->create([
-        'academic_year' => '2025-2026',
-        'graduation_year' => 2028,
-    ])->delete();
-    ProjectMapping::factory()->create([
-        'academic_year' => '2024-2025',
-        'graduation_year' => 2027,
-    ]);
+it('does not use a soft-deleted mapping as the active project', function () {
+    ProjectMapping::factory()->active()->create(['redcap_pid' => 1846])->delete();
+    ProjectMapping::factory()->create(['redcap_pid' => 1845]);
 
     get(route('admin.settings.index'))
         ->assertOk()
-        ->assertSee('Academic Year 2024-2025 (Class of 2027)');
+        ->assertSee('Source Project (PID 1845)');
 });
 
-it('creates a project mapping', function () {
+it('creates an active project mapping and deactivates any prior active mapping', function () {
+    ProjectMapping::factory()->active()->create(['redcap_pid' => 1500]);
+
     $response = post(route('admin.settings.project-mappings.store'), [
-        'academic_year' => '2025-2026',
-        'graduation_year' => 2028,
         'redcap_pid' => 1846,
         'redcap_token' => '78A933EF74A3B5B1DBAB2E313942CDA6',
     ]);
 
-    $projectMapping = ProjectMapping::first();
+    $projectMapping = ProjectMapping::where('redcap_pid', 1846)->first();
     expect($projectMapping)->not->toBeNull();
 
     $response->assertRedirect(route('admin.settings.project-mappings.import-students', $projectMapping));
 
-    expect($projectMapping)->not->toBeNull()
-        ->and($projectMapping->academic_year)->toBe('2025-2026')
-        ->and($projectMapping->graduation_year)->toBe(2028)
-        ->and($projectMapping->redcap_pid)->toBe(1846)
-        ->and($projectMapping->redcap_token)->toBe('78A933EF74A3B5B1DBAB2E313942CDA6');
+    expect($projectMapping->redcap_pid)->toBe(1846)
+        ->and($projectMapping->redcap_token)->toBe('78A933EF74A3B5B1DBAB2E313942CDA6')
+        ->and($projectMapping->is_active)->toBeTrue();
+
+    expect(ProjectMapping::where('redcap_pid', 1500)->first()->is_active)->toBeFalse();
 });
 
-it('renders graduating year and pid as text inputs', function () {
-    get(route('admin.settings.new-academic-year'))
+it('renders the source project create page with PID and token inputs', function () {
+    get(route('admin.settings.source-project.create'))
         ->assertOk()
-        ->assertSee('wire:model="graduation_year"', false)
-        ->assertSee('id="graduation_year"', false)
-        ->assertSee('type="text"', false)
         ->assertSee('wire:model="redcap_pid"', false)
-        ->assertSee('id="redcap_pid"', false);
+        ->assertSee('id="redcap_pid"', false)
+        ->assertSee('wire:model="redcap_token"', false);
 });
 
 it('validates project mapping uniqueness among active records', function () {
-    ProjectMapping::factory()->create([
-        'academic_year' => '2025-2026',
-        'graduation_year' => 2028,
-        'redcap_pid' => 1846,
-    ]);
+    ProjectMapping::factory()->create(['redcap_pid' => 1846]);
 
     post(route('admin.settings.project-mappings.store'), [
-        'academic_year' => '2025-2026',
-        'graduation_year' => 2028,
         'redcap_pid' => 1846,
         'redcap_token' => '78A933EF74A3B5B1DBAB2E313942CDA6',
-    ])->assertSessionHasErrors(['academic_year', 'graduation_year', 'redcap_pid']);
+    ])->assertSessionHasErrors(['redcap_pid']);
 });
 
 it('updates a project mapping while preserving the token when blank', function () {
@@ -175,8 +140,6 @@ it('updates a project mapping while preserving the token when blank', function (
 
     from(route('admin.settings.project-mappings.edit', $projectMapping))
         ->patch(route('admin.settings.project-mappings.update', $projectMapping), [
-            'academic_year' => '2026-2027',
-            'graduation_year' => 2029,
             'redcap_pid' => 1847,
             'redcap_token' => '',
         ])
@@ -184,9 +147,7 @@ it('updates a project mapping while preserving the token when blank', function (
 
     $projectMapping->refresh();
 
-    expect($projectMapping->academic_year)->toBe('2026-2027')
-        ->and($projectMapping->graduation_year)->toBe(2029)
-        ->and($projectMapping->redcap_pid)->toBe(1847)
+    expect($projectMapping->redcap_pid)->toBe(1847)
         ->and($projectMapping->redcap_token)->toBe('OLDTOKEN');
 });
 
@@ -196,8 +157,6 @@ it('can replace the project mapping token', function () {
     ]);
 
     patch(route('admin.settings.project-mappings.update', $projectMapping), [
-        'academic_year' => $projectMapping->academic_year,
-        'graduation_year' => $projectMapping->graduation_year,
         'redcap_pid' => $projectMapping->redcap_pid,
         'redcap_token' => 'NEWTOKEN',
     ]);
@@ -221,83 +180,49 @@ it('soft deletes and restores a project mapping', function () {
 });
 
 it('shows deleted project mappings in the restore section', function () {
-    ProjectMapping::factory()->create([
-        'academic_year' => '2025-2026',
-        'graduation_year' => 2028,
-        'redcap_pid' => 1846,
-    ])->delete();
+    ProjectMapping::factory()->create(['redcap_pid' => 1846])->delete();
 
     get(route('admin.settings.index'))
         ->assertOk()
         ->assertSee('Deleted project mappings')
-        ->assertSee('2025-2026')
         ->assertSee('1846');
 });
 
-it('dispatches a re-process job for a mapped project', function () {
-    Bus::fake();
-    $projectMapping = ProjectMapping::factory()->create([
-        'academic_year' => '2025-2026',
-        'graduation_year' => 2028,
-        'redcap_pid' => 1846,
-        'redcap_token' => '78A933EF74A3B5B1DBAB2E313942CDA6',
-    ]);
+it('activates a project mapping and deactivates any others', function () {
+    $first = ProjectMapping::factory()->active()->create();
+    $second = ProjectMapping::factory()->create();
 
-    post(route('admin.settings.project-mappings.process', $projectMapping))
-        ->assertOk()
-        ->assertSee('Processing Source Project');
+    post(route('admin.settings.project-mappings.activate', $second))
+        ->assertRedirect(route('admin.settings.index'));
 
-    Bus::assertDispatched(ProcessSourceProjectJob::class, function (ProcessSourceProjectJob $job): bool {
-        return $job->pid === '1846'
-            && $job->sourceToken === '78A933EF74A3B5B1DBAB2E313942CDA6';
-    });
+    expect($first->fresh()->is_active)->toBeFalse()
+        ->and($second->fresh()->is_active)->toBeTrue();
 });
 
-it('shows the new academic year prep page with the next graduating year filled into the SQL', function () {
-    ProjectMapping::factory()->create([
-        'academic_year' => '2025-2026',
-        'graduation_year' => 2028,
-        'redcap_pid' => 1846,
-    ]);
-
-    get(route('admin.settings.new-academic-year'))
-        ->assertOk()
-        ->assertSee('Prepare for a New Academic Year')
-        ->assertSee('OMM ACE List')
-        ->assertSee('PID')
-        ->assertSee('2115')
-        ->assertSee("e.value='2029'");
-});
-
-it('falls back to graduating year 2028 when no project mappings exist', function () {
-    get(route('admin.settings.new-academic-year'))
-        ->assertOk()
-        ->assertSee("e.value='2028'");
-});
-
-it('forbids non-service users from viewing the new academic year prep page', function () {
+it('forbids non-service users from viewing the source project create page', function () {
     asAdmin();
 
-    get(route('admin.settings.new-academic-year'))->assertForbidden();
+    get(route('admin.settings.source-project.create'))->assertForbidden();
 });
 
-it('redirects to scholar import after creating a project mapping and imports filtered students', function () {
+it('imports scholars after creating a source project, mirroring cohort fields onto users', function () {
     $destination = $this->mock(RedcapDestinationService::class);
-    $destination->shouldReceive('getStudentsByGraduationYear')
-        ->once()
-        ->with(2030)
+    $destination->shouldReceive('getAllStudentRecords')
         ->andReturn([
-            ['record_id' => '10', 'datatelid' => 'D10', 'first_name' => 'Ada', 'last_name' => 'Lovelace', 'goes_by' => '', 'email' => 'ada@example.com', 'year' => '2030'],
-            ['record_id' => '11', 'datatelid' => 'D11', 'first_name' => 'Grace', 'last_name' => 'Hopper', 'goes_by' => 'Amazing Grace', 'email' => 'grace@example.com', 'year' => '2030'],
-            ['record_id' => '12', 'datatelid' => 'D12', 'first_name' => 'NoEmail', 'last_name' => 'Person', 'goes_by' => '', 'email' => '', 'year' => '2030'],
+            ['record_id' => '10', 'datatelid' => 'D10', 'first_name' => 'Ada', 'last_name' => 'Lovelace', 'goes_by' => '', 'email' => 'ada@example.com', 'cohort_start_term' => 'Fall', 'cohort_start_year' => '2026', 'batch' => '12', 'is_active' => '1'],
+            ['record_id' => '11', 'datatelid' => 'D11', 'first_name' => 'Grace', 'last_name' => 'Hopper', 'goes_by' => 'Amazing Grace', 'email' => 'grace@example.com', 'batch' => '11', 'is_active' => '0'],
+            ['record_id' => '12', 'datatelid' => 'D12', 'first_name' => 'NoEmail', 'last_name' => 'Person', 'goes_by' => '', 'email' => ''],
         ]);
 
-    User::factory()->create(['email' => 'grace@example.com', 'role' => Role::Student]);
+    User::factory()->create([
+        'email' => 'grace@example.com',
+        'role' => Role::Student,
+        'batch' => null,
+        'is_active' => true,
+    ]);
 
     from(route('admin.settings.index'))
         ->post(route('admin.settings.project-mappings.store'), [
-            'academic_year' => '2027-2028',
-            'graduation_year' => 2030,
             'redcap_pid' => 9999,
             'redcap_token' => 'TOKEN1234567890',
         ])
@@ -308,48 +233,31 @@ it('redirects to scholar import after creating a project mapping and imports fil
     get(route('admin.settings.project-mappings.import-students', $mapping))
         ->assertOk()
         ->assertSee('Scholar Users Imported')
-        ->assertSee('OMM ACE List')
         ->assertSee('ada@example.com')
         ->assertSee('Amazing Grace Hopper')
+        ->assertSee('Refreshed Existing Users')
         ->assertSee('Records Missing Email');
 
-    expect(User::where('email', 'ada@example.com')->first())
-        ->not->toBeNull()
-        ->role->toBe(Role::Student);
-    expect(User::where('email', 'ada@example.com')->first()->name)->toBe('Ada Lovelace');
-    expect(User::where('email', 'ada@example.com')->first()->redcap_record_id)->toBe('10');
-    expect(User::where('email', 'grace@example.com')->count())->toBe(1);
+    $ada = User::where('email', 'ada@example.com')->first();
+    expect($ada)->not->toBeNull()
+        ->and($ada->role)->toBe(Role::Student)
+        ->and($ada->name)->toBe('Ada Lovelace')
+        ->and($ada->redcap_record_id)->toBe('10')
+        ->and($ada->cohort_start_term)->toBe('Fall')
+        ->and($ada->cohort_start_year)->toBe(2026)
+        ->and($ada->batch)->toBe('12')
+        ->and($ada->is_active)->toBeTrue();
+
+    $grace = User::where('email', 'grace@example.com')->firstOrFail();
+    expect($grace->name)->toBe('Amazing Grace Hopper')
+        ->and($grace->batch)->toBe('11')
+        ->and($grace->is_active)->toBeFalse();
 });
 
 it('forbids non-service users from running scholar import', function () {
-    $mapping = ProjectMapping::factory()->create([
-        'academic_year' => '2026-2027',
-        'graduation_year' => 2029,
-        'redcap_pid' => 1900,
-    ]);
+    $mapping = ProjectMapping::factory()->create(['redcap_pid' => 1900]);
 
     asAdmin();
 
     get(route('admin.settings.project-mappings.import-students', $mapping))->assertForbidden();
-});
-
-it('allows admins to re-process a mapped project', function () {
-    Bus::fake();
-    $projectMapping = ProjectMapping::factory()->create([
-        'academic_year' => '2025-2026',
-        'graduation_year' => 2028,
-        'redcap_pid' => 1846,
-        'redcap_token' => '78A933EF74A3B5B1DBAB2E313942CDA6',
-    ]);
-
-    asAdmin();
-
-    post(route('admin.settings.project-mappings.process', $projectMapping))
-        ->assertOk()
-        ->assertSee('Processing Source Project');
-
-    Bus::assertDispatched(ProcessSourceProjectJob::class, function (ProcessSourceProjectJob $job): bool {
-        return $job->pid === '1846'
-            && $job->sourceToken === '78A933EF74A3B5B1DBAB2E313942CDA6';
-    });
 });

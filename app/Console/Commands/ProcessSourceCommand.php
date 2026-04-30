@@ -6,6 +6,7 @@ use App\Models\ProjectMapping;
 use App\Services\RedcapDestinationService;
 use App\Services\RedcapSourceService;
 use App\Support\EvalAggregator;
+use App\Support\SemesterSlot;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
@@ -13,7 +14,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 #[Signature('omm:process-source
-    {--pid= : Process a specific PID (resolved from project_mappings) instead of the current academic year}
+    {--pid= : Process a specific PID (resolved from project_mappings) instead of the current active mapping}
     {--dry-run : Aggregate without writing back to the destination project}')]
 #[Description('Aggregate all source evaluation records and push results to the destination REDCap project.')]
 class ProcessSourceCommand extends Command
@@ -25,7 +26,6 @@ class ProcessSourceCommand extends Command
         $dryRun = (bool) $this->option('dry-run');
         $pid = $this->option('pid');
 
-        // Resolve token from project_mappings.
         if ($pid !== null) {
             $mapping = ProjectMapping::query()->where('redcap_pid', $pid)->first();
             if (! $mapping) {
@@ -35,9 +35,9 @@ class ProcessSourceCommand extends Command
             }
             $label = "PID {$pid}";
         } else {
-            $mapping = ProjectMapping::latestSourceProject();
+            $mapping = ProjectMapping::activeSource();
             if (! $mapping) {
-                $this->error('No project mapping configured. Add one in Settings before running.');
+                $this->error('No active source project configured. Add one in Settings before running.');
 
                 return self::FAILURE;
             }
@@ -47,8 +47,6 @@ class ProcessSourceCommand extends Command
         $token = (string) $mapping->redcap_token;
 
         $this->info("Processing {$label}".($dryRun ? ' <comment>[dry-run — no writes]</comment>' : '').'…');
-
-        // ── Fetch ─────────────────────────────────────────────────────────────
 
         $this->line('  Fetching records from source…');
 
@@ -70,29 +68,6 @@ class ProcessSourceCommand extends Command
             return self::SUCCESS;
         }
 
-        // ── Group by student + semester ───────────────────────────────────────
-
-        $groups = [];
-        $skipped = ['missing_required_fields' => 0];
-
-        foreach ($records as $record) {
-            $student = trim((string) ($record['student'] ?? ''));
-            $semester = trim((string) ($record['semester'] ?? ''));
-
-            if ($student === '' || $semester === '') {
-                $skipped['missing_required_fields']++;
-
-                continue;
-            }
-
-            $groups["{$student}|{$semester}"][] = $record;
-        }
-
-        $groupCount = count($groups);
-        $this->line("  <info>{$groupCount}</info> student-semester group(s) identified.");
-
-        // ── Load destination student map ──────────────────────────────────────
-
         $this->line('  Loading destination student map…');
 
         try {
@@ -104,7 +79,51 @@ class ProcessSourceCommand extends Command
             return self::FAILURE;
         }
 
-        // ── Process each group ────────────────────────────────────────────────
+        // Group records by student + 4-semester slot, derived from each scholar's cohort start.
+        $groups = [];
+        $skipped = [
+            'missing_required_fields' => 0,
+            'student_not_found' => 0,
+            'out_of_cohort_window' => 0,
+        ];
+
+        foreach ($records as $record) {
+            $student = trim((string) ($record['student'] ?? ''));
+            $semester = trim((string) ($record['semester'] ?? ''));
+            $dateLab = trim((string) ($record['date_lab'] ?? ''));
+
+            if ($student === '' || $semester === '' || $dateLab === '') {
+                $skipped['missing_required_fields']++;
+
+                continue;
+            }
+
+            $studentRecord = $studentMap[$student] ?? null;
+
+            if (! $studentRecord) {
+                $skipped['student_not_found']++;
+
+                continue;
+            }
+
+            $cohortTerm = trim((string) ($studentRecord['cohort_start_term'] ?? '')) ?: null;
+            $cohortYearRaw = trim((string) ($studentRecord['cohort_start_year'] ?? ''));
+            $cohortYear = $cohortYearRaw !== '' && ctype_digit($cohortYearRaw) ? (int) $cohortYearRaw : null;
+
+            $slot = SemesterSlot::compute($semester, $dateLab, $cohortTerm, $cohortYear);
+
+            if ($slot === null) {
+                $skipped['out_of_cohort_window']++;
+
+                continue;
+            }
+
+            $slotKey = SemesterSlot::slotKey($slot);
+            $groups["{$student}|{$slotKey}"][] = $record;
+        }
+
+        $groupCount = count($groups);
+        $this->line("  <info>{$groupCount}</info> student-slot group(s) identified.");
 
         $this->newLine();
         $bar = $this->output->createProgressBar($groupCount);
@@ -114,34 +133,22 @@ class ProcessSourceCommand extends Command
 
         $updated = 0;
         $failed = 0;
-        $notFound = 0;
-        $unknownSemester = 0;
 
         foreach ($groups as $key => $groupEvals) {
-            [$datatelId, $semesterCode] = explode('|', $key);
-            $semester = EvalAggregator::SEMESTER_MAP[$semesterCode] ?? null;
-
-            if ($semester === null) {
-                $unknownSemester++;
-                $bar->setMessage("skipped unknown semester '{$semesterCode}'");
-                $bar->advance();
-
-                continue;
-            }
+            [$datatelId, $slotKey] = explode('|', $key);
 
             $studentRecord = $studentMap[$datatelId] ?? null;
 
             if (! $studentRecord) {
-                $notFound++;
-                $bar->setMessage("student {$datatelId} not found in destination");
+                // Should not happen — we filtered above — but be defensive.
                 $bar->advance();
 
                 continue;
             }
 
-            $aggregates = EvalAggregator::aggregate($groupEvals, $semester);
+            $aggregates = EvalAggregator::aggregate($groupEvals, $slotKey);
 
-            $bar->setMessage("{$studentRecord['record_id']} · {$semester} · {$aggregates['by_category']['teaching']['nu']}T/{$aggregates['by_category']['clinic']['nu']}C/{$aggregates['by_category']['research']['nu']}R/{$aggregates['by_category']['didactics']['nu']}D evals");
+            $bar->setMessage("{$studentRecord['record_id']} · {$slotKey} · {$aggregates['by_category']['teaching']['nu']}T/{$aggregates['by_category']['clinic']['nu']}C/{$aggregates['by_category']['research']['nu']}R/{$aggregates['by_category']['didactics']['nu']}D evals");
 
             if (! $dryRun) {
                 try {
@@ -154,7 +161,7 @@ class ProcessSourceCommand extends Command
                     $failed++;
                     Log::error('omm:process-source update failed', [
                         'datatelid' => $datatelId,
-                        'semester' => $semester,
+                        'slot' => $slotKey,
                         'error' => $e->getMessage(),
                     ]);
                 }
@@ -169,24 +176,20 @@ class ProcessSourceCommand extends Command
         $bar->finish();
         $this->newLine(2);
 
-        // ── Invalidate caches ─────────────────────────────────────────────────
-
         if (! $dryRun) {
             Cache::forget('dashboard:stats');
             Cache::forget('destination:all_students');
         }
 
-        // ── Summary ───────────────────────────────────────────────────────────
-
         $this->table(
             ['Metric', 'Count'],
             [
                 ['Source records', $total],
-                ['Student-semester groups', $groupCount],
+                ['Student-slot groups', $groupCount],
                 [$dryRun ? 'Would update' : 'Updated', $updated],
                 ['Failed', $failed],
-                ['Student not found', $notFound],
-                ['Unknown semester', $unknownSemester],
+                ['Student not found', $skipped['student_not_found']],
+                ['Out of cohort window', $skipped['out_of_cohort_window']],
                 ['Missing required fields', $skipped['missing_required_fields']],
             ],
         );

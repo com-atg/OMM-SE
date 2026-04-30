@@ -7,21 +7,24 @@ use App\Models\User;
 use App\Services\RedcapDestinationService;
 use Illuminate\Support\Facades\Cache;
 
-it('imports scholars from redcap and writes progress to cache', function () {
-    $mapping = ProjectMapping::factory()->create([
-        'graduation_year' => 2029,
+it('imports new scholars and refreshes existing users on each run', function () {
+    $mapping = ProjectMapping::factory()->active()->create();
+
+    User::factory()->create([
+        'email' => 'existing@example.com',
+        'name' => 'Outdated Name',
+        'batch' => null,
+        'is_active' => true,
     ]);
 
-    User::factory()->create(['email' => 'existing@example.com']);
-
     $records = [
-        ['record_id' => '1', 'first_name' => 'Alice', 'goes_by' => '', 'last_name' => 'Andrews', 'email' => 'alice@example.com'],
-        ['record_id' => '2', 'first_name' => 'Bob', 'goes_by' => 'Bobby', 'last_name' => 'Brown', 'email' => 'EXISTING@example.com'],
+        ['record_id' => '1', 'first_name' => 'Alice', 'goes_by' => '', 'last_name' => 'Andrews', 'email' => 'alice@example.com', 'cohort_start_term' => 'Fall', 'cohort_start_year' => '2026', 'batch' => '12', 'is_active' => '1'],
+        ['record_id' => '2', 'first_name' => 'Bob', 'goes_by' => 'Bobby', 'last_name' => 'Brown', 'email' => 'EXISTING@example.com', 'batch' => '11', 'is_active' => '0'],
         ['record_id' => '3', 'first_name' => 'Carol', 'goes_by' => '', 'last_name' => 'Carter', 'email' => ''],
     ];
 
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('getStudentsByGraduationYear')->with(2029)->andReturn($records);
+    $destination->shouldReceive('getAllStudentRecords')->andReturn($records);
     app()->instance(RedcapDestinationService::class, $destination);
 
     $jobId = 'test-job-id';
@@ -35,18 +38,28 @@ it('imports scholars from redcap and writes progress to cache', function () {
         ->and($state['total_fetched'])->toBe(3)
         ->and($state['processed'])->toBe(3)
         ->and(count($state['created']))->toBe(1)
-        ->and(count($state['skipped']))->toBe(1)
+        ->and(count($state['updated']))->toBe(1)
         ->and(count($state['missing_email']))->toBe(1)
-        ->and($state['created'][0]['email'])->toBe('alice@example.com');
+        ->and($state['created'][0]['email'])->toBe('alice@example.com')
+        ->and($state['updated'][0]['email'])->toBe('existing@example.com');
 
     $alice = User::where('email', 'alice@example.com')->first();
     expect($alice)->not->toBeNull()
         ->and($alice->role)->toBe(Role::Student)
-        ->and($alice->name)->toBe('Alice Andrews');
+        ->and($alice->name)->toBe('Alice Andrews')
+        ->and($alice->cohort_start_term)->toBe('Fall')
+        ->and($alice->cohort_start_year)->toBe(2026)
+        ->and($alice->batch)->toBe('12')
+        ->and($alice->is_active)->toBeTrue();
+
+    $existing = User::where('email', 'existing@example.com')->first();
+    expect($existing->name)->toBe('Bobby Brown')
+        ->and($existing->batch)->toBe('11')
+        ->and($existing->is_active)->toBeFalse();
 });
 
 it('buckets records with malformed emails into failed without aborting the import', function () {
-    $mapping = ProjectMapping::factory()->create(['graduation_year' => 2030]);
+    $mapping = ProjectMapping::factory()->create();
 
     $records = [
         ['record_id' => '1', 'first_name' => 'Alice', 'goes_by' => '', 'last_name' => 'Andrews', 'email' => 'alice@example.com'],
@@ -55,7 +68,7 @@ it('buckets records with malformed emails into failed without aborting the impor
     ];
 
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('getStudentsByGraduationYear')->with(2030)->andReturn($records);
+    $destination->shouldReceive('getAllStudentRecords')->andReturn($records);
     app()->instance(RedcapDestinationService::class, $destination);
 
     $jobId = 'invalid-email-job';
@@ -89,7 +102,7 @@ it('marks the cache state as failed when the destination service throws', functi
     $mapping = ProjectMapping::factory()->create();
 
     $destination = mock(RedcapDestinationService::class);
-    $destination->shouldReceive('getStudentsByGraduationYear')->andThrow(new RuntimeException('REDCap unreachable'));
+    $destination->shouldReceive('getAllStudentRecords')->andThrow(new RuntimeException('REDCap unreachable'));
     app()->instance(RedcapDestinationService::class, $destination);
 
     $jobId = 'failed-job';

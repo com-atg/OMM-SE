@@ -53,10 +53,10 @@ function makeStudentRecord(array $overrides = []): array
     ], $overrides);
 }
 
-function makeAggregates(string $semester = 'spring'): array
+function makeAggregates(string $slotKey = 'sem1'): array
 {
     return [
-        'semester' => $semester,
+        'slot_key' => $slotKey,
         'by_category' => [
             'teaching' => ['nu' => 1, 'avg' => 90.00],
             'clinic' => ['nu' => 0, 'avg' => null],
@@ -73,7 +73,9 @@ test('subject includes category label for each eval_category', function (string 
     $mailable = new EvaluationNotification(
         evalRecord: makeEvalRecord($category),
         studentRecord: makeStudentRecord(),
-        semester: 'spring',
+        slotKey: 'sem1',
+        slotLabel: 'Spring 2026',
+        slotIndex: 1,
         aggregates: makeAggregates(),
         evalCategory: $category,
     );
@@ -125,7 +127,9 @@ test('content uses the evaluation markdown view', function () {
     $mailable = new EvaluationNotification(
         evalRecord: makeEvalRecord(),
         studentRecord: makeStudentRecord(),
-        semester: 'spring',
+        slotKey: 'sem1',
+        slotLabel: 'Spring 2026',
+        slotIndex: 1,
         aggregates: makeAggregates(),
         evalCategory: 'A',
     );
@@ -137,7 +141,9 @@ test('content passes criteria scoreScale categoryLabel and scoreField to view', 
     $mailable = new EvaluationNotification(
         evalRecord: makeEvalRecord('A'),
         studentRecord: makeStudentRecord(),
-        semester: 'spring',
+        slotKey: 'sem1',
+        slotLabel: 'Spring 2026',
+        slotIndex: 1,
         aggregates: makeAggregates(),
         evalCategory: 'A',
     );
@@ -158,7 +164,9 @@ test('goes_by is used as greeting when set', function () {
     $mailable = new EvaluationNotification(
         evalRecord: makeEvalRecord(),
         studentRecord: makeStudentRecord(['goes_by' => 'Cat']),
-        semester: 'spring',
+        slotKey: 'sem1',
+        slotLabel: 'Spring 2026',
+        slotIndex: 1,
         aggregates: makeAggregates(),
         evalCategory: 'A',
     );
@@ -172,7 +180,9 @@ test('first_name is used as greeting when goes_by is empty', function () {
     $mailable = new EvaluationNotification(
         evalRecord: makeEvalRecord(),
         studentRecord: makeStudentRecord(['goes_by' => '', 'first_name' => 'Catherine']),
-        semester: 'spring',
+        slotKey: 'sem1',
+        slotLabel: 'Spring 2026',
+        slotIndex: 1,
         aggregates: makeAggregates(),
         evalCategory: 'A',
     );
@@ -186,7 +196,9 @@ test('faculty feedback panel is shown when comments are present', function () {
     $mailable = new EvaluationNotification(
         evalRecord: makeEvalRecord('A', ['comments' => 'Outstanding performance!']),
         studentRecord: makeStudentRecord(),
-        semester: 'spring',
+        slotKey: 'sem1',
+        slotLabel: 'Spring 2026',
+        slotIndex: 1,
         aggregates: makeAggregates(),
         evalCategory: 'A',
     );
@@ -200,7 +212,9 @@ test('faculty feedback panel is absent when comments are empty', function () {
     $mailable = new EvaluationNotification(
         evalRecord: makeEvalRecord('A', ['comments' => '']),
         studentRecord: makeStudentRecord(),
-        semester: 'spring',
+        slotKey: 'sem1',
+        slotLabel: 'Spring 2026',
+        slotIndex: 1,
         aggregates: makeAggregates(),
         evalCategory: 'A',
     );
@@ -214,7 +228,9 @@ test('renders evaluation date when redcap sends iso date format', function () {
     $mailable = new EvaluationNotification(
         evalRecord: makeEvalRecord('A', ['date_lab' => '2026-04-22']),
         studentRecord: makeStudentRecord(),
-        semester: 'spring',
+        slotKey: 'sem1',
+        slotLabel: 'Spring 2026',
+        slotIndex: 1,
         aggregates: makeAggregates(),
         evalCategory: 'A',
     );
@@ -224,7 +240,7 @@ test('renders evaluation date when redcap sends iso date format', function () {
 
 test('semester summary table shows correct category averages', function () {
     $aggregates = [
-        'semester' => 'spring',
+        'slot_key' => 'sem1',
         'by_category' => [
             'teaching' => ['nu' => 2, 'avg' => 88.50],
             'clinic' => ['nu' => 1, 'avg' => 75.00],
@@ -237,7 +253,9 @@ test('semester summary table shows correct category averages', function () {
     $rendered = (new EvaluationNotification(
         evalRecord: makeEvalRecord(),
         studentRecord: makeStudentRecord(),
-        semester: 'spring',
+        slotKey: 'sem1',
+        slotLabel: 'Spring 2026',
+        slotIndex: 1,
         aggregates: $aggregates,
         evalCategory: 'A',
     ))->render();
@@ -253,7 +271,9 @@ test('returns no attachments', function () {
     $mailable = new EvaluationNotification(
         evalRecord: makeEvalRecord(),
         studentRecord: makeStudentRecord(),
-        semester: 'spring',
+        slotKey: 'sem1',
+        slotLabel: 'Spring 2026',
+        slotIndex: 1,
         aggregates: makeAggregates(),
         evalCategory: 'A',
     );

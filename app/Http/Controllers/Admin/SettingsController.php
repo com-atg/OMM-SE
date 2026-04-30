@@ -4,31 +4,30 @@ namespace App\Http\Controllers\Admin;
 
 use App\Enums\Role;
 use App\Http\Controllers\Controller;
-use App\Jobs\ProcessSourceProjectJob;
 use App\Mail\EvaluationNotification;
 use App\Models\AppSetting;
 use App\Models\ProjectMapping;
 use App\Models\User;
 use App\Services\MailTemplateRenderer;
 use App\Services\RedcapDestinationService;
+use App\Support\SemesterSlot;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
-use Symfony\Component\HttpFoundation\Response;
 
 class SettingsController extends Controller
 {
     public function index(): View
     {
         $projectMappings = ProjectMapping::query()
-            ->orderByDesc('graduation_year')
-            ->orderByDesc('academic_year')
+            ->orderByDesc('is_active')
+            ->orderByDesc('id')
             ->get();
         $trashedProjectMappings = ProjectMapping::onlyTrashed()
-            ->orderByDesc('graduation_year')
+            ->orderByDesc('id')
             ->get();
 
         $emailTemplateSetting = null;
@@ -42,7 +41,7 @@ class SettingsController extends Controller
         }
 
         return view('admin.settings.index', [
-            'currentProject' => ProjectMapping::current(),
+            'currentProject' => ProjectMapping::activeSource(),
             'projectMappings' => $projectMappings,
             'trashedProjectMappings' => $trashedProjectMappings,
             'emailTemplateSetting' => $emailTemplateSetting,
@@ -62,34 +61,33 @@ class SettingsController extends Controller
         }
     }
 
-    public function newAcademicYear(): View
+    public function create(): View
     {
-        $latestGraduationYear = (int) ProjectMapping::query()->max('graduation_year');
-        $nextGraduationYear = $latestGraduationYear > 0
-            ? $latestGraduationYear + 1
-            : 2028;
-
-        return view('admin.settings.new-academic-year', [
-            'nextGraduationYear' => $nextGraduationYear,
-        ]);
+        return view('admin.settings.new-source-project');
     }
 
     public function store(Request $request): RedirectResponse
     {
-        $projectMapping = ProjectMapping::create($this->validatedProjectMapping($request));
+        $validated = $this->validatedProjectMapping($request);
+        $validated['is_active'] = true;
+
+        DB::transaction(function () use ($validated, &$projectMapping): void {
+            ProjectMapping::query()->where('is_active', true)->update(['is_active' => false]);
+            $projectMapping = ProjectMapping::create($validated);
+        });
 
         return redirect()
             ->route('admin.settings.project-mappings.import-students', $projectMapping)
-            ->with('status', 'Project mapping created. Importing scholars from REDCap...');
+            ->with('status', 'Source project created and marked active. Importing scholars from REDCap...');
     }
 
     public function importStudents(ProjectMapping $projectMapping, RedcapDestinationService $destination): View
     {
         Cache::forget('destination:all_students');
-        $records = $destination->getStudentsByGraduationYear($projectMapping->graduation_year);
+        $records = $destination->getAllStudentRecords();
 
         $created = [];
-        $skipped = [];
+        $updated = [];
         $missingEmail = [];
 
         foreach ($records as $record) {
@@ -109,27 +107,49 @@ class SettingsController extends Controller
                 continue;
             }
 
-            if (User::withTrashed()->where('email', $email)->exists()) {
-                $skipped[] = ['email' => $email, 'name' => $name ?: $email];
+            $cohortTerm = $this->cohortTermFromRecord($record);
+            $cohortYear = $this->cohortYearFromRecord($record);
+            $batch = $this->batchFromRecord($record);
+            $isActive = $this->isActiveFromRecord($record);
+            $recordId = (string) ($record['record_id'] ?? '') ?: null;
+            $finalName = $name !== '' ? $name : $email;
+
+            $existing = User::withTrashed()->where('email', $email)->first();
+
+            if ($existing !== null) {
+                $existing->fill([
+                    'name' => $finalName,
+                    'redcap_record_id' => $recordId,
+                    'cohort_start_term' => $cohortTerm,
+                    'cohort_start_year' => $cohortYear,
+                    'batch' => $batch,
+                    'is_active' => $isActive,
+                ])->save();
+
+                $updated[] = ['email' => $email, 'name' => $finalName];
 
                 continue;
             }
 
             User::create([
                 'email' => $email,
-                'name' => $name !== '' ? $name : $email,
+                'name' => $finalName,
                 'role' => Role::Student,
-                'redcap_record_id' => (string) ($record['record_id'] ?? '') ?: null,
+                'redcap_record_id' => $recordId,
+                'cohort_start_term' => $cohortTerm,
+                'cohort_start_year' => $cohortYear,
+                'batch' => $batch,
+                'is_active' => $isActive,
             ]);
 
-            $created[] = ['email' => $email, 'name' => $name ?: $email];
+            $created[] = ['email' => $email, 'name' => $finalName];
         }
 
         return view('admin.settings.import-students-result', [
             'projectMapping' => $projectMapping,
             'totalFetched' => count($records),
             'created' => $created,
-            'skipped' => $skipped,
+            'updated' => $updated,
             'missingEmail' => $missingEmail,
         ]);
     }
@@ -153,7 +173,7 @@ class SettingsController extends Controller
 
         return redirect()
             ->route('admin.settings.index')
-            ->with('status', 'Project mapping updated.');
+            ->with('status', 'Source project updated.');
     }
 
     public function destroy(ProjectMapping $projectMapping): RedirectResponse
@@ -162,7 +182,7 @@ class SettingsController extends Controller
 
         return redirect()
             ->route('admin.settings.index')
-            ->with('status', 'Project mapping deleted.');
+            ->with('status', 'Source project mapping deleted.');
     }
 
     public function restore(int $id): RedirectResponse
@@ -172,41 +192,23 @@ class SettingsController extends Controller
 
         return redirect()
             ->route('admin.settings.index')
-            ->with('status', 'Project mapping restored.');
+            ->with('status', 'Source project mapping restored.');
     }
 
-    public function process(ProjectMapping $projectMapping): View|Response
+    public function activate(ProjectMapping $projectMapping): RedirectResponse
     {
-        $jobId = (string) Str::uuid();
-        $pid = (string) $projectMapping->redcap_pid;
+        DB::transaction(function () use ($projectMapping): void {
+            ProjectMapping::query()->where('is_active', true)->update(['is_active' => false]);
+            $projectMapping->update(['is_active' => true]);
+        });
 
-        Cache::put(ProcessSourceProjectJob::cacheKey($jobId), [
-            'job_id' => $jobId,
-            'pid' => $pid,
-            'status' => 'pending',
-            'started_at' => now()->toIso8601String(),
-            'finished_at' => null,
-            'total_records' => 0,
-            'total_groups' => 0,
-            'processed_groups' => 0,
-            'updated' => 0,
-            'unchanged' => 0,
-            'failed' => 0,
-            'skip_reasons' => [],
-            'error' => null,
-        ], now()->addMinutes(ProcessSourceProjectJob::TTL_MINUTES));
-
-        ProcessSourceProjectJob::dispatchAfterResponse($jobId, $pid, $projectMapping->redcap_token);
-
-        return view('process', [
-            'pid' => "{$projectMapping->displayName()} / PID {$pid}",
-            'jobId' => $jobId,
-            'active' => 'settings',
-        ]);
+        return redirect()
+            ->route('admin.settings.index')
+            ->with('status', "PID {$projectMapping->redcap_pid} is now the active source project.");
     }
 
     /**
-     * @return array{academic_year: string, graduation_year: int, redcap_pid: int, redcap_token?: string}
+     * @return array{redcap_pid: int, redcap_token?: string}
      */
     private function validatedProjectMapping(Request $request, ?ProjectMapping $projectMapping = null): array
     {
@@ -216,23 +218,6 @@ class SettingsController extends Controller
             : ['nullable', 'string', 'max:255'];
 
         return $request->validate([
-            'academic_year' => [
-                'required',
-                'string',
-                'regex:/^\d{4}-\d{4}$/',
-                'max:9',
-                Rule::unique('project_mappings', 'academic_year')
-                    ->whereNull('deleted_at')
-                    ->ignore($projectMappingId),
-            ],
-            'graduation_year' => [
-                'required',
-                'integer',
-                'between:2000,2100',
-                Rule::unique('project_mappings', 'graduation_year')
-                    ->whereNull('deleted_at')
-                    ->ignore($projectMappingId),
-            ],
             'redcap_pid' => [
                 'required',
                 'integer',
@@ -243,5 +228,39 @@ class SettingsController extends Controller
             ],
             'redcap_token' => $tokenRules,
         ]);
+    }
+
+    private function cohortTermFromRecord(array $record): ?string
+    {
+        $term = trim((string) ($record['cohort_start_term'] ?? ''));
+
+        return in_array($term, SemesterSlot::TERMS, true) ? $term : null;
+    }
+
+    private function cohortYearFromRecord(array $record): ?int
+    {
+        $year = trim((string) ($record['cohort_start_year'] ?? ''));
+
+        return ctype_digit($year) ? (int) $year : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $record
+     */
+    private function batchFromRecord(array $record): ?string
+    {
+        $batch = trim((string) ($record['batch'] ?? ''));
+
+        return $batch !== '' ? $batch : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $record
+     */
+    private function isActiveFromRecord(array $record): bool
+    {
+        $raw = trim((string) ($record['is_active'] ?? '1'));
+
+        return $raw !== '0';
     }
 }

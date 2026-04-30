@@ -30,8 +30,6 @@ class ProcessController extends Controller
             abort(404, "No project mapping found for PID {$pid}.");
         }
 
-        $token = (string) $mapping->redcap_token;
-
         $jobId = (string) Str::uuid();
 
         Cache::put(ProcessSourceProjectJob::cacheKey($jobId), [
@@ -50,7 +48,7 @@ class ProcessController extends Controller
             'error' => null,
         ], now()->addMinutes(ProcessSourceProjectJob::TTL_MINUTES));
 
-        ProcessSourceProjectJob::dispatchAfterResponse($jobId, $pid, $token);
+        ProcessSourceProjectJob::dispatchAfterResponse($jobId, $pid, $mapping->id);
 
         return view('process', [
             'pid' => $pid,
@@ -74,7 +72,6 @@ class ProcessController extends Controller
             'No project mapping configured. Add one in Settings before running.'
         );
 
-        $token = (string) $mapping->redcap_token;
         $pid = (string) $mapping->redcap_pid;
 
         $jobId = (string) Str::uuid();
@@ -95,7 +92,7 @@ class ProcessController extends Controller
             'error' => null,
         ], now()->addMinutes(ProcessSourceProjectJob::TTL_MINUTES));
 
-        ProcessSourceProjectJob::dispatchAfterResponse($jobId, $pid, $token);
+        ProcessSourceProjectJob::dispatchAfterResponse($jobId, $pid, $mapping->id);
 
         return view('process', [
             'pid' => $mapping->displayName().' / PID '.$pid,

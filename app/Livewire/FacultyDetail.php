@@ -7,7 +7,7 @@ use App\Models\ProjectMapping;
 use App\Models\User;
 use App\Services\RedcapDestinationService;
 use App\Services\RedcapSourceService;
-use App\Support\EvalAggregator;
+use App\Support\SemesterSlot;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -22,47 +22,33 @@ class FacultyDetail extends Component
 
     public bool $detailModalOpen = false;
 
-    public ?int $selectedGraduationYear = null;
+    public bool $activeOnly = true;
 
-    public const SESSION_KEY = 'academic_year_filter';
+    public ?string $selectedBatch = null;
 
     public function mount(): void
     {
-        $this->selectedGraduationYear = $this->resolveInitialGraduationYear();
+        $this->activeOnly = (bool) session(Dashboard::SESSION_KEY_ACTIVE_ONLY, true);
+        $batch = (string) session(Dashboard::SESSION_KEY_BATCH, '');
+        $this->selectedBatch = $batch !== '' ? $batch : null;
     }
 
-    public function updatedSelectedGraduationYear(): void
+    public function updatedActiveOnly(): void
     {
-        session([self::SESSION_KEY => $this->selectedGraduationYear]);
-        $this->selectedFaculty = '';
-        $this->selectedRecordId = null;
-        $this->detailModalOpen = false;
+        session([Dashboard::SESSION_KEY_ACTIVE_ONLY => $this->activeOnly]);
+        $this->resetSelection();
+    }
+
+    public function updatedSelectedBatch(): void
+    {
+        session([Dashboard::SESSION_KEY_BATCH => $this->selectedBatch ?? '']);
+        $this->resetSelection();
     }
 
     public function updatedSelectedFaculty(): void
     {
         $this->selectedRecordId = null;
         $this->detailModalOpen = false;
-    }
-
-    private function resolveInitialGraduationYear(): ?int
-    {
-        $available = ProjectMapping::query()
-            ->orderByDesc('graduation_year')
-            ->pluck('graduation_year')
-            ->map(fn ($year) => (int) $year)
-            ->all();
-
-        if ($available === []) {
-            return null;
-        }
-
-        $stored = (int) session(self::SESSION_KEY, 0);
-        if ($stored > 0 && in_array($stored, $available, true)) {
-            return $stored;
-        }
-
-        return $available[0];
     }
 
     public function openEvaluation(string $recordId): void
@@ -76,13 +62,15 @@ class FacultyDetail extends Component
         $user = Auth::user();
         abort_unless($user instanceof User && $user->canViewFacultyDetail(), 403);
 
-        $availableMappings = ProjectMapping::query()
-            ->orderByDesc('graduation_year')
-            ->get(['id', 'academic_year', 'graduation_year']);
+        $destination = app(RedcapDestinationService::class);
+        $availableBatches = $destination->availableBatches();
 
-        $mapping = $this->selectedGraduationYear !== null
-            ? ProjectMapping::byGraduationYear($this->selectedGraduationYear)
-            : ProjectMapping::latestSourceProject();
+        if ($this->selectedBatch !== null && ! in_array($this->selectedBatch, $availableBatches, true)) {
+            $this->selectedBatch = null;
+            session([Dashboard::SESSION_KEY_BATCH => '']);
+        }
+
+        $mapping = ProjectMapping::activeSource();
         $sourceToken = (string) ($mapping?->redcap_token ?? '');
         $sourceRecords = $sourceToken === ''
             ? []
@@ -95,7 +83,9 @@ class FacultyDetail extends Component
                 ->all();
         }
 
-        $studentMap = app(RedcapDestinationService::class)->studentMapByDatatelId();
+        $studentMap = $this->filteredStudentMap($destination->studentMapByDatatelId());
+        $sourceRecords = $this->filterSourceRecordsByStudent($sourceRecords, $studentMap);
+
         $displayFaculty = $user->isFaculty()
             ? $this->facultyRoster($sourceRecords)[0] ?? $user->name
             : $this->selectedFaculty;
@@ -110,8 +100,53 @@ class FacultyDetail extends Component
             'categoryCounts' => collect($evaluations)->countBy('category_label')->sortKeys(),
             'displayFaculty' => $displayFaculty,
             'lockSelection' => $user->isFaculty(),
-            'availableMappings' => $availableMappings,
+            'availableBatches' => $availableBatches,
         ]);
+    }
+
+    private function resetSelection(): void
+    {
+        $this->selectedFaculty = '';
+        $this->selectedRecordId = null;
+        $this->detailModalOpen = false;
+    }
+
+    /**
+     * @param  array<string,array<string,mixed>>  $studentMap
+     * @return array<string,array<string,mixed>>
+     */
+    private function filteredStudentMap(array $studentMap): array
+    {
+        return collect($studentMap)
+            ->filter(function (array $record): bool {
+                if ($this->activeOnly && (string) ($record['is_active'] ?? '') !== '1') {
+                    return false;
+                }
+
+                if ($this->selectedBatch !== null && trim((string) ($record['batch'] ?? '')) !== $this->selectedBatch) {
+                    return false;
+                }
+
+                return true;
+            })
+            ->all();
+    }
+
+    /**
+     * @param  array<int,array<string,mixed>>  $records
+     * @param  array<string,array<string,mixed>>  $studentMap
+     * @return array<int,array<string,mixed>>
+     */
+    private function filterSourceRecordsByStudent(array $records, array $studentMap): array
+    {
+        return collect($records)
+            ->filter(function (array $record) use ($studentMap): bool {
+                $studentId = trim((string) ($record['student'] ?? ''));
+
+                return $studentId !== '' && isset($studentMap[$studentId]);
+            })
+            ->values()
+            ->all();
     }
 
     /**
@@ -204,11 +239,9 @@ class FacultyDetail extends Component
 
     private function semesterLabel(string $semester): string
     {
-        $slug = EvalAggregator::SEMESTER_MAP[$semester] ?? '';
-
-        return match ($slug) {
-            'spring' => 'Spring',
-            'fall' => 'Fall',
+        return match (SemesterSlot::SOURCE_SEMESTER_TERM[$semester] ?? '') {
+            'Spring' => 'Spring',
+            'Fall' => 'Fall',
             default => $semester !== '' ? "Semester {$semester}" : 'Unknown Semester',
         };
     }

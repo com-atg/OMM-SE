@@ -20,37 +20,6 @@
             @method('PATCH')
 
             <div>
-                <label for="academic_year" class="mb-1 block text-xs font-bold uppercase tracking-[0.22em] text-slate-500">Academic Year</label>
-                <input
-                    type="text"
-                    name="academic_year"
-                    id="academic_year"
-                    value="{{ old('academic_year', $projectMapping->academic_year) }}"
-                    required
-                    class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100 @error('academic_year') border-red-400 focus:border-red-400 focus:ring-red-100 @enderror"
-                >
-                @error('academic_year')
-                    <p class="mt-1 text-xs font-medium text-red-600">{{ $message }}</p>
-                @enderror
-            </div>
-
-            <div>
-                <label for="graduation_year" class="mb-1 block text-xs font-bold uppercase tracking-[0.22em] text-slate-500">Graduating Year</label>
-                <input
-                    type="text"
-                    name="graduation_year"
-                    id="graduation_year"
-                    value="{{ old('graduation_year', $projectMapping->graduation_year) }}"
-                    required
-                    inputmode="numeric"
-                    class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100 @error('graduation_year') border-red-400 focus:border-red-400 focus:ring-red-100 @enderror"
-                >
-                @error('graduation_year')
-                    <p class="mt-1 text-xs font-medium text-red-600">{{ $message }}</p>
-                @enderror
-            </div>
-
-            <div>
                 <label for="redcap_pid" class="mb-1 block text-xs font-bold uppercase tracking-[0.22em] text-slate-500">REDCap PID</label>
                 <input
                     type="text"

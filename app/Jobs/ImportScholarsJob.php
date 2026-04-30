@@ -6,6 +6,7 @@ use App\Enums\Role;
 use App\Models\ProjectMapping;
 use App\Models\User;
 use App\Services\RedcapDestinationService;
+use App\Support\SemesterSlot;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
@@ -49,13 +50,13 @@ class ImportScholarsJob implements ShouldQueue
             $projectMapping = ProjectMapping::findOrFail($this->projectMappingId);
 
             Cache::forget('destination:all_students');
-            $records = $destination->getStudentsByGraduationYear($projectMapping->graduation_year);
+            $records = $destination->getAllStudentRecords();
 
             $state['status'] = 'running';
             $state['total_fetched'] = count($records);
             $state['processed'] = 0;
             $state['created'] = [];
-            $state['skipped'] = [];
+            $state['updated'] = [];
             $state['missing_email'] = [];
             $state['failed'] = [];
             $this->putState($cacheKey, $state);
@@ -127,20 +128,41 @@ class ImportScholarsJob implements ShouldQueue
             return;
         }
 
-        if (User::withTrashed()->where('email', $email)->exists()) {
-            $state['skipped'][] = ['email' => $email, 'name' => $name ?: $email];
-
-            return;
-        }
-
         try {
+            $cohortTerm = $this->cohortTerm($record);
+            $cohortYear = $this->cohortYear($record);
+            $batch = $this->batch($record);
+            $isActive = $this->isActive($record);
+            $finalName = $name !== '' ? $name : $email;
+
+            $existing = User::withTrashed()->where('email', $email)->first();
+
+            if ($existing !== null) {
+                $existing->fill([
+                    'name' => $finalName,
+                    'redcap_record_id' => $recordId !== '' ? $recordId : null,
+                    'cohort_start_term' => $cohortTerm,
+                    'cohort_start_year' => $cohortYear,
+                    'batch' => $batch,
+                    'is_active' => $isActive,
+                ])->save();
+
+                $state['updated'][] = ['email' => $email, 'name' => $finalName];
+
+                return;
+            }
+
             User::create([
                 'email' => $email,
-                'name' => $name !== '' ? $name : $email,
+                'name' => $finalName,
                 'role' => Role::Student,
                 'redcap_record_id' => $recordId !== '' ? $recordId : null,
+                'cohort_start_term' => $cohortTerm,
+                'cohort_start_year' => $cohortYear,
+                'batch' => $batch,
+                'is_active' => $isActive,
             ]);
-            $state['created'][] = ['email' => $email, 'name' => $name ?: $email];
+            $state['created'][] = ['email' => $email, 'name' => $finalName];
         } catch (\Throwable $e) {
             Log::warning('ImportScholarsJob: failed to create user', [
                 'email' => $email,
@@ -169,6 +191,50 @@ class ImportScholarsJob implements ShouldQueue
     }
 
     /**
+     * @param  array<string, mixed>  $record
+     */
+    private function cohortTerm(array $record): ?string
+    {
+        $term = trim((string) ($record['cohort_start_term'] ?? ''));
+
+        return in_array($term, SemesterSlot::TERMS, true) ? $term : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $record
+     */
+    private function cohortYear(array $record): ?int
+    {
+        $year = trim((string) ($record['cohort_start_year'] ?? ''));
+
+        return ctype_digit($year) ? (int) $year : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $record
+     */
+    private function batch(array $record): ?string
+    {
+        $batch = trim((string) ($record['batch'] ?? ''));
+
+        return $batch !== '' ? $batch : null;
+    }
+
+    /**
+     * REDCap returns checkbox/yesno values as the strings "1"/"0" or empty.
+     * Treat anything other than an explicit "0" as active so a missing field
+     * defaults to true rather than silently deactivating the user.
+     *
+     * @param  array<string, mixed>  $record
+     */
+    private function isActive(array $record): bool
+    {
+        $raw = trim((string) ($record['is_active'] ?? '1'));
+
+        return $raw !== '0';
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public static function initialState(string $jobId, int $projectMappingId): array
@@ -182,7 +248,7 @@ class ImportScholarsJob implements ShouldQueue
             'total_fetched' => 0,
             'processed' => 0,
             'created' => [],
-            'skipped' => [],
+            'updated' => [],
             'missing_email' => [],
             'failed' => [],
             'error' => null,

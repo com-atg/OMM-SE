@@ -3,13 +3,14 @@
 namespace App\Services;
 
 use App\Models\Redcap_lib;
+use App\Support\SemesterSlot;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
 /**
- * Wraps Redcap_lib for source evaluation projects. Source projects are recreated
- * each academic year; callers must resolve the per-AY token from project_mappings
- * and pass it explicitly to every method.
+ * Wraps Redcap_lib for the shared source evaluation project. The active source
+ * project's token is resolved from project_mappings (single active row) and
+ * passed explicitly to every method.
  */
 class RedcapSourceService
 {
@@ -64,18 +65,22 @@ class RedcapSourceService
     }
 
     /**
-     * Fetch all completed evaluation records for a given student (datatelid) and semester.
+     * Fetch all completed evaluation records for a given student (datatelid),
+     * semester code, and calendar year of [date_lab]. Year filtering happens in
+     * PHP because [date_lab] is a free-form text field.
+     *
      * $datatelId is the raw value from the source 'student' SQL field (numeric datatelid).
-     * semester is the raw coded value ('1' = Spring, '2' = Fall).
-     * Returns empty array if either value fails validation.
+     * $semester  is the raw coded value ('1' = Spring, '2' = Fall).
+     * $year      is the four-digit calendar year of the eval (matches year of [date_lab]).
+     * Returns empty array if any input fails validation.
      */
-    public function getStudentEvals(string $datatelId, string $semester, string $token): array
+    public function getStudentEvals(string $datatelId, string $semester, int $year, string $token): array
     {
         if (! preg_match('/^\d+$/', $datatelId) || ! preg_match('/^[12]$/', $semester)) {
             return [];
         }
 
-        return Redcap_lib::exportRecords(
+        $records = Redcap_lib::exportRecords(
             format: 'json',
             type: 'flat',
             rawOrLabel: 'raw',
@@ -84,6 +89,15 @@ class RedcapSourceService
             url: $this->url,
             token: $token,
         );
+
+        if (! is_array($records)) {
+            return [];
+        }
+
+        return array_values(array_filter(
+            $records,
+            fn (array $record): bool => SemesterSlot::yearFromDate((string) ($record['date_lab'] ?? '')) === $year,
+        ));
     }
 
     /**

@@ -36,12 +36,12 @@ it('does not leave preview files in resources/views/emails after rendering', fun
     expect($after)->toEqual($before);
 });
 
-it('hides the email-template editor from admin users', function () {
+it('shows the email-template editor to admin users', function () {
     asAdmin();
 
     get(route('admin.settings.index'))
         ->assertOk()
-        ->assertDontSee('Edit email template');
+        ->assertSee('Edit email template');
 });
 
 it('shows the email-template editor to service users', function () {
@@ -50,8 +50,16 @@ it('shows the email-template editor to service users', function () {
         ->assertSee('Edit email template');
 });
 
-it('forbids non-service users from opening the email-template modal', function () {
+it('lets admin users open the email-template modal', function () {
     asAdmin();
+
+    Livewire\Livewire::test('email-template-modal')
+        ->call('open')
+        ->assertOk();
+});
+
+it('forbids students from opening the email-template modal', function () {
+    asStudent();
 
     Livewire\Livewire::test('email-template-modal')
         ->call('open')
@@ -64,7 +72,9 @@ it('uses the custom template via the renderer when one is saved', function () {
     $mail = new EvaluationNotification(
         evalRecord: EvaluationNotification::sampleViewData()['evalRecord'],
         studentRecord: EvaluationNotification::sampleViewData()['studentRecord'],
-        semester: 'spring',
+        slotKey: 'sem1',
+        slotLabel: 'Spring 2026',
+        slotIndex: 1,
         aggregates: EvaluationNotification::sampleViewData()['aggregates'],
         evalCategory: 'A',
     );
@@ -78,7 +88,9 @@ it('falls back to the default markdown view when no custom template is saved', f
     $mail = new EvaluationNotification(
         evalRecord: EvaluationNotification::sampleViewData()['evalRecord'],
         studentRecord: EvaluationNotification::sampleViewData()['studentRecord'],
-        semester: 'spring',
+        slotKey: 'sem1',
+        slotLabel: 'Spring 2026',
+        slotIndex: 1,
         aggregates: EvaluationNotification::sampleViewData()['aggregates'],
         evalCategory: 'A',
     );

@@ -14,7 +14,7 @@
 <x-mail::message>
 # {{ $categoryLabel }} Evaluation
 
-<p style="color:#71717a;font-size:14px;margin-top:-8px;">{{ $evalDate }} &nbsp;&middot;&nbsp; {{ ucfirst($semester) }} Semester &nbsp;&middot;&nbsp; {{ $facultyName }}</p>
+<p style="color:#71717a;font-size:14px;margin-top:-8px;">{{ $evalDate }} &nbsp;&middot;&nbsp; {{ $slotLabel ?? $semester }} (Semester {{ $slotIndex ?? '' }}) &nbsp;&middot;&nbsp; {{ $facultyName }}</p>
 
 Hi {{ $firstName }},
 
@@ -48,7 +48,7 @@ A new **{{ $categoryLabel }}** evaluation has just been added to your record. He
 </x-mail::panel>
 @endif
 
-## {{ ucfirst($semester) }} Semester Progress
+## {{ $slotLabel ?? $semester }} Progress
 
 <p style="color:#71717a;font-size:13px;margin-top:-12px;">As of {{ now()->toFormattedDateString() }} &nbsp;&middot;&nbsp; Each category contributes 25% to your semester score.</p>
 

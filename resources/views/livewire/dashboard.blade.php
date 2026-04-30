@@ -6,85 +6,96 @@
         : 0;
 
     $kpis = [
-        ['label' => 'Students', 'value' => number_format($stats['kpis']['total_students']), 'sub' => $stats['kpis']['students_evaluated'].' with evaluations', 'icon' => 'academic-cap', 'tone' => 'text-sky-700 bg-sky-50 ring-sky-100'],
-        ['label' => 'Evaluations', 'value' => number_format($stats['kpis']['total_evals']), 'sub' => 'Across spring and fall', 'icon' => 'clipboard-document-check', 'tone' => 'text-emerald-700 bg-emerald-50 ring-emerald-100'],
-        ['label' => 'Overall avg', 'value' => $overallAverage !== null ? number_format($overallAverage, 1) : '-', 'sub' => 'Weighted by evaluation count', 'icon' => 'chart-bar', 'tone' => 'text-amber-700 bg-amber-50 ring-amber-100'],
-        ['label' => 'Coverage', 'value' => $evaluatedPct.'%', 'sub' => number_format($stats['kpis']['students_without_evals']).' without evaluations', 'icon' => 'shield-check', 'tone' => 'text-indigo-700 bg-indigo-50 ring-indigo-100'],
+        ['label' => 'Students', 'value' => number_format($stats['kpis']['total_students']), 'sub' => $stats['kpis']['students_evaluated'].' with evaluations', 'icon' => 'academic-cap', 'tone' => 'text-sky-700 bg-sky-50/70 ring-sky-200/60'],
+        ['label' => 'Evaluations', 'value' => number_format($stats['kpis']['total_evals']), 'sub' => 'Across all 4 semesters', 'icon' => 'clipboard-document-check', 'tone' => 'text-emerald-700 bg-emerald-50/70 ring-emerald-200/60'],
+        ['label' => 'Overall avg', 'value' => $overallAverage !== null ? number_format($overallAverage, 1) : '-', 'sub' => 'Weighted by evaluation count', 'icon' => 'chart-bar', 'tone' => 'text-amber-700 bg-amber-50/70 ring-amber-200/60'],
+        ['label' => 'Coverage', 'value' => $evaluatedPct.'%', 'sub' => number_format($stats['kpis']['students_without_evals']).' without evaluations', 'icon' => 'shield-check', 'tone' => 'text-indigo-700 bg-indigo-50/70 ring-indigo-200/60'],
     ];
 
     $chartPalette = ['#2563eb', '#059669', '#d97706', '#7c3aed', '#0ea5e9', '#db2777'];
+    $slotKeys = ['sem1', 'sem2', 'sem3', 'sem4'];
+    $slotLabels = ['sem1' => 'Sem 1', 'sem2' => 'Sem 2', 'sem3' => 'Sem 3', 'sem4' => 'Sem 4'];
 
-    $categoryRows = collect($stats['category_labels'])->map(function (string $label, int $index) use ($stats, $chartPalette) {
-        $spring = (int) ($stats['volume_by_semester']['spring'][$index] ?? 0);
-        $fall = (int) ($stats['volume_by_semester']['fall'][$index] ?? 0);
+    $cardSurface = 'rounded-xl border border-white/80 bg-white/90 backdrop-blur';
+    $cardShadow = 'shadow-[0_8px_24px_rgba(15,23,42,0.05)]';
+    $eyebrow = 'text-xs font-semibold uppercase tracking-[0.18em] text-slate-500';
+
+    $categoryRows = collect($stats['category_labels'])->map(function (string $label, int $index) use ($stats, $chartPalette, $slotKeys) {
+        $bySlot = [];
+        $total = 0;
+        foreach ($slotKeys as $slot) {
+            $count = (int) ($stats['volume_by_semester'][$slot][$index] ?? 0);
+            $bySlot[$slot] = $count;
+            $total += $count;
+        }
         $markerColor = $chartPalette[$index % count($chartPalette)];
 
         return [
             'label' => $label,
             'average' => (float) ($stats['avg_by_category'][$index] ?? 0),
             'coverage' => (float) ($stats['coverage_pct'][$index] ?? 0),
-            'spring' => $spring,
-            'fall' => $fall,
-            'total' => $spring + $fall,
+            'by_slot' => $bySlot,
+            'total' => $total,
             'marker_color' => $markerColor,
             'marker_ring' => $markerColor.'1A',
         ];
     });
 @endphp
 
-<div class="flex flex-col gap-7">
-    <section class="flex flex-col gap-4 rounded-lg border border-white/80 bg-white/86 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.07)] backdrop-blur sm:flex-row sm:items-end sm:justify-between">
-        @if ($availableMappings->count() >= 2)
-            <flux:select
-                class="max-w-[14rem]"
-                wire:model.live="selectedGraduationYear"
-                label="Academic Year"
-            >
-                @foreach ($availableMappings as $am)
-                    <flux:select.option value="{{ $am->graduation_year }}" wire:key="dashboard-ay-option-{{ $am->id }}">
-                        {{ $am->academic_year }} (Class of {{ $am->graduation_year }})
-                    </flux:select.option>
-                @endforeach
-            </flux:select>
-        @else
-            <span></span>
-        @endif
-
-        <span class="rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-500">
-            Refreshed {{ $generatedAt->diffForHumans() }}
-        </span>
-    </section>
-
-    <section class="rounded-lg border border-amber-200/80 bg-white/76 p-6 shadow-[0_24px_80px_rgba(15,23,42,0.08)] backdrop-blur sm:p-7">
-        <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-            <div class="max-w-3xl">
-                <div class="mb-3 text-[0.7rem] font-bold uppercase tracking-[0.36em] text-amber-700">
-                    Student Evaluation Overview
+<div class="flex flex-col gap-8 sm:gap-10">
+    <section class="overflow-hidden rounded-xl border border-white/80 bg-white/95 shadow-[0_8px_24px_rgba(15,23,42,0.05)] backdrop-blur">
+        <div class="flex flex-col divide-y divide-slate-200/70 md:flex-row md:items-stretch md:divide-x md:divide-y-0">
+            <div class="relative flex items-center gap-3 bg-gradient-to-br from-sky-50 via-white to-slate-50 px-5 py-4 md:min-w-[200px]">
+                <span class="absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-sky-400 to-indigo-500"></span>
+                <span class="grid size-9 shrink-0 place-items-center rounded-lg bg-white text-sky-600 shadow-sm ring-1 ring-sky-100">
+                    <flux:icon.funnel variant="mini" class="size-4" />
+                </span>
+                <div class="min-w-0">
+                    <div class="text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-sky-700">Filters</div>
+                    <div class="truncate text-sm font-semibold text-slate-900">Roster scope</div>
                 </div>
-                <h2 class="text-2xl font-bold tracking-tight text-slate-950">Data Quality Overview</h2>
-                <p class="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
-                    Snapshot of student roster coverage, score health, and evaluation volume from the latest REDCap sync.
-                </p>
             </div>
 
-            <div class="grid w-full gap-3 sm:grid-cols-2 lg:max-w-xl">
-                <div class="rounded-lg border border-slate-200 bg-white/80 p-4 shadow-sm">
-                    <div class="mb-2 inline-flex size-6 items-center justify-center rounded-full bg-amber-100 text-xs font-bold text-amber-800">1</div>
-                    <p class="text-sm font-medium leading-6 text-slate-600">Review coverage against the expected student roster.</p>
-                </div>
-                <div class="rounded-lg border border-slate-200 bg-white/80 p-4 shadow-sm">
-                    <div class="mb-2 inline-flex size-6 items-center justify-center rounded-full bg-sky-100 text-xs font-bold text-sky-800">2</div>
-                    <p class="text-sm font-medium leading-6 text-slate-600">Use category trends to find evaluation gaps before reporting.</p>
+            <div class="flex flex-1 flex-wrap items-center gap-x-5 gap-y-3 px-5 py-4">
+                <flux:field variant="inline">
+                    <flux:label class="text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-slate-500">Active only</flux:label>
+                    <flux:switch wire:model.live="activeOnly" />
+                </flux:field>
+
+                <div class="hidden h-7 w-px bg-slate-200" aria-hidden="true"></div>
+
+                <flux:field variant="inline">
+                    <flux:label class="text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-slate-500">Batch</flux:label>
+                    <flux:select
+                        wire:model.live="selectedBatch"
+                        size="sm"
+                        class="min-w-40"
+                        placeholder="All batches"
+                    >
+                        <flux:select.option value="">All batches</flux:select.option>
+                        @foreach ($availableBatches as $batch)
+                            <flux:select.option value="{{ $batch }}">{{ $batch }}</flux:select.option>
+                        @endforeach
+                    </flux:select>
+                </flux:field>
+            </div>
+
+            <div class="flex items-center gap-3 bg-slate-50/70 px-5 py-4">
+                @if ($stats['is_stale'] ?? false)
+                    <flux:badge color="amber" size="sm" icon="clock">Cached</flux:badge>
+                @endif
+                <div class="flex items-center gap-2.5">
+                    <span class="relative flex size-2.5">
+                        <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
+                        <span class="relative inline-flex size-2.5 rounded-full bg-emerald-500 ring-2 ring-emerald-100"></span>
+                    </span>
+                    <div class="leading-tight">
+                        <div class="text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-emerald-700">Live</div>
+                        <div class="text-xs font-medium text-slate-600 tabular-nums">Refreshed {{ $generatedAt->diffForHumans() }}</div>
+                    </div>
                 </div>
             </div>
         </div>
-
-        @if ($stats['is_stale'] ?? false)
-            <div class="mt-5 inline-flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800 ring-1 ring-amber-200">
-                <flux:icon.clock variant="mini" />
-                Cached snapshot
-            </div>
-        @endif
     </section>
 
     @if (! empty($stats['fetch_error']))
@@ -96,23 +107,23 @@
 
     <section class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         @foreach ($kpis as $kpi)
-            <div class="rounded-lg border border-white/80 bg-white/82 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.07)] backdrop-blur">
+            <div class="{{ $cardSurface }} {{ $cardShadow }} p-5">
                 <div class="flex items-start justify-between gap-4">
-                    <div>
-                        <div class="text-[0.72rem] font-bold uppercase tracking-[0.3em] text-slate-500">{{ $kpi['label'] }}</div>
-                        <div class="mt-3 text-3xl font-bold tracking-tight text-slate-950 tabular-nums">{{ $kpi['value'] }}</div>
+                    <div class="min-w-0">
+                        <div class="{{ $eyebrow }}">{{ $kpi['label'] }}</div>
+                        <div class="mt-3 text-[2.25rem] font-bold leading-none tracking-tight text-slate-950 tabular-nums">{{ $kpi['value'] }}</div>
                     </div>
-                    <span class="{{ $kpi['tone'] }} grid size-10 place-items-center rounded-lg ring-1">
+                    <span class="{{ $kpi['tone'] }} grid size-9 place-items-center rounded-md ring-1">
                         <flux:icon :name="$kpi['icon']" variant="mini" />
                     </span>
                 </div>
-                <div class="mt-4 text-sm text-slate-500">{{ $kpi['sub'] }}</div>
+                <div class="mt-4 truncate text-sm text-slate-500">{{ $kpi['sub'] }}</div>
             </div>
         @endforeach
     </section>
 
     @if (! $stats['has_students'])
-        <section class="rounded-lg border border-slate-200 bg-white/82 p-8 text-center shadow-sm">
+        <section class="rounded-xl border border-slate-200 bg-white/82 p-8 text-center shadow-sm">
             <div class="mx-auto grid size-12 place-items-center rounded-lg bg-slate-100 text-slate-500">
                 <flux:icon.inbox variant="mini" />
             </div>
@@ -122,7 +133,7 @@
             </p>
         </section>
     @elseif (! $stats['has_evals'])
-        <section class="rounded-lg border border-amber-200 bg-white/82 p-8 text-center shadow-sm">
+        <section class="rounded-xl border border-amber-200 bg-white/82 p-8 text-center shadow-sm">
             <div class="mx-auto grid size-12 place-items-center rounded-lg bg-amber-50 text-amber-600">
                 <flux:icon.clock variant="mini" />
             </div>
@@ -133,109 +144,109 @@
         </section>
     @else
         <section class="grid grid-cols-1 gap-5 xl:grid-cols-2">
-            <div class="rounded-lg border border-white/80 bg-white/84 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.07)] backdrop-blur">
+            <div class="{{ $cardSurface }} {{ $cardShadow }} p-6">
                 <div class="flex items-start justify-between gap-4">
                     <div>
-                        <div class="text-[0.72rem] font-bold uppercase tracking-[0.3em] text-sky-700">Submissions</div>
-                        <h2 class="mt-2 text-lg font-bold text-slate-950">Average Score by Category</h2>
-                        <p class="mt-1 text-sm leading-5 text-slate-500">Evaluation-weighted average score on a 0-100 scale.</p>
+                        <div class="{{ $eyebrow }}">Submissions</div>
+                        <h2 class="mt-2 text-base font-semibold tracking-tight text-slate-950">Average Score by Category</h2>
+                        <p class="mt-1 text-sm leading-6 text-slate-500">Evaluation-weighted average score on a 0-100 scale.</p>
                     </div>
                     <flux:badge color="blue">Score</flux:badge>
                 </div>
-                <div class="mt-6 h-72"><canvas id="chartAvgByCategory"></canvas></div>
+                <div class="mt-5 h-72"><canvas id="chartAvgByCategory"></canvas></div>
             </div>
 
-            <div class="rounded-lg border border-white/80 bg-white/84 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.07)] backdrop-blur">
+            <div class="{{ $cardSurface }} {{ $cardShadow }} p-6">
                 <div class="flex items-start justify-between gap-4">
                     <div>
-                        <div class="text-[0.72rem] font-bold uppercase tracking-[0.3em] text-sky-700">Activity</div>
-                        <h2 class="mt-2 text-lg font-bold text-slate-950">Evaluation Volume</h2>
-                        <p class="mt-1 text-sm leading-5 text-slate-500">Completed evaluation count by category and semester.</p>
+                        <div class="{{ $eyebrow }}">Activity</div>
+                        <h2 class="mt-2 text-base font-semibold tracking-tight text-slate-950">Evaluation Volume</h2>
+                        <p class="mt-1 text-sm leading-6 text-slate-500">Completed evaluation count by category and semester.</p>
                     </div>
                     <flux:badge color="amber">Spring/Fall</flux:badge>
                 </div>
-                <div class="mt-6 h-72"><canvas id="chartVolumeBySemester"></canvas></div>
+                <div class="mt-5 h-72"><canvas id="chartVolumeBySemester"></canvas></div>
             </div>
 
-            <div class="rounded-lg border border-white/80 bg-white/84 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.07)] backdrop-blur">
+            <div class="{{ $cardSurface }} {{ $cardShadow }} p-6">
                 <div class="flex items-start justify-between gap-4">
                     <div>
-                        <div class="text-[0.72rem] font-bold uppercase tracking-[0.3em] text-sky-700">Scores</div>
-                        <h2 class="mt-2 text-lg font-bold text-slate-950">Score Distribution</h2>
-                        <p class="mt-1 text-sm leading-5 text-slate-500">Student category averages grouped into score bands.</p>
+                        <div class="{{ $eyebrow }}">Scores</div>
+                        <h2 class="mt-2 text-base font-semibold tracking-tight text-slate-950">Score Distribution</h2>
+                        <p class="mt-1 text-sm leading-6 text-slate-500">Student category averages grouped into score bands.</p>
                     </div>
                     <flux:badge color="violet">Bands</flux:badge>
                 </div>
-                <div class="mt-6 h-72"><canvas id="chartScoreDistribution"></canvas></div>
+                <div class="mt-5 h-72"><canvas id="chartScoreDistribution"></canvas></div>
             </div>
 
-            <div class="rounded-lg border border-white/80 bg-white/84 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.07)] backdrop-blur">
+            <div class="{{ $cardSurface }} {{ $cardShadow }} p-6">
                 <div class="flex items-start justify-between gap-4">
                     <div>
-                        <div class="text-[0.72rem] font-bold uppercase tracking-[0.3em] text-sky-700">Coverage</div>
-                        <h2 class="mt-2 text-lg font-bold text-slate-950">Category Coverage</h2>
-                        <p class="mt-1 text-sm leading-5 text-slate-500">Students with 1+ eval in that category divided by total roster.</p>
+                        <div class="{{ $eyebrow }}">Coverage</div>
+                        <h2 class="mt-2 text-base font-semibold tracking-tight text-slate-950">Category Coverage</h2>
+                        <p class="mt-1 text-sm leading-6 text-slate-500">Students with 1+ eval in that category divided by total roster.</p>
                     </div>
                     <flux:badge color="emerald">Coverage</flux:badge>
                 </div>
-                <div class="mt-6 h-72"><canvas id="chartCoverage"></canvas></div>
+                <div class="mt-5 h-72"><canvas id="chartCoverage"></canvas></div>
             </div>
         </section>
 
-        <section class="rounded-lg border border-white/80 bg-white/86 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.07)] backdrop-blur">
+        <section class="{{ $cardSurface }} {{ $cardShadow }} p-6">
             <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div>
-                    <div class="text-[0.72rem] font-bold uppercase tracking-[0.3em] text-sky-700">Data Classification</div>
-                    <h2 class="mt-2 text-lg font-bold text-slate-950">Category Detail</h2>
+                    <div class="{{ $eyebrow }}">Data Classification</div>
+                    <h2 class="mt-2 text-base font-semibold tracking-tight text-slate-950">Category Detail</h2>
                 </div>
                 <flux:badge color="sky">{{ $categoryRows->count() }} categories</flux:badge>
             </div>
 
-            <div class="mt-5 rounded-lg border border-slate-200/80 bg-white/72 p-3 shadow-sm">
-                <flux:table container:class="w-full" class="w-full min-w-[760px] overflow-hidden rounded-md bg-white/88">
-                    <flux:table.columns>
-                        <flux:table.column class="w-[30%] bg-slate-50/90 px-5 text-xs font-bold uppercase tracking-[0.18em] text-slate-500" align="center">Category</flux:table.column>
-                        <flux:table.column class="w-[18%] bg-slate-50/90 px-5 text-xs font-bold uppercase tracking-[0.18em] text-slate-500" align="center">Avg score</flux:table.column>
-                        <flux:table.column class="w-[13%] bg-slate-50/90 px-5 text-xs font-bold uppercase tracking-[0.18em] text-slate-500" align="center">Spring</flux:table.column>
-                        <flux:table.column class="w-[13%] bg-slate-50/90 px-5 text-xs font-bold uppercase tracking-[0.18em] text-slate-500" align="center">Fall</flux:table.column>
-                        <flux:table.column class="w-[26%] bg-slate-50/90 px-5 text-xs font-bold uppercase tracking-[0.18em] text-slate-500" align="center">Coverage</flux:table.column>
-                    </flux:table.columns>
+            <flux:table container:class="mt-5 w-full" class="w-full min-w-[760px]">
+                <flux:table.columns>
+                    <flux:table.column class="w-[30%] border-b border-slate-200 px-5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500" align="center">Category</flux:table.column>
+                    <flux:table.column class="w-[16%] border-b border-slate-200 px-5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500" align="center">Avg score</flux:table.column>
+                    @foreach ($slotKeys as $slot)
+                        <flux:table.column class="w-[8%] border-b border-slate-200 px-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500" align="center">{{ $slotLabels[$slot] }}</flux:table.column>
+                    @endforeach
+                    <flux:table.column class="w-[22%] border-b border-slate-200 px-5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500" align="center">Coverage</flux:table.column>
+                </flux:table.columns>
 
-                    <flux:table.rows>
-                        @foreach ($categoryRows as $row)
-                            <flux:table.row class="transition hover:bg-slate-50/80">
-                                <flux:table.cell class="px-5" align="center">
-                                    <div class="inline-flex items-center justify-center gap-3 text-left">
-                                        <span
-                                            class="size-2.5 rounded-full"
-                                            style="background-color: {{ $row['marker_color'] }}; box-shadow: 0 0 0 5px {{ $row['marker_ring'] }}"
-                                        ></span>
-                                        <div>
-                                            <div class="font-semibold text-slate-950">{{ $row['label'] }}</div>
-                                            <div class="mt-0.5 text-xs font-medium text-slate-500">{{ number_format($row['total']) }} total evaluations</div>
-                                        </div>
+                <flux:table.rows>
+                    @foreach ($categoryRows as $row)
+                        <flux:table.row class="transition hover:bg-slate-50/70">
+                            <flux:table.cell class="px-5" align="center">
+                                <div class="inline-flex items-center justify-center gap-3 text-left">
+                                    <span
+                                        class="size-2.5 rounded-full"
+                                        style="background-color: {{ $row['marker_color'] }}; box-shadow: 0 0 0 5px {{ $row['marker_ring'] }}"
+                                    ></span>
+                                    <div>
+                                        <div class="font-semibold text-slate-950">{{ $row['label'] }}</div>
+                                        <div class="mt-0.5 text-xs font-medium text-slate-500">{{ number_format($row['total']) }} total evaluations</div>
                                     </div>
-                                </flux:table.cell>
-                                <flux:table.cell class="px-5 text-slate-700" align="center">
-                                    <span class="inline-flex min-w-16 justify-center rounded-md bg-slate-100 px-2.5 py-1 font-semibold tabular-nums text-slate-800">
-                                        {{ $row['average'] > 0 ? number_format($row['average'], 1) : '-' }}
-                                    </span>
-                                </flux:table.cell>
-                                <flux:table.cell class="px-5 font-medium tabular-nums text-slate-600" align="center">{{ number_format($row['spring']) }}</flux:table.cell>
-                                <flux:table.cell class="px-5 font-medium tabular-nums text-slate-600" align="center">{{ number_format($row['fall']) }}</flux:table.cell>
-                                <flux:table.cell class="px-5" align="center">
-                                    <div class="mx-auto flex w-40 flex-col gap-1.5">
-                                        <div class="text-sm font-semibold tabular-nums text-slate-700">{{ number_format($row['coverage'], 1) }}%</div>
-                                        <div class="h-1.5 overflow-hidden rounded-full bg-slate-100">
-                                            <div class="h-full rounded-full bg-emerald-500" style="width: {{ min(100, max(0, $row['coverage'])) }}%"></div>
-                                        </div>
+                                </div>
+                            </flux:table.cell>
+                            <flux:table.cell class="px-5 text-slate-700" align="center">
+                                <span class="inline-flex min-w-16 justify-center rounded-md bg-slate-100 px-2.5 py-1 font-semibold tabular-nums text-slate-800">
+                                    {{ $row['average'] > 0 ? number_format($row['average'], 1) : '-' }}
+                                </span>
+                            </flux:table.cell>
+                            @foreach ($slotKeys as $slot)
+                                <flux:table.cell class="px-3 font-medium tabular-nums text-slate-600" align="center">{{ number_format($row['by_slot'][$slot]) }}</flux:table.cell>
+                            @endforeach
+                            <flux:table.cell class="px-5" align="center">
+                                <div class="mx-auto flex w-40 flex-col gap-1.5">
+                                    <div class="text-sm font-semibold tabular-nums text-slate-700">{{ number_format($row['coverage'], 1) }}%</div>
+                                    <div class="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                                        <div class="h-full rounded-full bg-emerald-500" style="width: {{ min(100, max(0, $row['coverage'])) }}%"></div>
                                     </div>
-                                </flux:table.cell>
-                            </flux:table.row>
-                        @endforeach
-                    </flux:table.rows>
-                </flux:table>
-            </div>
+                                </div>
+                            </flux:table.cell>
+                        </flux:table.row>
+                    @endforeach
+                </flux:table.rows>
+            </flux:table>
         </section>
     @endif
 
@@ -329,8 +340,10 @@
                     data: {
                         labels: stats.volume_by_semester.labels,
                         datasets: [
-                            { label: 'Spring', data: stats.volume_by_semester.spring, backgroundColor: '#2563eb', borderRadius: 6, borderSkipped: false },
-                            { label: 'Fall', data: stats.volume_by_semester.fall, backgroundColor: '#f59e0b', borderRadius: 6, borderSkipped: false },
+                            { label: 'Sem 1', data: stats.volume_by_semester.sem1, backgroundColor: '#2563eb', borderRadius: 6, borderSkipped: false },
+                            { label: 'Sem 2', data: stats.volume_by_semester.sem2, backgroundColor: '#0ea5e9', borderRadius: 6, borderSkipped: false },
+                            { label: 'Sem 3', data: stats.volume_by_semester.sem3, backgroundColor: '#f59e0b', borderRadius: 6, borderSkipped: false },
+                            { label: 'Sem 4', data: stats.volume_by_semester.sem4, backgroundColor: '#dc2626', borderRadius: 6, borderSkipped: false },
                         ],
                     },
                     options: {

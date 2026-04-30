@@ -6,13 +6,14 @@ use App\Enums\Role;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Str;
 
-#[Fillable(['email', 'name', 'role', 'okta_nameid', 'redcap_record_id', 'public_token', 'last_login_at'])]
+#[Fillable(['email', 'name', 'role', 'okta_nameid', 'redcap_record_id', 'public_token', 'last_login_at', 'cohort_start_term', 'cohort_start_year', 'batch', 'is_active'])]
 #[Hidden(['remember_token'])]
 class User extends Authenticatable
 {
@@ -36,7 +37,18 @@ class User extends Authenticatable
         return [
             'role' => Role::class,
             'last_login_at' => 'datetime',
+            'cohort_start_year' => 'integer',
+            'is_active' => 'boolean',
         ];
+    }
+
+    /**
+     * @param  Builder<self>  $query
+     * @return Builder<self>
+     */
+    public function scopeActive(Builder $query): Builder
+    {
+        return $query->where('is_active', true);
     }
 
     public function isService(): bool
@@ -72,6 +84,11 @@ class User extends Authenticatable
     public function canManageSettingsRecords(): bool
     {
         return $this->isService();
+    }
+
+    public function canEditEmailTemplate(): bool
+    {
+        return $this->isService() || $this->isAdmin();
     }
 
     public function canViewAllStudents(): bool

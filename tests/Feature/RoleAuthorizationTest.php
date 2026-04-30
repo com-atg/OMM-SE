@@ -11,6 +11,8 @@ use Livewire\Livewire;
 use function Pest\Laravel\delete;
 use function Pest\Laravel\get;
 use function Pest\Laravel\mock;
+use function Pest\Laravel\patch;
+use function Pest\Laravel\post;
 
 beforeEach(function () {
     Cache::flush();
@@ -39,6 +41,7 @@ it('redirects students from dashboard to their student page', function () {
 it('lets service users view the dashboard', function () {
     asService();
     $destination = mock(RedcapDestinationService::class);
+    $destination->shouldReceive('availableBatches')->andReturn([]);
     $destination->shouldReceive('getAllStudentRecords')->andReturn([]);
 
     get('/')->assertOk();
@@ -47,6 +50,7 @@ it('lets service users view the dashboard', function () {
 it('lets admin users view the dashboard', function () {
     asAdmin();
     $destination = mock(RedcapDestinationService::class);
+    $destination->shouldReceive('availableBatches')->andReturn([]);
     $destination->shouldReceive('getAllStudentRecords')->andReturn([]);
 
     get('/')->assertOk();
@@ -54,7 +58,7 @@ it('lets admin users view the dashboard', function () {
 
 it('lets faculty users view a scoped dashboard', function () {
     asFaculty('smith@example.com', 'Dr. Smith');
-    ProjectMapping::factory()->create(['redcap_pid' => 1846, 'redcap_token' => 'SOURCE_TOKEN']);
+    ProjectMapping::factory()->active()->create(['redcap_pid' => 1846, 'redcap_token' => 'SOURCE_TOKEN']);
 
     $source = mock(RedcapSourceService::class);
     $source->shouldReceive('getCompletedEvaluationRecords')
@@ -81,6 +85,13 @@ it('lets faculty users view a scoped dashboard', function () {
                 'date_lab' => '2026-04-01',
             ],
         ]);
+
+    $destination = mock(RedcapDestinationService::class);
+    $destination->shouldReceive('availableBatches')->andReturn([]);
+    $destination->shouldReceive('studentMapByDatatelId')->andReturn([
+        '100' => ['record_id' => '10', 'datatelid' => '100', 'is_active' => '1', 'cohort_start_term' => 'Spring', 'cohort_start_year' => '2026'],
+        '200' => ['record_id' => '20', 'datatelid' => '200', 'is_active' => '1', 'cohort_start_term' => 'Spring', 'cohort_start_year' => '2026'],
+    ]);
 
     get('/')->assertOk();
 
@@ -255,4 +266,84 @@ it('blocks service users from deleting themselves', function () {
     $me = asService();
 
     delete(route('admin.users.destroy', $me))->assertForbidden();
+});
+
+// ─── Admin settings — view (Service + Admin), write (Service only) ───────────
+
+it('lets service users view admin settings index', function () {
+    asService();
+
+    get(route('admin.settings.index'))->assertOk();
+});
+
+it('lets admin users view admin settings index', function () {
+    asAdmin();
+
+    get(route('admin.settings.index'))->assertOk();
+});
+
+it('forbids faculty from admin settings index', function () {
+    asFaculty('smith@example.com', 'Dr. Smith');
+
+    get(route('admin.settings.index'))->assertForbidden();
+});
+
+it('forbids students from admin settings index', function () {
+    asStudent('10');
+
+    get(route('admin.settings.index'))->assertForbidden();
+});
+
+it('forbids admins from creating a source project', function () {
+    asAdmin();
+
+    get(route('admin.settings.source-project.create'))->assertForbidden();
+    post(route('admin.settings.project-mappings.store'), [
+        'redcap_pid' => 9999,
+        'redcap_token' => str_repeat('A', 32),
+    ])->assertForbidden();
+});
+
+it('forbids admins from activating a project mapping', function () {
+    asAdmin();
+
+    $mapping = ProjectMapping::factory()->create();
+
+    post(route('admin.settings.project-mappings.activate', $mapping))->assertForbidden();
+});
+
+it('forbids admins from editing or updating a project mapping', function () {
+    asAdmin();
+
+    $mapping = ProjectMapping::factory()->create();
+
+    get(route('admin.settings.project-mappings.edit', $mapping))->assertForbidden();
+    patch(route('admin.settings.project-mappings.update', $mapping), [
+        'redcap_pid' => 9999,
+    ])->assertForbidden();
+});
+
+it('forbids admins from destroying a project mapping', function () {
+    asAdmin();
+
+    $mapping = ProjectMapping::factory()->create();
+
+    delete(route('admin.settings.project-mappings.destroy', $mapping))->assertForbidden();
+});
+
+it('forbids admins from importing students for a mapping', function () {
+    asAdmin();
+
+    $mapping = ProjectMapping::factory()->create();
+
+    get(route('admin.settings.project-mappings.import-students', $mapping))->assertForbidden();
+});
+
+it('forbids faculty from any admin settings write action', function () {
+    asFaculty('smith@example.com', 'Dr. Smith');
+    $mapping = ProjectMapping::factory()->create();
+
+    get(route('admin.settings.source-project.create'))->assertForbidden();
+    post(route('admin.settings.project-mappings.activate', $mapping))->assertForbidden();
+    delete(route('admin.settings.project-mappings.destroy', $mapping))->assertForbidden();
 });

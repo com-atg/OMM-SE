@@ -17,14 +17,18 @@ class ProjectMappingFactory extends Factory
      */
     public function definition(): array
     {
-        $graduationYear = fake()->numberBetween(2027, 2034);
-        $academicYearStart = $graduationYear - 3;
+        $academicYearStart = fake()->numberBetween(2024, 2031);
 
         return [
             'academic_year' => $academicYearStart.'-'.($academicYearStart + 1),
-            'graduation_year' => $graduationYear,
             'redcap_pid' => fake()->unique()->numberBetween(1000, 9999),
             'redcap_token' => strtoupper(fake()->regexify('[A-F0-9]{32}')),
+            'is_active' => false,
         ];
+    }
+
+    public function active(): static
+    {
+        return $this->state(fn (array $attributes) => ['is_active' => true]);
     }
 }

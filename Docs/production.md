@@ -191,7 +191,8 @@ SAML_DEBUG=false
 SAML_DEFAULT_REDIRECT=/
 
 # ── Application role allowlists ──────────────────────────────────────────────
-# Comma-separated emails, case-insensitive. Role is recomputed on every login.
+# Comma-separated emails consumed only by DatabaseSeeder on first migrate --seed.
+# After bootstrap, manage roles in /admin/users; this list is not re-read at login.
 SERVICE_USERS=
 ADMIN_USERS=
 
@@ -200,9 +201,9 @@ DOCKERHUB_USERNAME=your-dockerhub-username
 
 **Database:** On first boot the `omm-ace-mysql` container initializes a volume at `./data` (bind mount). The app's `entrypoint.sh` runs `php artisan migrate --force` against it. Sessions, cache, and queue all live in MySQL.
 
-**Annual rotation:** For each new academic-year source project, add a project mapping in `/admin/settings` with the academic year, graduation year, REDCap PID, and source API token. The token is encrypted in MySQL.
+**Annual rotation:** For each new academic-year source project, run the wizard at `/admin/settings/source-project/create` with the REDCap PID and source API token. Saving flips the previously active mapping to `is_active = 0` and the new one to `is_active = 1` in a single transaction. The token is encrypted in MySQL. Step 2 of the wizard dispatches `ImportScholarsJob` to upsert students from the destination roster (and refresh cohort metadata on existing students).
 
-**Enrolling Service / Admin users:** Add their emails to `SERVICE_USERS=` or `ADMIN_USERS=`. After editing `.env`, run `docker compose -f docker-compose.prod.yml up -d --force-recreate app` to pick up the new values. The role is re-evaluated on each SAML login. Faculty and Student accounts can also be managed from `/admin/users`; students auto-provision on first login as long as their email matches a record in the destination REDCap project.
+**Enrolling Service / Admin users:** `SERVICE_USERS=` and `ADMIN_USERS=` are consumed only by `DatabaseSeeder` on the first `php artisan migrate --seed`. They are **not** re-evaluated at every SAML login — change roles afterward via `/admin/users`. Faculty and Student accounts can also be managed from `/admin/users`; students auto-provision on first login as long as their email matches a record in the destination REDCap project.
 
 **Okta application:** In the Okta admin console create a new SAML 2.0 app.
 - Single sign-on URL / ACS: `https://your-domain.com/saml/acs`

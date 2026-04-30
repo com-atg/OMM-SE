@@ -101,7 +101,7 @@ All variables live in `.env` (copied from `.env.example`).
 | `REDCAP_URL` | REDCap API base URL (`https://comresearchdata.nyit.edu/redcap/api/`) |
 | `REDCAP_TOKEN` | Destination project token (OMMScholarEvalList) |
 | `WEBHOOK_SECRET` | Shared secret for webhook token verification. Leave empty locally to skip the check. |
-| Source project tokens | Stored in `/admin/settings` project mappings, encrypted in the `project_mappings` table. |
+| Source project tokens | Stored encrypted in the `project_mappings` table. Add a mapping via `/admin/settings/source-project/create` — exactly one row is `is_active = 1` at any time. |
 
 ### Okta SAML SSO
 
@@ -112,7 +112,7 @@ All variables live in `.env` (copied from `.env.example`).
 | `SAML_ATTR_EMAIL` / `SAML_ATTR_NAME` | Attribute names the Okta app sends in assertions |
 | `SAML_STRICT` | `true` in all environments that talk to a real IdP |
 | `SAML_DEBUG` | `true` to log assertion contents during local debugging |
-| `SERVICE_USERS` / `ADMIN_USERS` | Comma-separated emails. Your email goes here for full access. |
+| `SERVICE_USERS` / `ADMIN_USERS` | Comma-separated emails consumed by `DatabaseSeeder` on first `php artisan migrate --seed`. After that, change roles in `/admin/users` — these env vars are not re-read at login. |
 
 ### Mail (Mailhog defaults)
 
@@ -187,14 +187,22 @@ Copy the IdP Entity ID, SSO URL, SLO URL, and certificate into the `SAML_IDP_*` 
 
 ### Role Management
 
-Service/Admin roles are resolved at login time from `.env` allowlists. Add your email to test elevated roles without touching the database:
+Service/Admin roles are stored on `users.role`, not recomputed at login. To bootstrap initial accounts:
 
 ```bash
+# .env
 SERVICE_USERS=you@example.com
 ADMIN_USERS=colleague@example.com
+
+# then on first migration
+php artisan migrate:fresh --seed
 ```
 
-Restart the dev server after changing `.env` so the new config is picked up.
+After the first seed, change roles in the UI at `/admin/users`. To upgrade a single existing user from Tinker:
+
+```bash
+php artisan tinker --execute 'use App\Models\User; use App\Enums\Role; User::where("email", "you@example.com")->update(["role" => Role::Service->value]);'
+```
 
 ---
 
@@ -208,7 +216,7 @@ GET https://your-local-domain/omm_ace/test/email
 
 This renders a stubbed Teaching (Category A) evaluation for Catherine Chin. Refresh after editing [`resources/views/emails/evaluation.blade.php`](../resources/views/emails/evaluation.blade.php) to preview changes.
 
-Service users can also override the template at runtime from `/admin/settings` via the email-template modal — overrides are stored in the `app_settings` table under the `email_template` key and take precedence over the Blade view in `EvaluationNotification::content()`.
+Service and Admin users can also override the template at runtime from the inline email-template editor on `/admin/settings` — overrides are stored in the `app_settings` table under the `email_template` key (cached forever per key in `AppSetting::get`) and take precedence over the Blade view in `EvaluationNotification::content()`. The same edit page renders a live preview via `MailTemplateRenderer::render()` against `EvaluationNotification::sampleViewData()`.
 
 ---
 
