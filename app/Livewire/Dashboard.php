@@ -61,7 +61,13 @@ class Dashboard extends Component
         abort_unless($user instanceof User && $user->canViewDashboard(), 403);
 
         $destination = app(RedcapDestinationService::class);
-        $availableBatches = $destination->availableBatches();
+
+        try {
+            $availableBatches = $destination->availableBatches();
+        } catch (\Throwable $e) {
+            Log::error('Dashboard: failed to fetch available batches.', ['error' => $e->getMessage()]);
+            $availableBatches = [];
+        }
 
         if ($this->selectedBatch !== null && ! in_array($this->selectedBatch, $availableBatches, true)) {
             $this->selectedBatch = null;
