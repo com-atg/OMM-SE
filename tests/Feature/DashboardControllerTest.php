@@ -95,6 +95,17 @@ it('uses a categorical y axis for the coverage chart', function () {
         ->toContain("text: '% of roster'");
 });
 
+it('guards each dashboard chart canvas with wire:ignore so Livewire morphs do not blank charts on filter toggle', function () {
+    $dashboard = file_get_contents(resource_path('views/livewire/dashboard.blade.php'));
+
+    expect($dashboard)
+        ->toContain('wire:ignore><canvas id="chartAvgByCategory"')
+        ->toContain('wire:ignore><canvas id="chartVolumeBySemester"')
+        ->toContain('wire:ignore><canvas id="chartScoreDistribution"')
+        ->toContain('wire:ignore><canvas id="chartCoverage"')
+        ->toContain('requestAnimationFrame(function ()');
+});
+
 it('labels dashboard charts with concise metric definitions', function () {
     $dashboard = file_get_contents(resource_path('views/livewire/dashboard.blade.php'));
 

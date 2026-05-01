@@ -153,7 +153,7 @@
                     </div>
                     <flux:badge color="blue">Score</flux:badge>
                 </div>
-                <div class="mt-5 h-72"><canvas id="chartAvgByCategory"></canvas></div>
+                <div class="mt-5 h-72" wire:ignore><canvas id="chartAvgByCategory"></canvas></div>
             </div>
 
             <div class="{{ $cardSurface }} {{ $cardShadow }} p-6">
@@ -165,7 +165,7 @@
                     </div>
                     <flux:badge color="amber">Spring/Fall</flux:badge>
                 </div>
-                <div class="mt-5 h-72"><canvas id="chartVolumeBySemester"></canvas></div>
+                <div class="mt-5 h-72" wire:ignore><canvas id="chartVolumeBySemester"></canvas></div>
             </div>
 
             <div class="{{ $cardSurface }} {{ $cardShadow }} p-6">
@@ -177,7 +177,7 @@
                     </div>
                     <flux:badge color="violet">Bands</flux:badge>
                 </div>
-                <div class="mt-5 h-72"><canvas id="chartScoreDistribution"></canvas></div>
+                <div class="mt-5 h-72" wire:ignore><canvas id="chartScoreDistribution"></canvas></div>
             </div>
 
             <div class="{{ $cardSurface }} {{ $cardShadow }} p-6">
@@ -189,7 +189,7 @@
                     </div>
                     <flux:badge color="emerald">Coverage</flux:badge>
                 </div>
-                <div class="mt-5 h-72"><canvas id="chartCoverage"></canvas></div>
+                <div class="mt-5 h-72" wire:ignore><canvas id="chartCoverage"></canvas></div>
             </div>
         </section>
 
@@ -253,7 +253,7 @@
     @if ($stats['has_students'] && $stats['has_evals'])
         @script
         <script>
-            (function () {
+            requestAnimationFrame(function () {
                 const stats = @json($stats);
                 const palette = @json($chartPalette);
                 const gridColor = 'rgba(100, 116, 139, 0.16)';
@@ -424,7 +424,7 @@
                         },
                     },
                 });
-            })();
+            });
         </script>
         @endscript
     @endif
