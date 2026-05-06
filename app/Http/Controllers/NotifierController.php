@@ -59,6 +59,24 @@ class NotifierController extends Controller
             return response('', 200);
         }
 
+        // Skip partial saves — only process when the form is fully submitted.
+        $instrument = (string) $request->input('instrument', '');
+        $completeField = $instrument !== '' ? "{$instrument}_complete" : null;
+
+        $completionStatus = $completeField !== null && array_key_exists($completeField, $evalRecord)
+            ? (string) $evalRecord[$completeField]
+            : (string) (collect($evalRecord)
+                ->filter(fn (mixed $value, string $field): bool => str_ends_with($field, '_complete'))
+                ->first() ?? '');
+
+        if ($completionStatus !== '2') {
+            Log::info("NotifierController: record {$recordId} not yet complete (status='{$completionStatus}'); skipping.", [
+                'instrument' => $instrument ?: null,
+            ]);
+
+            return response('', 200);
+        }
+
         if (! isset(SemesterSlot::SOURCE_SEMESTER_TERM[$semesterCode])) {
             Log::error("NotifierController: unknown semester code '{$semesterCode}' in record {$recordId}.");
 

@@ -42,6 +42,7 @@ function sourceEvalRecord(string $category = 'A', array $overrides = []): array
         'comments' => '',
         'faculty' => 'Dr. Smith',
         'faculty_email' => 'faculty@example.com',
+        'omm_evaluation_complete' => '2',
     ], $overrides);
 }
 
@@ -196,6 +197,48 @@ test('returns 200 when eval falls outside scholar cohort window', function () {
     $destination->shouldNotReceive('updateStudentRecord');
 
     $this->postJson('/notify', ['record' => '1', 'project_id' => '1846'])->assertSuccessful();
+
+    Mail::assertNothingSent();
+});
+
+// ─── Partial-save guard ──────────────────────────────────────────────────────
+
+test('returns 200 and does nothing when source record is not yet complete', function () {
+    Mail::fake();
+
+    $source = mock(RedcapSourceService::class);
+    $source->shouldReceive('getRecord')->andReturn(
+        sourceEvalRecord('A', ['omm_evaluation_complete' => '0'])
+    );
+    $source->shouldNotReceive('getStudentEvals');
+
+    $destination = mock(RedcapDestinationService::class);
+    $destination->shouldNotReceive('findStudentByDatatelId');
+    $destination->shouldNotReceive('updateStudentRecord');
+
+    $this->postJson('/notify', ['record' => '1', 'project_id' => '1846'])->assertSuccessful();
+
+    Mail::assertNothingSent();
+});
+
+test('returns 200 and does nothing when partial save webhook includes instrument', function () {
+    Mail::fake();
+
+    $source = mock(RedcapSourceService::class);
+    $source->shouldReceive('getRecord')->andReturn(
+        sourceEvalRecord('A', ['omm_evaluation_complete' => '0'])
+    );
+    $source->shouldNotReceive('getStudentEvals');
+
+    $destination = mock(RedcapDestinationService::class);
+    $destination->shouldNotReceive('findStudentByDatatelId');
+    $destination->shouldNotReceive('updateStudentRecord');
+
+    $this->postJson('/notify', [
+        'record' => '1',
+        'project_id' => '1846',
+        'instrument' => 'omm_evaluation',
+    ])->assertSuccessful();
 
     Mail::assertNothingSent();
 });
