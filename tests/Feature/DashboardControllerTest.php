@@ -51,6 +51,9 @@ it('renders the dashboard with aggregated stats', function () {
     get('/')->assertOk()
         ->assertViewIs('dashboard')
         ->assertSee('OMM Student Evaluations')
+        ->assertSee('New Eval')
+        ->assertSee('https://comresearchapp.nyit.edu/csso/omm_ace', false)
+        ->assertSee('target="_blank"', false)
         ->assertDontSee('Student detail')
         ->assertDontSee('Manage users');
 
@@ -230,6 +233,35 @@ it('applies the active and batch filters to the faculty dashboard path', functio
         ->viewData('stats');
     expect($batchActiveStats['kpis']['total_students'])->toBe(1);
 });
+
+it('shows the New Eval button on the dashboard for faculty, admin, and service roles', function (string $persona) {
+    match ($persona) {
+        'faculty' => asFaculty(),
+        'admin' => asAdmin(),
+        'service' => asService(),
+    };
+
+    $destination = mock(RedcapDestinationService::class);
+    $destination->shouldReceive('availableBatches')->andReturn(['12']);
+    $destination->shouldReceive('getAllStudentRecords')->andReturn(destRoster());
+
+    if ($persona === 'faculty') {
+        ProjectMapping::factory()->active()->create([
+            'redcap_pid' => 1846,
+            'redcap_token' => 'CURRENT_PROJECT_TOKEN',
+        ]);
+
+        $source = mock(RedcapSourceService::class);
+        $source->shouldReceive('getCompletedEvaluationRecords')->andReturn([]);
+        $destination->shouldReceive('studentMapByDatatelId')->andReturn([]);
+    }
+
+    get('/')->assertOk()
+        ->assertSee('New Eval')
+        ->assertSee('https://comresearchapp.nyit.edu/csso/omm_ace', false)
+        ->assertSee('target="_blank"', false)
+        ->assertSee('rel="noopener noreferrer"', false);
+})->with(['faculty', 'admin', 'service']);
 
 it('does not cache failed dashboard fetches as empty data', function () {
     $destination = mock(RedcapDestinationService::class);
