@@ -55,7 +55,7 @@ COPY --from=composer-builder /app/vendor /app/vendor
 RUN npm run build
 
 # ── Stage 3: Runtime ─────────────────────────────────────────────────────────
-FROM php:8.4.27-fpm-alpine AS runtime
+FROM php:8.4.28-fpm-alpine AS runtime
 
 # Upgrade all base-image packages to pull in latest security patches,
 # then install only what the runtime actually needs (curl intentionally omitted).
