@@ -41,6 +41,7 @@ RUN if [ -n "$COMPOSER_AUTH" ]; then \
         --no-scripts \
         --prefer-dist \
         --optimize-autoloader \
+        --ignore-platform-req=php \
     && rm -f /tmp/auth.json /root/.composer/auth.json /composer/auth.json
 COPY . .
 RUN composer dump-autoload --no-dev --optimize
